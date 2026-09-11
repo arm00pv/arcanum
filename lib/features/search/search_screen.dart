@@ -464,7 +464,11 @@ class _SearchResultTile extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          RarityBadge(rarity: rarity, compact: true),
+                          RarityBadge(
+                            rarity: rarity,
+                            compact: true,
+                            code: card.rarityCode,
+                          ),
                         ],
                       ),
                       if (manaCost != null || owned > 0) ...<Widget>[

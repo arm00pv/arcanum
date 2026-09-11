@@ -304,7 +304,7 @@ class _CardGridTile extends StatelessWidget {
               // same art, same collector number, often the same price. The
               // rarity is the only thing that tells them apart, so it earns its
               // place on the tile even at this size.
-              RarityBadge(rarity: rarity, compact: true),
+              RarityBadge(rarity: rarity, compact: true, code: card.rarityCode),
             ],
           ),
         ],
@@ -372,7 +372,7 @@ class _CardListTile extends StatelessWidget {
                         style: context.t.labelSmall?.copyWith(color: c.textTertiary),
                       ),
                       const SizedBox(width: 6),
-                      RarityBadge(rarity: rarity, compact: true),
+                      RarityBadge(rarity: rarity, compact: true, code: card.rarityCode),
                       const SizedBox(width: 6),
                       // Magic identifies cards by mana cost, Pokémon by energy
                       // type — showing the wrong one would be nonsense.

@@ -202,13 +202,26 @@ class ManaCostRow extends StatelessWidget {
 /// what dense collection rows want.
 class RarityBadge extends StatelessWidget {
   /// Creates a rarity badge.
-  const RarityBadge({super.key, required this.rarity, this.compact = false});
+  const RarityBadge({
+    super.key,
+    required this.rarity,
+    this.compact = false,
+    this.code,
+  });
 
-  /// The rarity tier to display.
+  /// The rarity tier, which supplies the colour.
   final CardRarity rarity;
 
-  /// Whether to render the single-letter form.
+  /// Whether to render the short form.
   final bool compact;
+
+  /// The printing's own rarity shorthand, when the provider publishes one.
+  ///
+  /// Only the compact form uses it, because the wide form has room to spell the
+  /// rarity out and a code would be a step backwards there. Without it the
+  /// compact form shows the tier letter, which is all a provider that publishes
+  /// tiers rather than rarities can support.
+  final String? code;
 
   /// The single letter used by the compact form.
   static String letterFor(CardRarity rarity) => switch (rarity) {
@@ -229,34 +242,60 @@ class RarityBadge extends StatelessWidget {
       label: 'Rarity ${rarity.label}',
       excludeSemantics: true,
       child: compact
-          ? SizedBox(
-              width: 18,
-              height: 18,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: color.withValues(alpha: 0.18),
-                  border: Border.all(color: color.withValues(alpha: 0.45)),
-                ),
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(3),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
+          ? (code != null && code!.isNotEmpty
+                // A code is two or three characters and a circle cannot hold
+                // them, so the shorthand gets a pill sized to its own text.
+                ? DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: color.withValues(alpha: 0.45)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
                       child: Text(
-                        letterFor(rarity),
+                        code!,
                         maxLines: 1,
                         style: context.t.labelSmall?.copyWith(
                           color: color,
                           letterSpacing: 0,
-                          height: 1,
+                          height: 1.1,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ),
-            )
+                  )
+                : SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: color.withValues(alpha: 0.18),
+                        border: Border.all(color: color.withValues(alpha: 0.45)),
+                      ),
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(3),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              letterFor(rarity),
+                              maxLines: 1,
+                              style: context.t.labelSmall?.copyWith(
+                                color: color,
+                                letterSpacing: 0,
+                                height: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ))
           : DecoratedBox(
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.14),

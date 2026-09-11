@@ -266,6 +266,21 @@ class TcgCard {
         .trim();
   }
 
+  /// The provider's own short code for this printing's rarity, or null.
+  ///
+  /// A rarity tier is not a rarity: "Super Rare" and "Secret Rare" are both
+  /// premium tiers, and a collector reading a badge is asking which one they
+  /// hold. Where the provider publishes the shorthand collectors actually use -
+  /// Yu-Gi-Oh! sends "(UR)", "(ScR)", "(StR)" in `set_rarity_code` - that code
+  /// is the honest thing to show. Providers that publish only a tier, as Magic
+  /// and Pokémon do, leave this null and the caller falls back to the tier.
+  String? get rarityCode {
+    final raw = extras['rarityCode'];
+    if (raw is! String) return null;
+    final stripped = raw.trim().replaceAll(RegExp(r'[()]'), '').trim();
+    return stripped.isEmpty ? null : stripped;
+  }
+
   TcgCard copyWith({
     String? id,
     String? setCode,
