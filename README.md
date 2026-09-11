@@ -62,6 +62,18 @@ data, adjusted for finish and (optionally) condition. The Vault shows total
 value, cost basis, unrealised P/L, allocation by colour/rarity/set, and a
 Herfindahl concentration index.
 
+**Interoperability** — Import and export the collection as CSV. Export writes a
+file shaped for **Moxfield**, **Archidekt**, a plain spreadsheet, or Arcanum's own
+lossless format, which additionally carries cost basis, purchase date, finish,
+condition, language, binder and notes. Import reads any of those back, and every
+row is matched to a *real printing* before anything is written: by card id, then
+by set code plus collector number, then by name. The screen shows what it intends
+to do first — how many cards, how many new stacks, how many merge into stacks you
+already own, the cost basis the file supplied, and every row it could not match.
+It never guesses silently. A row whose printing had to be inferred from the name
+alone is flagged for review, and a row that matches nothing is reported rather
+than filed against the wrong card.
+
 **Analysis** — A real quantitative engine, computed entirely on the phone.
 
 ---
@@ -128,18 +140,24 @@ score.
 
 ```
 lib/
-  core/theme/        mana.dart (WUBRG + rarity), app_theme.dart (M3 + ArcanumColors)
+  core/legal.dart    the WOTC and TPCi notices, shown verbatim
+  core/theme/        mana.dart (WUBRG + finishes + conditions), app_theme.dart
   core/utils/        formatters.dart, app_settings.dart
-  data/api/          scryfall_client.dart, scryfall_models.dart   (rate-limited, retrying)
-  data/db/           app_database.dart (schema), catalog/collection/history DAOs
-  data/history/      price_history_source.dart (3 providers), price_history_service.dart
-  data/repositories/ catalog_repository.dart, collection_repository.dart
+  data/api/          scryfall_client.dart + scryfall_models.dart (rate-limited, retrying)
+  data/catalog/      card_catalog.dart (the per-game interface), mtg_catalog, pokemon_catalog
+  data/db/           app_database.dart (v3 schema), catalog/collection/history/alert DAOs
+  data/history/      price_history_source.dart (5 providers), price_history_service.dart
+  data/repositories/ catalog, collection, alert repositories
+  data/transfer/     csv.dart (RFC 4180), collection_transfer.dart (dialects),
+                     import_service.dart (printing resolution)
   domain/quant/      models, indicators, kalman, analytics   (pure Dart, no Flutter)
-  domain/models/     collection_entry.dart
-  features/          dashboard, sets, set_detail, collection, card, search, settings, shell
+  domain/models/     tcg_card.dart, card_game.dart, collection_entry.dart, price_alert.dart
+  features/          dashboard, sets, set_detail, collection, card, search, alerts,
+                     transfer, settings, shell
   widgets/           glass, sparkline, delta_chip, mana_pips, card_thumbnail, trend_gauge, ...
 tool/
   slice_prices.py    MTGJSON -> compact SQLite price history
+  poll_pokemon_prices.py  daily TCGdex price poller
   sync_server.py     read-only HTTP service the app fetches from
 ```
 
@@ -186,7 +204,8 @@ Release signing uses `android/key.properties` + `android/arcanum-release.jks`.
 ## Tests
 
 ```powershell
-flutter test        # 98 tests: quant engine, widgets, Scryfall client (live)
+flutter test        # 205 tests: quant engine, widgets, Scryfall client (live),
+                    # CSV codec + dialects, import matching, YGOPRODeck parsing
 ```
 
 ---

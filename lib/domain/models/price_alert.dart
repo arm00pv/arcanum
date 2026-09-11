@@ -122,7 +122,7 @@ class PriceAlert {
     final money = kind.isPercent ? null : threshold;
     final suffix = kind.isPercent
         ? '${threshold.toStringAsFixed(threshold % 1 == 0 ? 0 : 1)}%'
-        : '${money!.toStringAsFixed(2)}';
+        : money!.toStringAsFixed(2);
     return '${kind.label} $suffix';
   }
 

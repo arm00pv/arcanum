@@ -498,7 +498,7 @@ class JustTcgHistorySource implements PriceHistorySource {
         'include_price_history': true,
         'priceHistoryDuration': duration,
         if (game == CardGame.mtg && externalId == null) 'scryfallId': cardId,
-        if (externalId != null) 'tcgplayerId': externalId,
+        'tcgplayerId': ?externalId,
       };
       final res = await _dio.get<dynamic>(
         '/cards',

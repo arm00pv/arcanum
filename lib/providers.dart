@@ -154,7 +154,7 @@ final alertRepositoryProvider =
 /// Every alert for a game, armed ones first.
 final alertsProvider =
     FutureProvider.family<List<PriceAlert>, CardGame>((ref, game) async {
-  await ref.watch(alertRevisionProvider);
+  ref.watch(alertRevisionProvider);
   return ref.watch(alertRepositoryProvider).all(game);
 });
 
@@ -173,14 +173,14 @@ final alertRevisionProvider = NotifierProvider<AlertRevision, int>(AlertRevision
 /// Alerts for one printing.
 final cardAlertsProvider =
     FutureProvider.family<List<PriceAlert>, CardRef>((ref, ref0) async {
-  await ref.watch(alertRevisionProvider);
+  ref.watch(alertRevisionProvider);
   return ref.watch(alertRepositoryProvider).forCard(ref0.game, ref0.id);
 });
 
 /// How many alerts have fired and not been acknowledged, per game.
 final triggeredAlertCountProvider =
     FutureProvider.family<int, CardGame>((ref, game) async {
-  await ref.watch(alertRevisionProvider);
+  ref.watch(alertRevisionProvider);
   return ref.watch(alertRepositoryProvider).triggeredCount(game);
 });
 
@@ -198,7 +198,7 @@ final alertCardsProvider =
 /// Runs against stored prices, which are already refreshed daily. Invalidate
 /// this to re-check after a price refresh.
 final alertEvaluationProvider = FutureProvider<List<AlertEvaluation>>((ref) async {
-  await ref.watch(alertRevisionProvider);
+  ref.watch(alertRevisionProvider);
   return ref.watch(alertRepositoryProvider).evaluate();
 });
 

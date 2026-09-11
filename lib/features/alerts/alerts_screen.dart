@@ -381,7 +381,7 @@ class _SetAlertSheet extends ConsumerStatefulWidget {
 }
 
 class _SetAlertSheetState extends ConsumerState<_SetAlertSheet> {
-  late CardFinish _finish =
+  late final CardFinish _finish =
       widget.initialFinish ?? widget.card.game.finishes.first;
   AlertKind _kind = AlertKind.above;
   late final TextEditingController _threshold;

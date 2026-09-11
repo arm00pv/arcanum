@@ -31,8 +31,12 @@ linter:
   # `// ignore_for_file: name_of_lint` syntax on the line or in the file
   # producing the lint.
   rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+    # Data-layer classes keep their collaborators private (\`_dao\`, \`_settings\`) and
+    # take them as required *named* constructor parameters. Dart rejects private
+    # names at the call site, so \`required this._dao\` is not a legal rewrite of
+    # \`required HistoryDao dao) : _dao = dao\` -- the lint's suggestion cannot be
+    # applied without needlessly widening them to public fields.
+    prefer_initializing_formals: false
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

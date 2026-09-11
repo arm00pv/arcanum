@@ -8,6 +8,7 @@ import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/features/transfer/transfer_screen.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/common.dart';
 import 'package:arcanum/widgets/glass.dart';
@@ -634,6 +635,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Divider(height: 1, color: c.hairline),
           const SizedBox(height: 16),
           Text(
+            'Move your collection in or out as CSV. Read a Moxfield, Archidekt '
+            'or spreadsheet export, or share a file as a backup.',
+            style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const TransferScreen()),
+            ),
+            icon: const Icon(Icons.swap_horiz_rounded, size: 18),
+            label: const Text('Import & export'),
+          ),
+          const SizedBox(height: 24),
+          Divider(height: 1, color: c.hairline),
+          const SizedBox(height: 16),
+          Text(
             'Clearing deletes every card in your ${game.shortLabel} collection, '
             'along with its purchase prices and binders. The cached set catalogue '
             'and the recorded price history are kept, and your other games are '
@@ -728,7 +745,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Widget _about(BuildContext context, CardGame game) {
     final c = context.c;
-    final bool isMtg = game == CardGame.mtg;
     return _group(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

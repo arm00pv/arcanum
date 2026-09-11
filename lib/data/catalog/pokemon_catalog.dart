@@ -410,7 +410,7 @@ class PokemonCatalog implements CardCatalog {
       releasedAt: set?.releasedAt,
       oracleId: TcgCard.normaliseName(data['name']?.toString() ?? name),
       extras: {
-        if (tcgplayerId != null) 'tcgplayerId': tcgplayerId,
+        'tcgplayerId': ?tcgplayerId,
         if (variantTypes.isNotEmpty) 'variants': variantTypes,
         if (data['dexId'] is List && (data['dexId'] as List).isNotEmpty)
           'pokedex': (data['dexId'] as List).first,
