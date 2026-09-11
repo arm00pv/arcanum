@@ -4,10 +4,28 @@
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
+    <!--
+      Cleartext is permitted because the one plain-HTTP address Arcanum talks to
+      is a service the user runs themselves on their own private network - the
+      companion price-history server, reached over Tailscale or the LAN.
+
+      Android blocks cleartext by default from targetSdk 28 onwards, and a
+      network security config cannot express "private address ranges only"
+      because it matches domains and literals, not CIDR blocks. Since the
+      endpoint is user-configurable and may be any host on their own network, an
+      allowlist of specific addresses would break the moment they point it
+      somewhere else.
+
+      This does not weaken anything else. Every public provider - Scryfall,
+      TCGdex, YGOPRODeck, MTGStocks, GitHub, JustTCG - is HTTPS, and permitting
+      cleartext does not stop Android validating their certificates. It only
+      stops the platform rejecting the user's own server.
+    -->
     <application
         android:label="Arcanum"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
         android:enableOnBackInvokedCallback="true"
         android:hardwareAccelerated="true">
         <activity
