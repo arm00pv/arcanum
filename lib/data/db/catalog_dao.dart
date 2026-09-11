@@ -1,0 +1,460 @@
+import 'dart:convert';
+
+import 'package:sqflite/sqflite.dart';
+
+import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/domain/models/tcg_card.dart';
+
+/// How a set list should be ordered.
+enum SetSort {
+  /// Newest release first — the default browsing order.
+  newest,
+
+  /// Oldest first, for collectors walking the history of the game.
+  oldest,
+
+  /// Alphabetical by name.
+  name,
+
+  /// Largest sets first.
+  size,
+}
+
+/// Persistence for the card catalogue (sets and printings).
+///
+/// Every method is scoped to one game, and no query can ever return rows from
+/// two games at once. Card data is effectively immutable, so a set is only
+/// re-fetched when the caller explicitly asks for it; prices are stored
+/// alongside the printing and refreshed on their own schedule.
+class CatalogDao {
+  CatalogDao(this._db);
+
+  final Database _db;
+
+  // ------------------------------------------------------------------- sets
+
+  /// Inserts or updates a batch of sets for one game.
+  Future<void> upsertSets(CardGame game, List<TcgSet> sets) async {
+    if (sets.isEmpty) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final batch = _db.batch();
+    for (final s in sets) {
+      batch.insert(
+        'sets',
+        {
+          'game': game.id,
+          'code': s.code,
+          'id': s.id,
+          'name': s.name,
+          'set_type': s.setType,
+          'released_at': s.releasedAt?.toIso8601String().split('T').first,
+          'card_count': s.cardCount,
+          'printed_size': s.printedSize,
+          'icon_svg_uri': s.iconSvgUri,
+          'logo_uri': s.logoUri,
+          'series': s.series,
+          'digital': s.digital ? 1 : 0,
+          'foil_only': s.foilOnly ? 1 : 0,
+          'nonfoil_only': s.nonfoilOnly ? 1 : 0,
+          'parent_set_code': s.parentSetCode,
+          'block_code': s.blockCode,
+          'block': s.block,
+          'collector_number_start': s.collectorNumberStart,
+          'fetched_at': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// All cached sets for a game, ordered by [sort].
+  Future<List<TcgSet>> sets(
+    CardGame game, {
+    String? search,
+    Set<String>? types,
+    bool includeDigital = false,
+    SetSort sort = SetSort.newest,
+  }) async {
+    final where = <String>['game = ?'];
+    final args = <Object?>[game.id];
+    if (search != null && search.trim().isNotEmpty) {
+      where.add('(name LIKE ? OR code LIKE ?)');
+      final like = '%${search.trim()}%';
+      args..add(like)..add(like);
+    }
+    if (types != null && types.isNotEmpty) {
+      where.add('set_type IN (${List.filled(types.length, '?').join(',')})');
+      args.addAll(types);
+    }
+    if (!includeDigital) where.add('digital = 0');
+
+    final orderBy = switch (sort) {
+      SetSort.newest => 'released_at DESC NULLS LAST, name ASC',
+      SetSort.oldest => 'released_at ASC NULLS LAST, name ASC',
+      SetSort.name => 'name COLLATE NOCASE ASC',
+      SetSort.size => 'card_count DESC',
+    };
+
+    final rows = await _db.query(
+      'sets',
+      where: where.join(' AND '),
+      whereArgs: args,
+      orderBy: orderBy,
+    );
+    return rows.map((r) => _setFromRow(game, r)).toList();
+  }
+
+  /// A single set by code.
+  Future<TcgSet?> set(CardGame game, String code) async {
+    final rows = await _db.query('sets',
+        where: 'game = ? AND code = ?', whereArgs: [game.id, code], limit: 1);
+    return rows.isEmpty ? null : _setFromRow(game, rows.first);
+  }
+
+  /// Distinct set types present in a game's cache, with counts.
+  Future<Map<String, int>> setTypeCounts(CardGame game,
+      {bool includeDigital = false}) async {
+    final rows = await _db.rawQuery(
+      'SELECT set_type, COUNT(*) AS n FROM sets WHERE game = ? '
+      '${includeDigital ? '' : 'AND digital = 0 '}'
+      'GROUP BY set_type ORDER BY n DESC',
+      [game.id],
+    );
+    return {
+      for (final r in rows) (r['set_type'] as String): (r['n'] as num).toInt(),
+    };
+  }
+
+  /// How many sets of a game are cached.
+  Future<int> setCount(CardGame game) async {
+    final r = await _db
+        .rawQuery('SELECT COUNT(*) AS n FROM sets WHERE game = ?', [game.id]);
+    return (r.first['n'] as num?)?.toInt() ?? 0;
+  }
+
+  /// When a game's catalogue was last refreshed.
+  Future<DateTime?> setsFetchedAt(CardGame game) async {
+    final r = await _db.rawQuery(
+        'SELECT MAX(fetched_at) AS t FROM sets WHERE game = ?', [game.id]);
+    final t = (r.first['t'] as num?)?.toInt();
+    return t == null ? null : DateTime.fromMillisecondsSinceEpoch(t);
+  }
+
+  // ------------------------------------------------------------------ cards
+
+  /// Inserts or updates printings.
+  Future<void> upsertCards(CardGame game, List<TcgCard> cards) async {
+    if (cards.isEmpty) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final batch = _db.batch();
+    for (final c in cards) {
+      batch.insert(
+        'cards',
+        _cardToRow(game, c, now),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Marks a set as fully catalogued.
+  Future<void> markCatalogued(CardGame game, String setCode) async {
+    await _db.update(
+      'sets',
+      {'catalogued_at': DateTime.now().millisecondsSinceEpoch},
+      where: 'game = ? AND code = ?',
+      whereArgs: [game.id, setCode],
+    );
+  }
+
+  /// True when every printing of a set is already stored.
+  Future<bool> isCatalogued(CardGame game, String setCode) async {
+    final r = await _db.rawQuery(
+      'SELECT s.card_count AS expected, '
+      '  (SELECT COUNT(*) FROM cards c WHERE c.game = s.game AND c.set_code = s.code) AS actual '
+      'FROM sets s WHERE s.game = ? AND s.code = ?',
+      [game.id, setCode],
+    );
+    if (r.isEmpty) return false;
+    final expected = (r.first['expected'] as num?)?.toInt() ?? 0;
+    final actual = (r.first['actual'] as num?)?.toInt() ?? 0;
+    // Pokémon sets report both a printedTotal and a secret-card total that can
+    // disagree with the API's card list, so a small shortfall still counts as
+    // catalogued.
+    return expected > 0 && actual >= (expected * 0.98).floor();
+  }
+
+  /// Every stored printing of a set, ordered by collector number.
+  ///
+  /// This is the ordering collectors expect: cards sit in the same sequence as
+  /// a physical binder.
+  Future<List<TcgCard>> cardsInSet(CardGame game, String setCode) async {
+    final rows = await _db.query(
+      'cards',
+      where: 'game = ? AND set_code = ?',
+      whereArgs: [game.id, setCode],
+      orderBy: 'collector_sort ASC, collector_number ASC',
+    );
+    return rows.map((r) => _cardFromRow(game, r)).toList();
+  }
+
+  /// A single printing by provider id.
+  Future<TcgCard?> cardById(CardGame game, String id) async {
+    final rows = await _db.query('cards',
+        where: 'game = ? AND id = ?', whereArgs: [game.id, id], limit: 1);
+    return rows.isEmpty ? null : _cardFromRow(game, rows.first);
+  }
+
+  /// Many printings by id, keyed by id.
+  Future<Map<String, TcgCard>> cardsByIds(CardGame game, List<String> ids) async {
+    if (ids.isEmpty) return const {};
+    final out = <String, TcgCard>{};
+    for (var i = 0; i < ids.length; i += 400) {
+      final chunk = ids.sublist(i, i + 400 > ids.length ? ids.length : i + 400);
+      final marks = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.rawQuery(
+          'SELECT * FROM cards WHERE game = ? AND id IN ($marks)',
+          [game.id, ...chunk]);
+      for (final r in rows) {
+        final c = _cardFromRow(game, r);
+        out[c.id] = c;
+      }
+    }
+    return out;
+  }
+
+  /// Every printing sharing a group id (all reprints of a card).
+  Future<List<TcgCard>> printingsOf(CardGame game, String groupId) async {
+    final rows = await _db.query(
+      'cards',
+      where: 'game = ? AND oracle_id = ?',
+      whereArgs: [game.id, groupId],
+      orderBy: 'released_at ASC NULLS LAST',
+    );
+    return rows.map((r) => _cardFromRow(game, r)).toList();
+  }
+
+  /// Fuzzy name search across everything cached for a game, newest first.
+  Future<List<TcgCard>> searchByName(CardGame game, String query,
+      {int limit = 80}) async {
+    final q = query.trim();
+    if (q.isEmpty) return const [];
+    final rows = await _db.rawQuery(
+      'SELECT * FROM cards WHERE game = ? AND name LIKE ? COLLATE NOCASE '
+      'ORDER BY (name LIKE ? COLLATE NOCASE) DESC, released_at DESC NULLS LAST LIMIT ?',
+      [game.id, '%$q%', '$q%', limit],
+    );
+    return rows.map((r) => _cardFromRow(game, r)).toList();
+  }
+
+  /// How many printings of a game are cached.
+  Future<int> cardCount(CardGame game) async {
+    final r = await _db
+        .rawQuery('SELECT COUNT(*) AS n FROM cards WHERE game = ?', [game.id]);
+    return (r.first['n'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Updates only the market prices for a batch of printings.
+  Future<void> updatePrices(CardGame game, List<TcgCard> cards) async {
+    if (cards.isEmpty) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final batch = _db.batch();
+    for (final c in cards) {
+      batch.update(
+        'cards',
+        {
+          'prices_json': jsonEncode(c.prices.toJson()),
+          'prices_updated_at': now,
+        },
+        where: 'game = ? AND id = ?',
+        whereArgs: [game.id, c.id],
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// When prices were last refreshed for a printing.
+  Future<DateTime?> pricesUpdatedAt(CardGame game, String cardId) async {
+    final rows = await _db.query('cards',
+        columns: ['prices_updated_at'],
+        where: 'game = ? AND id = ?',
+        whereArgs: [game.id, cardId],
+        limit: 1);
+    if (rows.isEmpty) return null;
+    final t = (rows.first['prices_updated_at'] as num?)?.toInt();
+    return t == null ? null : DateTime.fromMillisecondsSinceEpoch(t);
+  }
+
+  /// Removes every cached row for a game, used to reclaim space.
+  Future<void> clearGame(CardGame game) async {
+    final batch = _db.batch();
+    batch.delete('cards', where: 'game = ?', whereArgs: [game.id]);
+    batch.delete('sets', where: 'game = ?', whereArgs: [game.id]);
+    await batch.commit(noResult: true);
+  }
+
+  // --------------------------------------------------------------- mapping
+
+  static Map<String, Object?> _cardToRow(CardGame game, TcgCard c, int now) => {
+        'id': c.id,
+        'game': game.id,
+        'oracle_id': c.oracleId,
+        'set_code': c.setCode,
+        'set_name': c.setName,
+        'name': c.name,
+        'collector_number': c.collectorNumber,
+        'collector_sort': c.collectorNumberSortKey,
+        'rarity': c.rarity,
+        'layout': c.layout,
+        'type_line': c.typeLine,
+        'oracle_text': c.oracleText,
+        'mana_cost': c.manaCost,
+        'cmc': c.cmc,
+        'colors': c.colors.join(','),
+        'color_identity': c.colorIdentity.join(','),
+        'artist': c.artist,
+        'flavor_text': c.flavorText,
+        'image_small': c.imageUris['small'],
+        'image_normal': c.imageUris['normal'],
+        'image_large': c.imageUris['large'],
+        'image_art_crop': c.imageUris['art_crop'],
+        'image_png': c.imageUris['png'],
+        'back_image_small': c.faces.length > 1 ? c.faces[1].imageUris['small'] : null,
+        'back_image_normal': c.faces.length > 1 ? c.faces[1].imageUris['normal'] : null,
+        'prices_json': jsonEncode(c.prices.toJson()),
+        'prices_updated_at': now,
+        'digital': c.digital ? 1 : 0,
+        'promo': c.promo ? 1 : 0,
+        'reprint': c.reprint ? 1 : 0,
+        'reserved': c.reserved ? 1 : 0,
+        'full_art': c.fullArt ? 1 : 0,
+        'booster': c.booster ? 1 : 0,
+        'foil': c.foil ? 1 : 0,
+        'nonfoil': c.nonfoil ? 1 : 0,
+        'edhrec_rank': c.edhrecRank,
+        'released_at': c.releasedAt?.toIso8601String().split('T').first,
+        'extras_json':
+            c.extras.isEmpty ? null : jsonEncode(c.extras.map((k, v) => MapEntry(k, v))),
+      };
+
+  static TcgCard _cardFromRow(CardGame game, Map<String, Object?> r) => TcgCard(
+        game: game,
+        id: r['id'] as String,
+        oracleId: r['oracle_id'] as String?,
+        setCode: r['set_code'] as String,
+        setName: (r['set_name'] as String?) ?? '',
+        name: r['name'] as String,
+        collectorNumber: (r['collector_number'] as String?) ?? '',
+        rarity: (r['rarity'] as String?) ?? 'unknown',
+        layout: (r['layout'] as String?) ?? '',
+        typeLine: r['type_line'] as String?,
+        oracleText: r['oracle_text'] as String?,
+        manaCost: r['mana_cost'] as String?,
+        artist: r['artist'] as String?,
+        flavorText: r['flavor_text'] as String?,
+        cmc: (r['cmc'] as num?)?.toDouble(),
+        colors: _split(r['colors']),
+        colorIdentity: _split(r['color_identity']),
+        digital: (r['digital'] as int? ?? 0) == 1,
+        foil: (r['foil'] as int? ?? 0) == 1,
+        nonfoil: (r['nonfoil'] as int? ?? 0) == 1,
+        promo: (r['promo'] as int? ?? 0) == 1,
+        reprint: (r['reprint'] as int? ?? 0) == 1,
+        reserved: (r['reserved'] as int? ?? 0) == 1,
+        fullArt: (r['full_art'] as int? ?? 0) == 1,
+        booster: (r['booster'] as int? ?? 0) == 1,
+        edhrecRank: (r['edhrec_rank'] as num?)?.toInt(),
+        releasedAt: _parseDate(r['released_at'] as String?),
+        prices: _pricesFrom(r['prices_json']),
+        imageUris: _imagesFromRow(r),
+        faces: _facesFromRow(r),
+        extras: _extrasFrom(r['extras_json']),
+      );
+
+  static TcgPrices _pricesFrom(Object? raw) {
+    if (raw is! String || raw.isEmpty) return TcgPrices.empty;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return TcgPrices.empty;
+      return TcgPrices.fromJson(decoded.cast<String, Object?>());
+    } catch (_) {
+      return TcgPrices.empty;
+    }
+  }
+
+  static Map<String, Object?> _extrasFrom(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const {};
+      return decoded.cast<String, Object?>();
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  static Map<String, String> _imagesFromRow(Map<String, Object?> r) {
+    final out = <String, String>{};
+    void put(String key, Object? v) {
+      if (v is String && v.isNotEmpty) out[key] = v;
+    }
+
+    put('small', r['image_small']);
+    put('normal', r['image_normal']);
+    put('large', r['image_large']);
+    put('art_crop', r['image_art_crop']);
+    put('png', r['image_png']);
+    return out;
+  }
+
+  static List<TcgCardFace> _facesFromRow(Map<String, Object?> r) {
+    final back = <String, String>{};
+    final bs = r['back_image_small'];
+    final bn = r['back_image_normal'];
+    if (bs is String && bs.isNotEmpty) back['small'] = bs;
+    if (bn is String && bn.isNotEmpty) back['normal'] = bn;
+    if (back.isEmpty) return const [];
+    // The front face is reconstructed from the top-level images so that
+    // imageUrl(face: 0) and imageUrl(face: 1) behave identically.
+    return [
+      TcgCardFace(
+        name: r['name'] as String?,
+        typeLine: r['type_line'] as String?,
+        text: r['oracle_text'] as String?,
+        cost: r['mana_cost'] as String?,
+        imageUris: _imagesFromRow(r),
+      ),
+      TcgCardFace(imageUris: back),
+    ];
+  }
+
+  static List<String> _split(Object? v) {
+    final s = (v as String?) ?? '';
+    if (s.isEmpty) return const [];
+    return s.split(',').where((e) => e.isNotEmpty).toList();
+  }
+
+  static DateTime? _parseDate(String? s) => s == null ? null : DateTime.tryParse(s);
+
+  static TcgSet _setFromRow(CardGame game, Map<String, Object?> r) => TcgSet(
+        game: game,
+        id: r['id'] as String,
+        code: r['code'] as String,
+        name: r['name'] as String,
+        setType: (r['set_type'] as String?) ?? 'unknown',
+        releasedAt: _parseDate(r['released_at'] as String?),
+        cardCount: (r['card_count'] as num?)?.toInt() ?? 0,
+        printedSize: (r['printed_size'] as num?)?.toInt(),
+        iconSvgUri: r['icon_svg_uri'] as String?,
+        logoUri: r['logo_uri'] as String?,
+        series: r['series'] as String?,
+        digital: (r['digital'] as int? ?? 0) == 1,
+        foilOnly: (r['foil_only'] as int? ?? 0) == 1,
+        nonfoilOnly: (r['nonfoil_only'] as int? ?? 0) == 1,
+        parentSetCode: r['parent_set_code'] as String?,
+        blockCode: r['block_code'] as String?,
+        block: r['block'] as String?,
+        collectorNumberStart: (r['collector_number_start'] as num?)?.toInt(),
+      );
+}

@@ -1,0 +1,348 @@
+import 'dart:async';
+
+import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
+
+/// Opens and migrates the Arcanum SQLite database.
+///
+/// The database is the app's single source of truth. Everything the user sees
+/// (sets, cards, their collection, accumulated price history and portfolio
+/// snapshots) lives here so the app is fully usable offline once a set has been
+/// browsed once.
+///
+/// Since v2 every row carries a `game` column. The two games share a schema but
+/// never share rows: a Pokémon collection and a Magic collection are independent,
+/// and every query is scoped by game.
+class AppDatabase {
+  AppDatabase._(this.db);
+
+  final Database db;
+
+  static const _fileName = 'arcanum.db';
+
+  /// v1 — Magic only.
+  /// v2 — multi-game: a `game` column on every table, composite keys on `sets`
+  ///      and `portfolio_snapshots`.
+  /// v3 — price alerts gain a `baseline`, the price the rule was armed at, so
+  ///      percentage alerts have something stable to measure against.
+  static const _version = 3;
+
+  static AppDatabase? _instance;
+
+  /// Opens (or creates) the shared database instance.
+  static Future<AppDatabase> open() async {
+    if (_instance != null) return _instance!;
+    final dir = await getDatabasesPath();
+    final path = p.join(dir, _fileName);
+    final db = await openDatabase(
+      path,
+      version: _version,
+      onConfigure: (d) async {
+        await d.execute('PRAGMA foreign_keys = ON');
+      },
+      onCreate: (d, v) async {
+        await _createSchema(d);
+      },
+      onUpgrade: (d, from, to) async {
+        if (from < 2) await _migrateV1ToV2(d);
+        if (from < 3) await _migrateV2ToV3(d);
+      },
+    );
+    _instance = AppDatabase._(db);
+    return _instance!;
+  }
+
+  /// A database backed by memory, for tests.
+  static Future<AppDatabase> openInMemory() async {
+    final db = await openDatabase(
+      inMemoryDatabasePath,
+      version: _version,
+      onConfigure: (d) => d.execute('PRAGMA foreign_keys = ON'),
+      onCreate: (d, v) => _createSchema(d),
+    );
+    return AppDatabase._(db);
+  }
+
+  Future<void> close() async {
+    await db.close();
+    _instance = null;
+  }
+
+  // --------------------------------------------------------------- v2 schema
+
+  static Future<void> _createSchema(Database d) async {
+    final batch = d.batch();
+
+    // ---------------------------------------------------------------- sets
+    batch.execute('''
+      CREATE TABLE sets (
+        game             TEXT NOT NULL DEFAULT 'mtg',
+        code             TEXT NOT NULL,
+        id               TEXT NOT NULL,
+        name             TEXT NOT NULL,
+        set_type         TEXT NOT NULL,
+        released_at      TEXT,
+        card_count       INTEGER NOT NULL DEFAULT 0,
+        printed_size     INTEGER,
+        icon_svg_uri     TEXT,
+        logo_uri         TEXT,
+        series           TEXT,
+        digital          INTEGER NOT NULL DEFAULT 0,
+        foil_only        INTEGER NOT NULL DEFAULT 0,
+        nonfoil_only     INTEGER NOT NULL DEFAULT 0,
+        parent_set_code  TEXT,
+        block_code       TEXT,
+        block            TEXT,
+        collector_number_start INTEGER,
+        catalogued_at    INTEGER NOT NULL DEFAULT 0,
+        fetched_at       INTEGER NOT NULL,
+        PRIMARY KEY (game, code)
+      )
+    ''');
+    batch.execute('CREATE INDEX idx_sets_game_released ON sets(game, released_at DESC)');
+    batch.execute('CREATE INDEX idx_sets_type ON sets(game, set_type)');
+
+    // --------------------------------------------------------------- cards
+    batch.execute('''
+      CREATE TABLE cards (
+        id                  TEXT PRIMARY KEY,
+        game                TEXT NOT NULL DEFAULT 'mtg',
+        oracle_id           TEXT,
+        set_code            TEXT NOT NULL,
+        set_name            TEXT,
+        name                TEXT NOT NULL,
+        collector_number    TEXT NOT NULL,
+        collector_sort      INTEGER NOT NULL DEFAULT 0,
+        rarity              TEXT NOT NULL DEFAULT 'unknown',
+        layout              TEXT,
+        type_line           TEXT,
+        oracle_text         TEXT,
+        mana_cost           TEXT,
+        cmc                 REAL,
+        colors              TEXT NOT NULL DEFAULT '',
+        color_identity      TEXT NOT NULL DEFAULT '',
+        artist              TEXT,
+        flavor_text         TEXT,
+        image_small         TEXT,
+        image_normal        TEXT,
+        image_large         TEXT,
+        image_art_crop      TEXT,
+        image_png           TEXT,
+        back_image_small    TEXT,
+        back_image_normal   TEXT,
+        prices_json         TEXT,
+        prices_updated_at   INTEGER,
+        digital             INTEGER NOT NULL DEFAULT 0,
+        promo               INTEGER NOT NULL DEFAULT 0,
+        reprint             INTEGER NOT NULL DEFAULT 0,
+        reserved            INTEGER NOT NULL DEFAULT 0,
+        full_art            INTEGER NOT NULL DEFAULT 0,
+        booster             INTEGER NOT NULL DEFAULT 0,
+        foil                INTEGER NOT NULL DEFAULT 0,
+        nonfoil             INTEGER NOT NULL DEFAULT 0,
+        edhrec_rank         INTEGER,
+        released_at         TEXT,
+        extras_json         TEXT
+      )
+    ''');
+    batch.execute(
+        'CREATE INDEX idx_cards_set ON cards(game, set_code, collector_sort, collector_number)');
+    batch.execute('CREATE INDEX idx_cards_name ON cards(game, name COLLATE NOCASE)');
+    batch.execute('CREATE INDEX idx_cards_oracle ON cards(game, oracle_id)');
+    batch.execute('CREATE INDEX idx_cards_rarity ON cards(game, rarity)');
+
+    // ---------------------------------------------------------- collection
+    batch.execute('''
+      CREATE TABLE collection_entries (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        game           TEXT NOT NULL DEFAULT 'mtg',
+        card_id        TEXT NOT NULL,
+        finish         TEXT NOT NULL DEFAULT 'nonfoil',
+        condition      TEXT NOT NULL DEFAULT 'near_mint',
+        language       TEXT NOT NULL DEFAULT 'en',
+        quantity       INTEGER NOT NULL DEFAULT 1,
+        purchase_price REAL,
+        purchase_date  INTEGER,
+        binder         TEXT NOT NULL DEFAULT '',
+        notes          TEXT,
+        created_at     INTEGER NOT NULL,
+        updated_at     INTEGER NOT NULL
+      )
+    ''');
+    batch.execute(
+        'CREATE UNIQUE INDEX idx_entries_unique ON collection_entries(game, card_id, finish, condition, language, binder)');
+    batch.execute('CREATE INDEX idx_entries_game ON collection_entries(game)');
+    batch.execute('CREATE INDEX idx_entries_card ON collection_entries(card_id)');
+    batch.execute('CREATE INDEX idx_entries_binder ON collection_entries(game, binder)');
+
+    // ------------------------------------------------------- price history
+    batch.execute('''
+      CREATE TABLE price_history (
+        card_id TEXT NOT NULL,
+        game    TEXT NOT NULL DEFAULT 'mtg',
+        finish  TEXT NOT NULL,
+        date    TEXT NOT NULL,
+        price   REAL NOT NULL,
+        source  TEXT NOT NULL DEFAULT 'snapshot',
+        PRIMARY KEY (card_id, finish, date, source)
+      ) WITHOUT ROWID
+    ''');
+    batch.execute(
+        'CREATE INDEX idx_history_lookup ON price_history(card_id, finish, date DESC)');
+    batch.execute('CREATE INDEX idx_history_game ON price_history(game, date DESC)');
+
+    // --------------------------------------------------- portfolio tracking
+    batch.execute('''
+      CREATE TABLE portfolio_snapshots (
+        game         TEXT NOT NULL DEFAULT 'mtg',
+        date         TEXT NOT NULL,
+        total_value  REAL NOT NULL,
+        unique_cards INTEGER NOT NULL,
+        total_cards  INTEGER NOT NULL,
+        PRIMARY KEY (game, date)
+      )
+    ''');
+
+    // ------------------------------------------------------------- alerts
+    batch.execute('''
+      CREATE TABLE alerts (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        game         TEXT NOT NULL DEFAULT 'mtg',
+        card_id      TEXT NOT NULL,
+        finish       TEXT NOT NULL DEFAULT 'nonfoil',
+        kind         TEXT NOT NULL,
+        threshold    REAL NOT NULL,
+        created_at   INTEGER NOT NULL,
+        triggered_at INTEGER,
+        baseline     REAL,
+        last_value   REAL
+      )
+    ''');
+    batch.execute('CREATE INDEX idx_alerts_card ON alerts(game, card_id)');
+
+    // ------------------------------------------------------------ metadata
+    batch.execute('''
+      CREATE TABLE meta (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+
+    await batch.commit(noResult: true);
+  }
+
+  // -------------------------------------------------------------- migration
+
+  /// v2 -> v3: alerts learn the price they were armed at.
+  ///
+  /// Existing alerts adopt their last observed price as the baseline, which is
+  /// the closest honest approximation available and keeps percentage rules
+  /// meaningful rather than silently inert.
+  static Future<void> _migrateV2ToV3(Database d) async {
+    final batch = d.batch();
+    batch.execute('ALTER TABLE alerts ADD COLUMN baseline REAL');
+    batch.execute('UPDATE alerts SET baseline = last_value WHERE baseline IS NULL');
+    await batch.commit(noResult: true);
+  }
+
+  /// Upgrades a Magic-only v1 database to the multi-game v2 schema.
+  ///
+  /// Existing rows become Magic rows, so an upgrade never loses a collection.
+  /// `sets` and `portfolio_snapshots` need a table rebuild because SQLite cannot
+  /// alter a primary key in place; the rest only need a column.
+  static Future<void> _migrateV1ToV2(Database d) async {
+    final batch = d.batch();
+
+    // sets: primary key becomes (game, code).
+    batch.execute('''
+      CREATE TABLE sets_v2 (
+        game             TEXT NOT NULL DEFAULT 'mtg',
+        code             TEXT NOT NULL,
+        id               TEXT NOT NULL,
+        name             TEXT NOT NULL,
+        set_type         TEXT NOT NULL,
+        released_at      TEXT,
+        card_count       INTEGER NOT NULL DEFAULT 0,
+        printed_size     INTEGER,
+        icon_svg_uri     TEXT,
+        logo_uri         TEXT,
+        series           TEXT,
+        digital          INTEGER NOT NULL DEFAULT 0,
+        foil_only        INTEGER NOT NULL DEFAULT 0,
+        nonfoil_only     INTEGER NOT NULL DEFAULT 0,
+        parent_set_code  TEXT,
+        block_code       TEXT,
+        block            TEXT,
+        collector_number_start INTEGER,
+        catalogued_at    INTEGER NOT NULL DEFAULT 0,
+        fetched_at       INTEGER NOT NULL,
+        PRIMARY KEY (game, code)
+      )
+    ''');
+    batch.execute('''
+      INSERT INTO sets_v2 (game, code, id, name, set_type, released_at, card_count,
+                           printed_size, icon_svg_uri, digital, foil_only, nonfoil_only,
+                           parent_set_code, block_code, block, catalogued_at, fetched_at)
+      SELECT 'mtg', code, id, name, set_type, released_at, card_count,
+             printed_size, icon_svg_uri, digital, foil_only, nonfoil_only,
+             parent_set_code, block_code, block, catalogued_at, fetched_at
+      FROM sets
+    ''');
+    batch.execute('DROP TABLE sets');
+    batch.execute('ALTER TABLE sets_v2 RENAME TO sets');
+    batch.execute('CREATE INDEX idx_sets_game_released ON sets(game, released_at DESC)');
+    batch.execute('CREATE INDEX idx_sets_type ON sets(game, set_type)');
+
+    // portfolio_snapshots: primary key becomes (game, date).
+    batch.execute('''
+      CREATE TABLE portfolio_snapshots_v2 (
+        game         TEXT NOT NULL DEFAULT 'mtg',
+        date         TEXT NOT NULL,
+        total_value  REAL NOT NULL,
+        unique_cards INTEGER NOT NULL,
+        total_cards  INTEGER NOT NULL,
+        PRIMARY KEY (game, date)
+      )
+    ''');
+    batch.execute('''
+      INSERT INTO portfolio_snapshots_v2 (game, date, total_value, unique_cards, total_cards)
+      SELECT 'mtg', date, total_value, unique_cards, total_cards FROM portfolio_snapshots
+    ''');
+    batch.execute('DROP TABLE portfolio_snapshots');
+    batch.execute('ALTER TABLE portfolio_snapshots_v2 RENAME TO portfolio_snapshots');
+
+    // The remaining tables only gain columns.
+    for (final table in ['cards', 'collection_entries', 'price_history', 'alerts']) {
+      batch.execute(
+          "ALTER TABLE $table ADD COLUMN game TEXT NOT NULL DEFAULT 'mtg'");
+    }
+    batch.execute('ALTER TABLE cards ADD COLUMN flavor_text TEXT');
+    batch.execute('ALTER TABLE cards ADD COLUMN booster INTEGER NOT NULL DEFAULT 0');
+    batch.execute('ALTER TABLE cards ADD COLUMN foil INTEGER NOT NULL DEFAULT 0');
+    batch.execute('ALTER TABLE cards ADD COLUMN nonfoil INTEGER NOT NULL DEFAULT 0');
+    batch.execute('ALTER TABLE cards ADD COLUMN prices_json TEXT');
+    batch.execute('ALTER TABLE cards ADD COLUMN extras_json TEXT');
+
+    // Refresh the indexes that now lead with the game column.
+    batch.execute('DROP INDEX IF EXISTS idx_cards_set');
+    batch.execute('DROP INDEX IF EXISTS idx_cards_name');
+    batch.execute('DROP INDEX IF EXISTS idx_cards_oracle');
+    batch.execute('DROP INDEX IF EXISTS idx_cards_rarity');
+    batch.execute('DROP INDEX IF EXISTS idx_entries_unique');
+    batch.execute('DROP INDEX IF EXISTS idx_entries_binder');
+    batch.execute('DROP INDEX IF EXISTS idx_alerts_card');
+    batch.execute(
+        'CREATE INDEX idx_cards_set ON cards(game, set_code, collector_sort, collector_number)');
+    batch.execute('CREATE INDEX idx_cards_name ON cards(game, name COLLATE NOCASE)');
+    batch.execute('CREATE INDEX idx_cards_oracle ON cards(game, oracle_id)');
+    batch.execute('CREATE INDEX idx_cards_rarity ON cards(game, rarity)');
+    batch.execute(
+        'CREATE UNIQUE INDEX idx_entries_unique ON collection_entries(game, card_id, finish, condition, language, binder)');
+    batch.execute('CREATE INDEX idx_entries_game ON collection_entries(game)');
+    batch.execute('CREATE INDEX idx_entries_binder ON collection_entries(game, binder)');
+    batch.execute('CREATE INDEX idx_alerts_card ON alerts(game, card_id)');
+    batch.execute('CREATE INDEX IF NOT EXISTS idx_history_game ON price_history(game, date DESC)');
+
+    await batch.commit(noResult: true);
+  }
+}
