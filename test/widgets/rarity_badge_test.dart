@@ -16,9 +16,7 @@ TcgCard ygoCard({String? rarityCode, String rarity = 'Ultra Rare'}) => TcgCard(
       name: 'Blue-Eyes White Dragon',
       collectorNumber: '001',
       rarity: rarity,
-      extras: <String, Object?>{
-        if (rarityCode != null) 'rarityCode': rarityCode,
-      },
+      extras: <String, Object?>{'rarityCode': ?rarityCode},
     );
 
 Future<void> pumpBadge(WidgetTester tester, RarityBadge badge) async {

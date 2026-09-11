@@ -447,6 +447,95 @@ void main() {
     });
   });
 
+  group('rarity shorthand', () {
+    test('keeps the provider code verbatim when it publishes one', () async {
+      final catalog = catalogWith(
+        bySetName: <String, String>{
+          'Legend of Blue Eyes White Dragon': lobBody,
+        },
+      );
+
+      final card = (await catalog.fetchCardsInSet('lob'))
+          .firstWhere((c) => c.name == 'Blue-Eyes White Dragon');
+
+      expect(card.rarityCode, 'UR');
+    });
+
+    test('derives initials when the provider leaves the code empty', () async {
+      const bare = '''
+{"id":99999999,"name":"Bare Rarity","type":"Effect Monster",
+ "humanReadableCardType":"Effect Monster","frameType":"effect",
+ "desc":"Test.","race":"Warrior","atk":1000,"def":1000,"level":4,
+ "attribute":"EARTH",
+ "card_sets":[
+   {"set_name":"Starter Deck: Kaiba","set_code":"SDK-099",
+    "set_rarity":"Grand Master Rare","set_rarity_code":"","set_price":"0"},
+   {"set_name":"Starter Deck: Kaiba","set_code":"SDK-098",
+    "set_rarity":"New","set_rarity_code":"","set_price":"0"}],
+ "card_prices":[{"cardmarket_price":"0.00","tcgplayer_price":"0.00",
+   "ebay_price":"0.00","amazon_price":"0.00","coolstuffinc_price":"0.00"}]}
+''';
+      final catalog = catalogWith(
+        bySetName: <String, String>{
+          'Starter Deck: Kaiba': cardData(<String>[bare]),
+        },
+      );
+
+      final cards = await catalog.fetchCardsInSet('sdk');
+
+      // "Grand Master Rare" would otherwise collapse to the rare tier letter
+      // and be indistinguishable from every other premium rarity in the set.
+      final grand = cards.firstWhere((c) => c.rarity == 'Grand Master Rare');
+      expect(grand.rarityCode, 'GMR');
+
+      // A one-word rarity keeps its own name rather than one initial.
+      final placeholder = cards.firstWhere((c) => c.rarity == 'New');
+      expect(placeholder.rarityCode, 'NEW');
+    });
+
+    test('caps the shorthand so it cannot push the card name out', () async {
+      const long = '''
+{"id":88888888,"name":"Long Rarity","type":"Spell Card",
+ "humanReadableCardType":"Spell Card","frameType":"spell","race":"Normal",
+ "desc":"Test.",
+ "card_sets":[{"set_name":"Starter Deck: Kaiba","set_code":"SDK-097",
+   "set_rarity":"Duel Terminal Parallel Rare","set_rarity_code":"",
+   "set_price":"0"}],
+ "card_prices":[{"cardmarket_price":"0.00","tcgplayer_price":"0.00",
+   "ebay_price":"0.00","amazon_price":"0.00","coolstuffinc_price":"0.00"}]}
+''';
+      final catalog = catalogWith(
+        bySetName: <String, String>{
+          'Starter Deck: Kaiba': cardData(<String>[long]),
+        },
+      );
+
+      final card = (await catalog.fetchCardsInSet('sdk')).single;
+      expect(card.rarityCode, 'DTPR');
+    });
+
+    test('publishes no shorthand when the row has no rarity at all', () async {
+      const none = '''
+{"id":77777777,"name":"No Rarity","type":"Spell Card",
+ "humanReadableCardType":"Spell Card","frameType":"spell","race":"Normal",
+ "desc":"Test.",
+ "card_sets":[{"set_name":"Starter Deck: Kaiba","set_code":"SDK-096",
+   "set_rarity":"","set_rarity_code":"","set_price":"0"}],
+ "card_prices":[{"cardmarket_price":"0.00","tcgplayer_price":"0.00",
+   "ebay_price":"0.00","amazon_price":"0.00","coolstuffinc_price":"0.00"}]}
+''';
+      final catalog = catalogWith(
+        bySetName: <String, String>{
+          'Starter Deck: Kaiba': cardData(<String>[none]),
+        },
+      );
+
+      // The badge falls back to the tier letter rather than inventing a code.
+      final card = (await catalog.fetchCardsInSet('sdk')).single;
+      expect(card.rarityCode, isNull);
+    });
+  });
+
   group('reprints', () {
     test('groups every printing of one name and drops fuzzy matches', () async {
       final catalog = catalogWith(

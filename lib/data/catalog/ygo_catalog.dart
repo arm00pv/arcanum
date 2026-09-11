@@ -474,6 +474,35 @@ class YgoCatalog implements CardCatalog {
     return _providerCodeOf(row.code) == set.providerCode;
   }
 
+  /// The badge shorthand for a printing's rarity, or null when there is none.
+  ///
+  /// cardinfo publishes `set_rarity_code` for most rarities - "(UR)", "(ScR)",
+  /// "(StR)" - but leaves it empty for a few, and those are exactly the ones the
+  /// tier letters cannot describe: "Grand Master Rare" and the "New" placeholder
+  /// both arrive bare, and both would otherwise render as a generic premium
+  /// letter shared with half the set.
+  ///
+  /// The fallback is the initials of the provider's own words, so the shorthand
+  /// is derived from what Yu-Gi-Oh! calls the rarity rather than from a guess.
+  /// Four characters is the cap, because the badge is a pill on a dense grid
+  /// tile and a longer one would start pushing the card name out.
+  static String? _rarityShorthand(YgoCardSet? row) {
+    final published = row?.rarityCode.trim() ?? '';
+    if (published.isNotEmpty) return published;
+
+    final words = (row?.rarity ?? '')
+        .split(RegExp(r'[^A-Za-z0-9]+'))
+        .where((word) => word.isNotEmpty)
+        .toList();
+    if (words.isEmpty) return null;
+
+    final initials = words.length == 1
+        ? words.first
+        : words.map((word) => word[0]).join();
+    final upper = initials.toUpperCase();
+    return upper.length <= 4 ? upper : upper.substring(0, 4);
+  }
+
   TcgCard _cardFor(
     YgoCard card,
     YgoCardSet? row, {
@@ -531,7 +560,11 @@ class YgoCatalog implements CardCatalog {
         if (card.scale != null) 'pendulumScale': card.scale,
         if (card.archetype != null && card.archetype!.isNotEmpty)
           'archetype': card.archetype,
-        if (row != null && row.rarityCode.isNotEmpty) 'rarityCode': row.rarityCode,
+        // The provider's own shorthand when it publishes one, and otherwise a
+        // stand-in derived from its own name for the rarity. Leaving it empty
+        // would drop the badge back to a tier letter, which cannot tell Grand
+        // Master Rare from any other premium rarity.
+        'rarityCode': ?_rarityShorthand(row),
         if (card.banlist?.tcg != null) 'banlistTcg': card.banlist!.tcg,
         if (card.ygoprodeckUrl.isNotEmpty) 'ygoprodeckUrl': card.ygoprodeckUrl,
       },
