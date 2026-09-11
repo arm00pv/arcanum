@@ -6,6 +6,7 @@ import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/data/db/collection_dao.dart';
 import 'package:arcanum/data/db/history_dao.dart';
 import 'package:arcanum/data/history/price_history_service.dart';
+import 'package:arcanum/data/repositories/catalog_repository.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -112,8 +113,10 @@ class CollectionRepository {
     required CatalogDao catalogDao,
     required HistoryDao historyDao,
     required PriceHistoryService history,
+    required CatalogRepository catalogs,
     required AppSettings settings,
-  })  : _col = collectionDao,
+  })  : _catalogs = catalogs,
+        _col = collectionDao,
         _cat = catalogDao,
         _hist = historyDao,
         _history = history,
@@ -122,6 +125,7 @@ class CollectionRepository {
   /// The game this repository is scoped to.
   final CardGame game;
 
+  final CatalogRepository _catalogs;
   final CollectionDao _col;
   final CatalogDao _cat;
   final HistoryDao _hist;
@@ -394,6 +398,21 @@ class CollectionRepository {
 
     final entries = await _col.all(game);
     if (entries.isEmpty) return 0;
+
+    // Pull today's market price for everything owned before recording it.
+    // Cached prices are only as fresh as the last set download, so without
+    // this the snapshot would faithfully record a stale number and the
+    // resulting history would be quietly wrong.
+    try {
+      await _catalogs.refreshPrices(
+        game,
+        entries.map((e) => e.cardId).toSet().toList(),
+      );
+    } catch (_) {
+      // Offline, or the provider refused. Recording what we have beats
+      // skipping the day and leaving a hole in the series.
+    }
+
     final cards = await _cat.cardsByIds(game, entries.map((e) => e.cardId).toSet().toList());
 
     var written = 0;

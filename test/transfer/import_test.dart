@@ -123,6 +123,7 @@ void main() {
       catalogDao: catalogDao,
       historyDao: HistoryDao(db.db),
       history: PriceHistoryService(dao: HistoryDao(db.db), settings: settings),
+      catalogs: catalogs,
       settings: settings,
     );
     importer = CollectionImporter(collection: collection, catalogs: catalogs);

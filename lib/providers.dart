@@ -104,6 +104,9 @@ class Bootstrap {
           CardGame.pokemon: PokemonCatalog(),
         };
 
+    final catalogRepository =
+        CatalogRepository(catalogs: resolvedCatalogs, dao: catalogDao);
+
     final collections = <CardGame, CollectionRepository>{
       for (final game in CardGame.values)
         game: CollectionRepository(
@@ -112,6 +115,7 @@ class Bootstrap {
           catalogDao: catalogDao,
           historyDao: historyDao,
           history: historyService,
+          catalogs: catalogRepository,
           settings: settings,
         ),
     };
@@ -124,7 +128,7 @@ class Bootstrap {
       historyDao: historyDao,
       alertDao: alertDao,
       historyService: historyService,
-      catalog: CatalogRepository(catalogs: resolvedCatalogs, dao: catalogDao),
+      catalog: catalogRepository,
       collections: collections,
       catalogs: resolvedCatalogs,
       alerts: AlertRepository(dao: alertDao, catalogDao: catalogDao),
