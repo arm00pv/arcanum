@@ -60,6 +60,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       'Mewtwo',
       'Umbreon',
     ],
+    CardGame.yugioh: <String>[
+      'Dark Magician',
+      'Blue-Eyes White Dragon',
+      'Monster Reborn',
+      'Pot of Greed',
+      'Exodia',
+    ],
   };
 
   final TextEditingController _controller = TextEditingController();
@@ -167,9 +174,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               onChanged: _onChanged,
               onSubmitted: _submit,
               decoration: InputDecoration(
-                hintText: game == CardGame.mtg
-                    ? 'Card name, set or oracle text'
-                    : 'Card name, set or attack text',
+                hintText: switch (game) {
+                  CardGame.mtg => 'Card name, set or oracle text',
+                  CardGame.pokemon => 'Card name, set or attack text',
+                  CardGame.yugioh => 'Card name, set or card text',
+                },
                 prefixIcon: Icon(
                   Icons.search_rounded,
                   size: 20,
@@ -211,15 +220,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     CardGame game,
   ) {
     final List<String> quick = _quickFilters[game] ?? const <String>[];
-    final bool isMtg = game == CardGame.mtg;
+    final String textNoun = _textNoun(game);
 
     return <Widget>[
       const SizedBox(height: 12),
       EmptyState(
         icon: Icons.travel_explore_rounded,
-        title: isMtg ? 'Search the multiverse' : 'Search every Pokémon set',
+        title: switch (game) {
+          CardGame.mtg => 'Search the multiverse',
+          CardGame.pokemon => 'Search every Pokémon set',
+          CardGame.yugioh => 'Search every Yu-Gi-Oh! set',
+        },
         message: 'Type at least two characters - card names, set names and '
-            '${isMtg ? 'oracle text' : 'attack and rules text'} all work. '
+            '$textNoun all work. '
             'Arcanum answers from your cached ${game.shortLabel} catalogue '
             'first and asks ${game.dataSource} for the rest.',
       ),
@@ -253,24 +266,40 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               _SearchTip(
                 icon: Icons.text_fields_rounded,
                 label: 'Names',
-                detail: isMtg
-                    ? 'Partial names work: "bolt" finds Lightning Bolt.'
-                    : 'Partial names work: "zard" finds Charizard.',
+                detail: switch (game) {
+                  CardGame.mtg =>
+                    'Partial names work: "bolt" finds Lightning Bolt.',
+                  CardGame.pokemon =>
+                    'Partial names work: "zard" finds Charizard.',
+                  CardGame.yugioh =>
+                    'Partial names work: "magician" finds Dark Magician.',
+                },
               ),
               _SearchTip(
                 icon: Icons.category_outlined,
                 label: 'Sets',
-                detail: isMtg
-                    ? 'Search a set name such as "Bloomburrow" to browse it.'
-                    : 'Search a set name such as "Base Set" to browse it.',
+                detail: switch (game) {
+                  CardGame.mtg =>
+                    'Search a set name such as "Bloomburrow" to browse it.',
+                  CardGame.pokemon =>
+                    'Search a set name such as "Base Set" to browse it.',
+                  CardGame.yugioh =>
+                    'Search a set name such as "Legend of Blue Eyes" to browse it.',
+                },
               ),
               _SearchTip(
                 icon: Icons.menu_book_rounded,
                 label: 'Rules text',
-                detail: isMtg
-                    ? 'Oracle text is searched, so "draw a card" finds cantrips.'
-                    : 'Attacks and rules are searched, so "discard an Energy" '
+                detail: switch (game) {
+                  CardGame.mtg =>
+                    'Oracle text is searched, so "draw a card" finds cantrips.',
+                  CardGame.pokemon =>
+                    'Attacks and rules are searched, so "discard an Energy" '
                         'finds the cards that do it.',
+                  CardGame.yugioh =>
+                    'Card text is searched, so "Special Summon" finds the '
+                        'cards that do it.',
+                },
               ),
               _SearchTip(
                 icon: Icons.sell_outlined,
@@ -285,6 +314,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       ),
     ];
   }
+
+  /// What a game calls the text printed on its cards.
+  ///
+  /// Each game names this differently and the search tips read badly when the
+  /// wrong one is used, so it is resolved per game rather than phrased vaguely.
+  static String _textNoun(CardGame game) => switch (game) {
+        CardGame.mtg => 'oracle text',
+        CardGame.pokemon => 'attack and rules text',
+        CardGame.yugioh => 'card text',
+      };
 
   // ----------------------------------------------------------------- results
 

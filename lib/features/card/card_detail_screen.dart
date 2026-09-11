@@ -629,16 +629,27 @@ class _AnalyticsSection extends StatelessWidget {
                     Text('Building price history', style: context.t.titleMedium),
                     const SizedBox(height: 6),
                     Text(
-                      game == CardGame.pokemon
-                          ? 'Arcanum records a Pokémon price snapshot every day you '
+                      // Each game has a different answer to "where is my
+                      // history?", and two of the three have nowhere to
+                      // backfill from, so the sentence follows the game.
+                      switch (game) {
+                        CardGame.mtg =>
+                          'Arcanum records a price snapshot every day you open '
+                              'the app. Trend analysis needs at least a couple of '
+                              'weeks of data — connect a history provider in '
+                              'Settings to backfill immediately.',
+                        CardGame.pokemon =>
+                          'Arcanum records a Pokémon price snapshot every day you '
                               'open the app, and the free TCGdex archive supplies '
                               'history up to September 2024. Trend analysis needs '
                               'about three weeks of data — a JustTCG key in Settings '
-                              'adds live history immediately.'
-                          : 'Arcanum records a price snapshot every day you open the '
-                              'app. Trend analysis needs at least a couple of weeks '
-                              'of data — connect a history provider in Settings to '
-                              'backfill immediately.',
+                              'adds live history immediately.',
+                        CardGame.yugioh =>
+                          'Arcanum records a Yu-Gi-Oh! price snapshot every day '
+                              'you open the app. YGOPRODeck keeps no price history '
+                              'at all, so these snapshots are the only source of a '
+                              'trend and analysis begins after a couple of weeks.',
+                      },
                       textAlign: TextAlign.center,
                       style: context.t.bodySmall,
                     ),

@@ -258,17 +258,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   ) {
     final c = context.c;
     final bool isMtg = game == CardGame.mtg;
+    final bool isYgo = game == CardGame.yugioh;
     final bool configured = settings.hasHistoryProvider(game);
     // A Pokémon companion is genuinely optional, so the probe only appears
-    // once an endpoint has actually been typed in.
-    final bool canTest =
-        isMtg || _pokemonEndpointController.text.trim().isNotEmpty;
+    // once an endpoint has actually been typed in. Yu-Gi-Oh! has no endpoint to
+    // probe in the first place, so the button is never offered for it.
+    final bool canTest = !isYgo &&
+        (isMtg || _pokemonEndpointController.text.trim().isNotEmpty);
 
     return _group(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          if (isMtg) ...<Widget>[
+          if (isYgo) ...<Widget>[
+            Text('Yu-Gi-Oh! price history', style: context.t.titleSmall),
+            const SizedBox(height: 8),
+            Text(
+              'YGOPRODeck publishes what a card is worth today and nothing '
+              'else: the API has no history endpoint, and there is no free '
+              'archive of Yu-Gi-Oh! prices to stand in for one. Trends for this '
+              'game therefore come from the daily snapshots Arcanum records for '
+              'every card you own, which start building the day you add your '
+              'first card.',
+              style: context.t.bodySmall
+                  ?.copyWith(color: c.textSecondary, height: 1.45),
+            ),
+          ] else if (isMtg) ...<Widget>[
             Text(
               'Scryfall publishes only current Magic prices, so it cannot answer '
               'what a card was worth last month. Arcanum fills that gap from '
@@ -343,40 +358,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 label: Text(_testing ? 'Testing...' : 'Test connection'),
               ),
             ),
-          const SizedBox(height: 20),
-          Text('JustTCG API key', style: context.t.titleSmall),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _keyController,
-            obscureText: _obscureKey,
-            autocorrect: false,
-            enableSuggestions: false,
-            onChanged: (String value) {
-              ref.read(settingsProvider).justTcgKey = value;
-              setState(() {});
-            },
-            decoration: InputDecoration(
-              hintText: 'Optional',
-              helperText: isMtg
-                  ? 'The free tier is rate limited, so long backfills take a '
-                      'while. Leave empty to rely on snapshots only.'
-                  : 'The free tier allows 100 requests a day and is the only '
-                      'source of live Pokémon history. Leave empty to rely on '
-                      'snapshots and the 2024 TCGdex archive.',
-              suffixIcon: IconButton(
-                tooltip: _obscureKey ? 'Show key' : 'Hide key',
-                icon: Icon(
-                  _obscureKey
-                      ? Icons.visibility_off_rounded
-                      : Icons.visibility_rounded,
-                  size: 18,
-                  color: c.textSecondary,
+          // Hidden for Yu-Gi-Oh!: the key is stored per app rather than per
+          // game, and no JustTCG plan carries Yu-Gi-Oh! history, so offering the
+          // field here would promise a source that would never answer.
+          if (!isYgo) ...<Widget>[
+            const SizedBox(height: 20),
+            Text('JustTCG API key', style: context.t.titleSmall),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _keyController,
+              obscureText: _obscureKey,
+              autocorrect: false,
+              enableSuggestions: false,
+              onChanged: (String value) {
+                ref.read(settingsProvider).justTcgKey = value;
+                setState(() {});
+              },
+              decoration: InputDecoration(
+                hintText: 'Optional',
+                helperText: isMtg
+                    ? 'The free tier is rate limited, so long backfills take a '
+                        'while. Leave empty to rely on snapshots only.'
+                    : 'The free tier allows 100 requests a day and is the only '
+                        'source of live Pokémon history. Leave empty to rely on '
+                        'snapshots and the 2024 TCGdex archive.',
+                suffixIcon: IconButton(
+                  tooltip: _obscureKey ? 'Show key' : 'Hide key',
+                  icon: Icon(
+                    _obscureKey
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    size: 18,
+                    color: c.textSecondary,
+                  ),
+                  onPressed: () => setState(() => _obscureKey = !_obscureKey),
                 ),
-                onPressed: () => setState(() => _obscureKey = !_obscureKey),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
           Row(
             children: <Widget>[
               Icon(

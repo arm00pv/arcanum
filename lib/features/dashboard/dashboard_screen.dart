@@ -245,17 +245,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
 /// What a game's allocation section is called.
 ///
-/// Magic buckets its collection by mana colour; Pokémon has energy types
-/// instead, so calling the section "By colour" there would be a lie.
+/// Magic buckets its collection by mana colour, Pokémon by energy type and
+/// Yu-Gi-Oh! by monster attribute, so one shared title would be a lie for two
+/// games out of three.
 String _categorySectionTitle(CardGame game) => switch (game) {
       CardGame.mtg => 'By colour',
       CardGame.pokemon => 'By energy type',
+      CardGame.yugioh => 'By attribute',
     };
 
 /// Explains what the buckets are measured against, per game.
 String _categorySectionSubtitle(CardGame game) => switch (game) {
       CardGame.mtg => 'Market value by colour identity',
       CardGame.pokemon => 'Market value by Pokémon type',
+      // Spell and Trap cards carry no attribute, so the chart has a slice for
+      // them rather than pretending they belong to one of the seven.
+      CardGame.yugioh => 'Market value by attribute, Spells and Traps apart',
     };
 
 /// The headline: total value, change, and the portfolio curve.
@@ -417,11 +422,11 @@ class _StatGrid extends StatelessWidget {
 
 /// Where a game's value sits across its own categories.
 ///
-/// Magic allocates by mana colour, Pokémon by energy type. The two are different
-/// concepts that happen to share a shape, so the rows are driven by
-/// [ColourBucket] and the swatch is a plain filled circle — a mana pip would be
-/// nonsense next to a Pokémon type. Whatever the active game does not use simply
-/// never appears in the map.
+/// Magic allocates by mana colour, Pokémon by energy type and Yu-Gi-Oh! by
+/// monster attribute. They are different concepts that happen to share a shape,
+/// so the rows are driven by [ColourBucket] and the swatch is a plain filled
+/// circle — a mana pip would be nonsense next to a Pokémon type. Whatever the
+/// active game does not use simply never appears in the map.
 class _CategoryAllocation extends StatelessWidget {
   const _CategoryAllocation({required this.values});
 

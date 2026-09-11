@@ -5,6 +5,7 @@ import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/catalog/mtg_catalog.dart';
 import 'package:arcanum/data/catalog/pokemon_catalog.dart';
+import 'package:arcanum/data/catalog/ygo_catalog.dart';
 import 'package:arcanum/data/db/alert_dao.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
@@ -102,6 +103,7 @@ class Bootstrap {
         <CardGame, CardCatalog>{
           CardGame.mtg: MtgCatalog(),
           CardGame.pokemon: PokemonCatalog(),
+          CardGame.yugioh: YgoCatalog(),
         };
 
     final catalogRepository =

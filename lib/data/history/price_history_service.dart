@@ -33,7 +33,14 @@ class PriceHistoryService {
   final _inFlight = <String, Future<List<PricePoint>>>{};
 
   /// Network providers configured for a game, most preferred first.
+  ///
+  /// Yu-Gi-Oh! has none, and that is not an oversight: YGOPRODeck publishes
+  /// current prices only, with no history endpoint anywhere in the API and no
+  /// free archive of the kind Pokémon has. The game therefore runs on the daily
+  /// snapshots Arcanum records itself, which is why this returns an empty list
+  /// rather than a provider that would only ever answer with nothing.
   List<PriceHistorySource> providersFor(CardGame game) {
+    if (game == CardGame.yugioh) return const <PriceHistorySource>[];
     final out = <PriceHistorySource>[];
     if (_settings.historyEndpoint.isNotEmpty) {
       final hasPokemonEndpoint = _settings.pokemonHistoryEndpoint.isNotEmpty;

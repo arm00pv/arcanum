@@ -246,7 +246,9 @@ class CollectionRepository {
         totalValue += value;
         final setName = card!.setName.isEmpty ? card.setCode.toUpperCase() : card.setName;
         bySet.update(setName, (x) => x + value, ifAbsent: () => value);
-        // Magic buckets by colour identity, Pokémon by energy type.
+        // Magic buckets by colour identity, Pokémon by energy type and
+        // Yu-Gi-Oh! by monster attribute; the latter two both carry their
+        // category in `colors`, so only Magic needs the other list.
         final bucket = game.dominantBucket(
             game == CardGame.mtg ? card.colorIdentity : card.colors);
         byCategory.update(bucket, (x) => x + value, ifAbsent: () => value);

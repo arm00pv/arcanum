@@ -99,12 +99,16 @@ enum CardRarity {
   final String label;
   final Color color;
 
-  /// Resolves a rarity string from either game onto a display tier.
+  /// Resolves a rarity string from any game onto a display tier.
   ///
   /// Magic ships `common`/`uncommon`/`rare`/`mythic`/`special`/`bonus`.
   /// Pokémon ships values such as `Rare Holo`, `Double Rare`,
   /// `Illustration Rare`, `Special Illustration Rare`, `Hyper Rare`,
-  /// `ACE SPEC Rare` and `Trainer Gallery`.
+  /// `ACE SPEC Rare` and `Trainer Gallery`. Yu-Gi-Oh! ships its own long tail
+  /// — `Super Rare`, `Ultra Rare`, `Secret Rare`, `Ultimate Rare`,
+  /// `Starlight Rare`, `Ghost Rare`, `Gold Rare`, `Duel Terminal Parallel
+  /// Rare` — which is why the tail of this method falls back to "contains
+  /// rare" rather than matching whole strings.
   static CardRarity fromCode(String? c) {
     final s = (c ?? '').toLowerCase().trim();
     if (s.isEmpty) return CardRarity.unknown;
@@ -113,6 +117,7 @@ enum CardRarity {
     if (s.contains('special illustration') ||
         s.contains('hyper rare') ||
         s.contains('secret') ||
+        s.contains('starlight') ||
         s.contains('mythic')) {
       return CardRarity.mythic;
     }
@@ -133,6 +138,10 @@ enum CardRarity {
     if (s.contains('promo')) return CardRarity.bonus;
     if (s.contains('uncommon')) return CardRarity.uncommon;
     if (s.contains('common')) return CardRarity.common;
+    // Deliberately after `common`: Yu-Gi-Oh!'s "Duel Terminal ... Rare" and
+    // "Parallel Rare" variants, and Pokémon's longer rarity names, all reach
+    // the rare tier here rather than falling through to `unknown`.
+    if (s.contains('rare')) return CardRarity.rare;
     if (s.contains('special')) return CardRarity.special;
     if (s.contains('bonus')) return CardRarity.bonus;
     return CardRarity.unknown;
@@ -142,7 +151,8 @@ enum CardRarity {
 /// Physical finish or variant of a card, which materially changes its price.
 ///
 /// Magic has three; Pokémon has a wider set of print variants, including the
-/// 1st Edition and unlimited printings that dominate the value of older sets.
+/// 1st Edition and unlimited printings that dominate the value of older sets;
+/// Yu-Gi-Oh! has only the ordinary/foil pair.
 enum CardFinish {
   nonfoil('nonfoil', 'Non-foil', 'Normal'),
   foil('foil', 'Foil', 'Foil'),
@@ -178,20 +188,22 @@ enum CardFinish {
 
 /// Condition grades, ordered from best to worst.
 ///
-/// The two games use different vocabularies. Magic players grade with the
-/// M/NM/EX/GD/LP/PL/PO scale; Pokémon collectors use NM/LP/MP/HP/DMG. Both are
-/// here, and each game shows only the ones its collectors actually use.
+/// The three games use different vocabularies. Magic players grade with the
+/// M/NM/EX/GD/LP/PL/PO scale; Pokémon collectors and Yu-Gi-Oh! collectors both
+/// use the NM/LP/MP/HP/DMG scale TCGplayer publishes, which is why those five
+/// grades are shared between them and the Magic-only ones are not. Each game
+/// shows only the grades its collectors actually use.
 enum CardCondition {
   mint('mint', 'Mint', 'M', {CardGameTag.mtg}),
-  nearMint('near_mint', 'Near Mint', 'NM', {CardGameTag.mtg, CardGameTag.pokemon}),
+  nearMint('near_mint', 'Near Mint', 'NM', {CardGameTag.mtg, CardGameTag.pokemon, CardGameTag.yugioh}),
   excellent('excellent', 'Excellent', 'EX', {CardGameTag.mtg}),
   good('good', 'Good', 'GD', {CardGameTag.mtg}),
-  lightPlayed('light_played', 'Lightly Played', 'LP', {CardGameTag.mtg, CardGameTag.pokemon}),
-  moderatelyPlayed('moderately_played', 'Moderately Played', 'MP', {CardGameTag.pokemon}),
-  heavilyPlayed('heavily_played', 'Heavily Played', 'HP', {CardGameTag.pokemon}),
+  lightPlayed('light_played', 'Lightly Played', 'LP', {CardGameTag.mtg, CardGameTag.pokemon, CardGameTag.yugioh}),
+  moderatelyPlayed('moderately_played', 'Moderately Played', 'MP', {CardGameTag.pokemon, CardGameTag.yugioh}),
+  heavilyPlayed('heavily_played', 'Heavily Played', 'HP', {CardGameTag.pokemon, CardGameTag.yugioh}),
   played('played', 'Played', 'PL', {CardGameTag.mtg}),
   poor('poor', 'Poor', 'PO', {CardGameTag.mtg}),
-  damaged('damaged', 'Damaged', 'DMG', {CardGameTag.pokemon});
+  damaged('damaged', 'Damaged', 'DMG', {CardGameTag.pokemon, CardGameTag.yugioh});
 
   const CardCondition(this.code, this.label, this.short, this.games);
 
@@ -231,7 +243,8 @@ enum CardCondition {
 /// game ids instead.
 enum CardGameTag {
   mtg('mtg'),
-  pokemon('pokemon');
+  pokemon('pokemon'),
+  yugioh('yugioh');
 
   const CardGameTag(this.id);
   final String id;

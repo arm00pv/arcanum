@@ -171,7 +171,14 @@ class AppSettings extends ChangeNotifier {
   }
 
   /// True when at least one provider serves this game.
+  ///
+  /// Must agree with [PriceHistoryService.providersFor], because the settings
+  /// screen uses it to tell the user whether trends have a source. Yu-Gi-Oh! has
+  /// no provider at all - neither JustTCG nor either self-hosted endpoint
+  /// carries it - so a key left over from another game must not make the app
+  /// claim one is configured.
   bool hasHistoryProvider(CardGame game) {
+    if (game == CardGame.yugioh) return false;
     if (justTcgKey.isNotEmpty) return true;
     if (game == CardGame.mtg) return historyEndpoint.isNotEmpty;
     return pokemonHistoryEndpoint.isNotEmpty;
