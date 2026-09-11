@@ -204,8 +204,9 @@ Release signing uses `android/key.properties` + `android/arcanum-release.jks`.
 ## Tests
 
 ```powershell
-flutter test        # 205 tests: quant engine, widgets, Scryfall client (live),
-                    # CSV codec + dialects, import matching, YGOPRODeck parsing
+flutter test        # 210 tests: quant engine, widgets, Scryfall client (live),
+                    # CSV codec + dialects, import matching, transfer screen,
+                    # YGOPRODeck parsing
 ```
 
 ---
