@@ -341,9 +341,12 @@ void main() {
       final card = (await catalog.fetchCardsInSet('lob'))
           .firstWhere((c) => c.name == 'Blue-Eyes White Dragon');
 
-      // eBay quotes 5.95 for the same card; TCGplayer is the reference market
-      // for Yu-Gi-Oh! and wins outright.
-      expect(card.prices.priceFor(CardFinish.nonfoil), 0.13);
+      // The printing's own figure, not the card's. The card-level block quotes
+      // TCGplayer at 0.13, but that is the cheapest version of Blue-Eyes
+      // anywhere; this row is the LOB Ultra Rare, which the provider prices at
+      // 62.15. Using the card-level number here is what valued a 62-dollar
+      // printing at thirteen cents.
+      expect(card.prices.priceFor(CardFinish.nonfoil), 62.15);
       expect(card.prices.byFinish.keys, <String>[CardFinish.nonfoil.code]);
       // No foil price was published, so none is invented.
       expect(card.prices.priceFor(CardFinish.foil), isNull);
@@ -352,6 +355,71 @@ void main() {
       expect(card.prices.byFinish.containsKey('eur'), isFalse);
       expect(card.prices.secondary['ebay'], 5.95);
       expect(card.prices.secondary['coolstuffinc'], 0.99);
+    });
+
+    test('prefers the printing price over the card price', () async {
+      final catalog = catalogWith(
+        bySetName: <String, String>{
+          'Legend of Blue Eyes White Dragon': lobBody,
+        },
+      );
+
+      final cards = await catalog.fetchCardsInSet('lob');
+
+      // Both LOB printings carry their own set_price of 62.15 while the card
+      // block says 0.13, so every printing must come out at 62.15.
+      final blueEyes = cards.where((c) => c.name == 'Blue-Eyes White Dragon');
+      expect(blueEyes, isNotEmpty);
+      for (final card in blueEyes) {
+        expect(card.prices.priceFor(CardFinish.nonfoil), 62.15);
+      }
+    });
+
+    test('gives two rarities of one card their own prices', () async {
+      const twoRarities = '''
+{"id":55555555,"name":"Twin Rarity","type":"Effect Monster",
+ "humanReadableCardType":"Effect Monster","frameType":"effect",
+ "desc":"Test.","race":"Warrior","atk":1000,"def":1000,"level":4,
+ "attribute":"DARK",
+ "card_sets":[
+   {"set_name":"Starter Deck: Kaiba","set_code":"SDK-010",
+    "set_rarity":"Ultra Rare","set_rarity_code":"(UR)","set_price":"74.49"},
+   {"set_name":"Starter Deck: Kaiba","set_code":"SDK-010",
+    "set_rarity":"Secret Rare","set_rarity_code":"(ScR)","set_price":"27.92"}],
+ "card_prices":[{"cardmarket_price":"0.10","tcgplayer_price":"0.14",
+   "ebay_price":"0.00","amazon_price":"0.00","coolstuffinc_price":"0.00"}]}
+''';
+      final catalog = catalogWith(
+        bySetName: <String, String>{
+          'Starter Deck: Kaiba': cardData(<String>[twoRarities]),
+        },
+      );
+
+      final cards = await catalog.fetchCardsInSet('sdk');
+      final prices = <String, double?>{
+        for (final card in cards)
+          card.rarity: card.prices.priceFor(CardFinish.nonfoil),
+      };
+
+      // This is the whole point: one card, one collector number, two rarities,
+      // and the two are worth different money rather than the same 0.14.
+      expect(prices['Ultra Rare'], 74.49);
+      expect(prices['Secret Rare'], 27.92);
+    });
+
+    test('falls back to the card price when the row has none', () async {
+      final catalog = catalogWith(
+        bySetName: <String, String>{
+          'Legend of Blue Eyes White Dragon': lobBody,
+        },
+      );
+
+      // The 25th Anniversary printing carries set_price "0", which the provider
+      // uses for "no market data yet", so the card-level figure stands in
+      // rather than the printing going unpriced.
+      final reborn = (await catalog.fetchCardsInSet('lob'))
+          .firstWhere((c) => c.name == 'Monster Reborn');
+      expect(reborn.prices.priceFor(CardFinish.nonfoil), 1.50);
     });
 
     test('falls back to another USD vendor only when TCGplayer is empty',
@@ -636,7 +704,9 @@ void main() {
       expect(fresh, hasLength(1));
       expect(fresh.single.id, original.id);
       expect(fresh.single.setCode, 'sdk');
-      expect(fresh.single.prices.priceFor(CardFinish.nonfoil), 12.50);
+      // 40 is this printing's own set_price; 12.50 is the card-level TCGplayer
+      // figure that stood in for every version of the card before.
+      expect(fresh.single.prices.priceFor(CardFinish.nonfoil), 40.0);
     });
   });
 

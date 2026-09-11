@@ -372,8 +372,10 @@ class YgoCatalog implements CardCatalog {
   Future<List<TcgCard>> refreshPrices(List<TcgCard> cards) async {
     if (cards.isEmpty) return const [];
 
-    // One request per distinct passcode: every printing of a card shares the
-    // card's price, so re-reading the card reprices all of them at once.
+    // One request per distinct passcode: the card carries every printing's row
+    // and therefore every printing's own price, so one read reprices all of
+    // them. What it must not do is hand them all the same number - the card
+    // level figure is the cheapest version's, not each row's.
     final byPasscode = <String, List<TcgCard>>{};
     for (final card in cards) {
       final passcode = _passcodeOf(card.id);
@@ -382,7 +384,7 @@ class YgoCatalog implements CardCatalog {
     }
     if (byPasscode.isEmpty) return const [];
 
-    final prices = <String, TcgPrices>{};
+    final fetched = <String, YgoCard>{};
     final queue = byPasscode.keys.toList();
     Future<void> worker() async {
       while (true) {
@@ -391,7 +393,7 @@ class YgoCatalog implements CardCatalog {
         try {
           final page = await _pageOrNull('/cardinfo.php', {'id': passcode});
           if (page == null || page.cards.isEmpty) continue;
-          prices[passcode] = _pricesOf(page.cards.first.prices);
+          fetched[passcode] = page.cards.first;
         } catch (_) {
           // A card that cannot be re-read keeps the price it already had.
         }
@@ -402,8 +404,16 @@ class YgoCatalog implements CardCatalog {
 
     final out = <TcgCard>[];
     for (final card in cards) {
-      final fresh = prices[_passcodeOf(card.id)];
-      if (fresh != null) out.add(card.copyWith(prices: fresh));
+      final fresh = fetched[_passcodeOf(card.id)];
+      if (fresh == null) continue;
+      out.add(
+        card.copyWith(
+          prices: _pricesOf(
+            fresh.prices,
+            printingPrice: _priceOfRow(fresh, card.id),
+          ),
+        ),
+      );
     }
     return out;
   }
@@ -544,7 +554,7 @@ class YgoCatalog implements CardCatalog {
       // bucketing code has something to work with either way.
       colorIdentity: colors,
       releasedAt: releasedAt,
-      prices: _pricesOf(card.prices),
+      prices: _pricesOf(card.prices, printingPrice: row?.price ?? ''),
       imageUris: _imagesOf(card),
       oracleId: TcgCard.normaliseName(card.name),
       extras: {
@@ -652,31 +662,76 @@ class YgoCatalog implements CardCatalog {
       .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
       .replaceAll(RegExp(r'^-+|-+$'), '');
 
+  /// Reads a price the provider sends as a string, treating zero as no data.
+  ///
+  /// YGOPRODeck signals "no market data" with the string "0.00" rather than by
+  /// omitting the field, so a zero is an absence and never a free card.
+  static double? _money(String raw) {
+    final value = double.tryParse(raw.trim());
+    if (value == null || value <= 0) return null;
+    return value;
+  }
+
   /// Maps the provider's price block onto the shared shape.
   ///
-  /// The whole card carries one USD figure with no foil split, and it is placed
-  /// on the non-foil finish because that is the finish every default valuation
-  /// in the app uses. The foil finish is left unpriced rather than filled in with
-  /// the same number: the provider does not know what a foil copy sells for, and
-  /// a duplicated figure would claim it does.
-  static TcgPrices _pricesOf(YgoCardPrices? prices) {
-    if (prices == null) return TcgPrices.empty;
-    final usd = prices.bestUsd;
+  /// The provider publishes two different figures and they are not
+  /// interchangeable. `card_prices` is one number for the whole card - the
+  /// provider's own documentation calls it "the lowest price found across
+  /// multiple versions of that card" - so pricing every printing from it values
+  /// the most valuable version at the price of the cheapest. Blue-Eyes White
+  /// Dragon carries a card-level $0.14 while its YAP1 Ultra Rare printing sells
+  /// for $282, and the two must not be confused.
+  ///
+  /// [printingPrice] is `set_price`, the figure for the single row being built,
+  /// and it is used whenever the provider has one. It is left at zero for sets
+  /// with no market data yet, which is when the card-level figure is the only
+  /// thing available and is the honest fallback.
+  ///
+  /// The figure goes on the non-foil finish because that is the finish every
+  /// default valuation uses. The foil finish is left unpriced rather than filled
+  /// in with the same number: the provider does not know what a foil copy sells
+  /// for, and a duplicated figure would claim it does.
+  static TcgPrices _pricesOf(YgoCardPrices? prices, {String printingPrice = ''}) {
+    final perPrinting = _money(printingPrice);
+    final usd = perPrinting ?? prices?.bestUsd;
+    final vendors = prices;
+
     return TcgPrices(
       // A card the provider holds no data for has no key at all, so an unpriced
       // card is empty rather than priced at zero.
       byFinish: {
         CardFinish.nonfoil.code: ?usd,
       },
-      secondary: {
-        // cardmarket is the one EUR figure in a block of four USD ones; it is
-        // labelled here so nothing downstream can show euros as dollars.
-        if (prices.cardmarket != null) 'eur': prices.cardmarket,
-        if (prices.ebay != null) 'ebay': prices.ebay,
-        if (prices.amazon != null) 'amazon': prices.amazon,
-        if (prices.coolstuffinc != null) 'coolstuffinc': prices.coolstuffinc,
-      },
+      secondary: _vendorsOf(vendors),
     );
+  }
+
+  /// The other four vendors the provider quotes, keyed for the shared shape.
+  static Map<String, double?> _vendorsOf(YgoCardPrices? prices) {
+    if (prices == null) return const <String, double?>{};
+    return <String, double?>{
+      // cardmarket is the one EUR figure in a block of four USD ones; it is
+      // labelled here so nothing downstream can show euros as dollars.
+      if (prices.cardmarket != null) 'eur': prices.cardmarket,
+      if (prices.ebay != null) 'ebay': prices.ebay,
+      if (prices.amazon != null) 'amazon': prices.amazon,
+      if (prices.coolstuffinc != null) 'coolstuffinc': prices.coolstuffinc,
+    };
+  }
+
+  /// The provider's price for the exact printing a catalogue id names.
+  ///
+  /// Empty when the card carries no row for it, which leaves the card-level
+  /// figure to stand in.
+  static String _priceOfRow(YgoCard card, String id) {
+    final printingCode = _idField(id, 2);
+    final rarity = _idField(id, 3);
+    for (final row in card.sets) {
+      if (_slug(row.code) != printingCode) continue;
+      if (rarity.isNotEmpty && _slug(row.rarity) != rarity) continue;
+      return row.price;
+    }
+    return '';
   }
 
   /// The artwork URLs, keyed the way the rest of the app expects.
