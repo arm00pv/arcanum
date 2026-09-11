@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +9,7 @@ import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/data/update/update_service.dart';
 import 'package:arcanum/features/transfer/transfer_screen.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/common.dart';
@@ -34,8 +36,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  /// The release shown in the About block.
-  static const String _version = '1.0.0';
 
   /// Where the data that powers Arcanum is documented.
   static const String _scryfallApiUrl = 'https://scryfall.com/docs/api';
@@ -70,6 +70,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _backfillDone = 0;
   int _backfillTotal = 0;
 
+  /// The installed version, read from the built package rather than written
+  /// down here. A hand-kept constant drifts from pubspec the first time a
+  /// release bumps the version and nobody remembers to edit two files.
+  String _version = '';
+
+  /// Null until the user asks; the check never runs on its own.
+  UpdateResult? _update;
+  bool _checkingUpdate = false;
+
   @override
   void initState() {
     super.initState();
@@ -79,6 +88,45 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _pokemonEndpointController =
         TextEditingController(text: settings.pokemonHistoryEndpoint);
     _keyController = TextEditingController(text: settings.justTcgKey);
+    _loadVersion();
+  }
+
+  /// Reads the version the package was actually built with.
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() {
+        _version = info.version.isEmpty ? info.buildNumber : info.version;
+      });
+    } catch (_) {
+      // The test harness and some desktop shells have no package metadata.
+      // Showing nothing is better than inventing a number.
+      if (mounted) setState(() => _version = '');
+    }
+  }
+
+  /// Asks GitHub whether a newer release exists.
+  ///
+  /// Only ever called from the button: this is the one request Arcanum makes
+  /// that is not about cards or prices, so it does not happen behind the user's
+  /// back.
+  Future<void> _checkForUpdate() async {
+    setState(() {
+      _checkingUpdate = true;
+      _update = null;
+    });
+    try {
+      final service = UpdateService(
+        dio: Dio(),
+        currentVersion: _version,
+      );
+      final result = await service.check();
+      if (!mounted) return;
+      setState(() => _update = result);
+    } finally {
+      if (mounted) setState(() => _checkingUpdate = false);
+    }
   }
 
   @override
@@ -692,6 +740,84 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  /// The update check, and whatever it last found.
+  ///
+  /// Arcanum is sideloaded, so nothing updates it in the background. This is
+  /// the app telling the user that a newer build exists and pointing them at
+  /// it; it never downloads or installs anything itself.
+  ///
+  /// Until the project is published there is no repository to ask, and a
+  /// disabled button would be a control that can only ever fail, so the state
+  /// is stated in words instead.
+  Widget _updateRow(BuildContext context, ArcanumColors c) {
+    final service = UpdateService(dio: Dio(), currentVersion: _version);
+    final result = _update;
+
+    if (!service.isConfigured) {
+      return Text(
+        'Update checks appear once Arcanum has a published release '
+        'repository. This build was installed directly, so nothing updates '
+        'it in the background.',
+        style: context.t.bodySmall?.copyWith(color: c.textTertiary, height: 1.4),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (result != null) ...<Widget>[
+          Text(
+            _updateMessage(result),
+            style: context.t.bodySmall?.copyWith(
+              color: result.status == UpdateStatus.updateAvailable
+                  ? c.positive
+                  : c.textTertiary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        Row(
+          children: <Widget>[
+            OutlinedButton.icon(
+              onPressed: _checkingUpdate ? null : _checkForUpdate,
+              icon: _checkingUpdate
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.system_update_alt_rounded, size: 18),
+              label: Text(_checkingUpdate ? 'Checking' : 'Check for updates'),
+            ),
+            if (result != null &&
+                result.status == UpdateStatus.updateAvailable) ...<Widget>[
+              const SizedBox(width: 10),
+              FilledButton.icon(
+                onPressed: () => launchUrl(
+                  Uri.parse(result.release!.url),
+                  mode: LaunchMode.externalApplication,
+                ),
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: Text('Get ${result.release!.version}'),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// What the last check found, in one sentence.
+  String _updateMessage(UpdateResult result) => switch (result.status) {
+        UpdateStatus.updateAvailable =>
+          'Version ${result.release!.version} is available.',
+        UpdateStatus.upToDate => 'This is the newest release.',
+        UpdateStatus.noReleasesYet => 'No releases have been published yet.',
+        UpdateStatus.unreachable =>
+          result.message ?? 'GitHub could not be reached.',
+      };
+
   /// Renders a value that may still be loading, or may have failed.
   Widget _asyncText<T>(AsyncValue<T> value, String Function(T data) format) {
     final c = context.c;
@@ -779,7 +905,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   children: <Widget>[
                     Text('Arcanum', style: context.t.titleMedium),
                     Text(
-                      'Version $_version',
+                      _version.isEmpty
+                          ? 'Installed on this device'
+                          : 'Version $_version',
                       style: context.t.bodySmall?.copyWith(color: c.textTertiary),
                     ),
                   ],
@@ -787,6 +915,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          _updateRow(context, c),
           const SizedBox(height: 14),
           // Both notices are shown at all times, not just for the active game:
           // the app ships both catalogues, so both licences apply to it.

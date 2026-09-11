@@ -113,7 +113,15 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                           [
                             if (set != null) Fmt.date(set.releasedAt),
                             if (set?.series != null) set!.series!,
-                            '${cardsAsync.value?.length ?? set?.cardCount ?? 0} cards',
+                            // The rows this set stores, which is not always the
+                            // provider's published card count: Yu-Gi-Oh!
+                            // publishes one row per rarity, so a 126-card set
+                            // holds 228 printings here. The list calls the
+                            // provider's figure "cards", so this screen says
+                            // what it is actually listing rather than repeating
+                            // the word and contradicting the number.
+                            if (cardsAsync.value != null)
+                              '${cardsAsync.value!.length} printings',
                           ].join('  ·  '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -280,11 +288,24 @@ class _CardGridTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 2),
-          Text(
-            card.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.t.bodySmall?.copyWith(color: c.textPrimary),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  card.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.t.bodySmall?.copyWith(color: c.textPrimary),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // One card printed at several rarities inside a set becomes
+              // several tiles here, and they are otherwise indistinguishable:
+              // same art, same collector number, often the same price. The
+              // rarity is the only thing that tells them apart, so it earns its
+              // place on the tile even at this size.
+              RarityBadge(rarity: rarity, compact: true),
+            ],
           ),
         ],
       ),
