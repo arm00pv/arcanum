@@ -96,27 +96,46 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Base URL of the Arcanum Sync companion serving Magic price history.
+  /// Base URL of the Arcanum Sync companion serving price history.
   ///
-  /// Defaults to this collection's own companion service, reachable over the
-  /// private Tailscale network. It is only a convenience default — the app is
-  /// fully functional without it because MTGStocks provides deep history
-  /// directly.
-  static const defaultHistoryEndpoint = 'http://100.90.30.95:8787';
+  /// The companion is hosted behind TLS and answers from any network, so trends
+  /// work away from home rather than only on the private tailnet. It is still
+  /// only a convenience: the app is fully functional without it, because
+  /// MTGStocks and TCGdex answer directly and the app records its own daily
+  /// snapshots regardless.
+  static const defaultHistoryEndpoint = 'https://zapp.sytes.net/arcanum';
 
-  String get historyEndpoint =>
-      _prefs.getString(_kHistoryEndpoint) ?? defaultHistoryEndpoint;
+  /// The endpoint earlier builds shipped with, kept so that installs which
+  /// never changed it are moved onto the hosted one instead of being left
+  /// pointing at a desktop that is usually asleep.
+  static const legacyHistoryEndpoint = 'http://100.90.30.95:8787';
+
+  String get historyEndpoint {
+    final String? stored = _prefs.getString(_kHistoryEndpoint)?.trim();
+    if (stored == null || stored.isEmpty) return defaultHistoryEndpoint;
+    // Only the value Arcanum itself shipped is migrated. Anything typed by hand
+    // is the collector's own service and is never rewritten.
+    if (stored == legacyHistoryEndpoint) return defaultHistoryEndpoint;
+    return stored;
+  }
 
   set historyEndpoint(String v) {
     _prefs.setString(_kHistoryEndpoint, v.trim());
     notifyListeners();
   }
 
-  /// Base URL of the companion serving Pokémon price history, if the user runs
-  /// one. Empty by default: Pokémon history comes from JustTCG or the app's own
-  /// snapshots.
-  String get pokemonHistoryEndpoint =>
-      _prefs.getString(_kPokemonHistoryEndpoint) ?? '';
+  /// Base URL of the companion serving Pokémon price history.
+  ///
+  /// Defaults to the same service as Magic: one companion holds both databases
+  /// and works out which to consult from the id alone, so asking it for a
+  /// Pokémon printing is the same request as asking it for a Magic one.
+  static const defaultPokemonHistoryEndpoint = defaultHistoryEndpoint;
+
+  String get pokemonHistoryEndpoint {
+    final String stored =
+        _prefs.getString(_kPokemonHistoryEndpoint)?.trim() ?? '';
+    return stored.isEmpty ? defaultPokemonHistoryEndpoint : stored;
+  }
 
   set pokemonHistoryEndpoint(String v) {
     _prefs.setString(_kPokemonHistoryEndpoint, v.trim());

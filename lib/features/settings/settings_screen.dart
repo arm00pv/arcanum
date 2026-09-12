@@ -336,8 +336,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'Scryfall publishes only current Magic prices, so it cannot answer '
               'what a card was worth last month. Arcanum fills that gap from '
               'three places: a daily snapshot it records itself for every card '
-              'you own, an optional Arcanum Sync companion you host yourself, '
-              'and MTGStocks (free, no API key) for longer daily series.',
+              'you own, an Arcanum Sync companion (hosted by default, and '
+              'replaceable with your own), and MTGStocks (free, no API key) for '
+              'longer daily series.',
               style: context.t.bodySmall
                   ?.copyWith(color: c.textSecondary, height: 1.45),
             ),
@@ -353,8 +354,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 setState(() {});
               },
               decoration: const InputDecoration(
-                hintText: 'http://host:port',
-                helperText: 'e.g. http://100.90.30.95:8787',
+                hintText: 'https://host/arcanum',
+                helperText: 'defaults to the hosted companion — point it at '
+                    'your own if you run one',
               ),
             ),
           ] else ...<Widget>[
@@ -369,12 +371,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'Pokémon history therefore needs a JustTCG API key - the free tier '
               'allows 100 requests a day. On top of that, Arcanum records its own '
               'daily snapshot of everything you own, which is the one series that '
-              'always stays current.',
+              'always stays current. The hosted Arcanum Sync companion carries a '
+              'Pokémon database sampled once a day as well, so the endpoint below '
+              'works for this game too.',
               style: context.t.bodySmall
                   ?.copyWith(color: c.textSecondary, height: 1.45),
             ),
             const SizedBox(height: 18),
-            Text('Self-hosted history endpoint', style: context.t.titleSmall),
+            Text('Arcanum Sync endpoint', style: context.t.titleSmall),
             const SizedBox(height: 8),
             TextField(
               controller: _pokemonEndpointController,
@@ -385,8 +389,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 setState(() {});
               },
               decoration: const InputDecoration(
-                hintText: 'https://host:port',
-                helperText: 'optional — leave blank unless you host one',
+                hintText: 'https://host/arcanum',
+                helperText: 'defaults to the hosted companion — point it at '
+                    'your own if you run one',
               ),
             ),
           ],
@@ -502,7 +507,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _snack(_healthSummary(response.data, response.statusCode));
     } on DioException catch (error) {
       if (!mounted) return;
-      _snack('Connection failed: ${error.message ?? error.type.name}', error: true);
+      _snack(_failureReason(error), error: true);
     } catch (error) {
       if (!mounted) return;
       _snack('Connection failed: $error', error: true);
@@ -510,6 +515,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       dio.close(force: true);
       if (mounted) setState(() => _testing = false);
     }
+  }
+
+  /// Says what actually went wrong, in the terms the collector can act on.
+  ///
+  /// "Connection failed: connectionError" tells nobody anything. Whether the
+  /// host name did not resolve, nothing answered on the port, the certificate
+  /// was rejected or the request timed out decides what to do about it.
+  String _failureReason(DioException error) {
+    final int? status = error.response?.statusCode;
+    if (status != null) {
+      if (status == 404) {
+        return 'Reached the host (HTTP 404), but it has no /v1/health. Check '
+            'the path — a hosted companion usually ends in /arcanum.';
+      }
+      return 'The endpoint answered HTTP $status.';
+    }
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+        return 'Timed out connecting. The host is not answering on that port — '
+            'check the address and that the service is running.';
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.transformTimeout:
+        return 'Connected, but the reply took too long.';
+      case DioExceptionType.badCertificate:
+        return 'The certificate was rejected, so the address is not the host it '
+            'claims to be.';
+      case DioExceptionType.connectionError:
+        return 'Could not reach ${_endpointHost(error)}. The name may not '
+            'resolve, or nothing is listening there.';
+      case DioExceptionType.cancel:
+        return 'The request was cancelled.';
+      case DioExceptionType.badResponse:
+        return 'The endpoint answered something Arcanum could not read.';
+      case DioExceptionType.unknown:
+        return 'Could not reach the endpoint: '
+            '${error.message ?? 'no further detail'}';
+    }
+  }
+
+  /// The host a failed request was aimed at, for the failure message.
+  String _endpointHost(DioException error) {
+    final Uri uri = error.requestOptions.uri;
+    if (uri.host.isEmpty) return 'the endpoint';
+    return uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
   }
 
   /// Turns a /v1/health payload into one readable line.

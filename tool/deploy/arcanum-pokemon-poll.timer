@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily Arcanum Pokemon price sample
+
+[Timer]
+# Early morning UTC, before the app's users are awake in either hemisphere.
+OnCalendar=*-*-* 04:20:00 UTC
+# A missed run - the host asleep, or an interrupted boot - happens on the next
+# boot rather than being skipped, which matters because the series is built one
+# sample at a time and a missing day is a hole in every chart.
+Persistent=true
+RandomizedDelaySec=20m
+Unit=arcanum-pokemon-poll.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,21 @@
+[Unit]
+Description=Arcanum - rebuild Magic price history from MTGJSON
+Documentation=https://github.com/arm00pv/arcanum
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=zixen
+Group=zixen
+WorkingDirectory=/home/zixen/arcanum
+ExecStart=/home/zixen/arcanum/rebuild_mtg_history.sh
+# The sync service holds the old database open, so it has to be restarted to
+# serve the new one. The + prefix runs this with full privileges because the
+# sync service is a system unit and this one runs as zixen.
+ExecStartPost=+/usr/bin/systemctl restart arcanum-sync.service
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=7200
+StandardOutput=append:/home/zixen/arcanum/logs/mtg_rebuild.log
+StandardError=append:/home/zixen/arcanum/logs/mtg_rebuild.log

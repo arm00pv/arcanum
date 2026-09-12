@@ -1,0 +1,26 @@
+[Unit]
+Description=Arcanum Sync - read-only price history API
+Documentation=https://github.com/arm00pv/arcanum
+After=network-online.target docker.service
+Wants=network-online.target
+# The listen address is the docker bridge gateway, so the service is reachable
+# by the Caddy container and by nothing else. It is deliberately not 0.0.0.0:
+# this host has a public address and no host firewall, so binding every
+# interface would publish the price database to the internet in cleartext.
+# If compose is ever recreated and the bridge moves, change it here.
+
+[Service]
+Type=simple
+User=zixen
+Group=zixen
+WorkingDirectory=/home/zixen/arcanum
+ExecStart=/usr/bin/python3 /home/zixen/arcanum/sync_server.py --host 172.19.0.1 --port 8787 --db /home/zixen/arcanum/data/prices.db --pokemon-db /home/zixen/arcanum/data/pokemon_prices.db
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/zixen/arcanum/logs/sync.log
+StandardError=append:/home/zixen/arcanum/logs/sync.log
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

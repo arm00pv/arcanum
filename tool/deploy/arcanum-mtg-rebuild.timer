@@ -1,0 +1,13 @@
+[Unit]
+Description=Weekly Arcanum Magic price-history rebuild
+
+[Timer]
+# MTGJSON republishes daily; weekly is enough to keep the series current, and
+# keeps the heavy slice off a host that runs other services all week.
+OnCalendar=Mon 05:30:00 UTC
+Persistent=true
+RandomizedDelaySec=30m
+Unit=arcanum-mtg-rebuild.service
+
+[Install]
+WantedBy=timers.target
