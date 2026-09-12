@@ -9,6 +9,8 @@ import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/features/card/card_detail_screen.dart';
 import 'package:arcanum/features/sets/printing_groups.dart';
+import 'package:arcanum/features/sets/set_filter_sheet.dart';
+import 'package:arcanum/features/sets/set_filters.dart';
 import 'package:arcanum/features/sets/sets_screen.dart' show SetGlyph;
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
@@ -42,7 +44,27 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   bool _grid = true;
   bool _ownedOnly = false;
 
+  /// What the collector has narrowed the set to. Price and rarity only: what is
+  /// owned is the pill in the header, which is a different question and stays
+  /// where a collector already reaches for it.
+  SetFilter _filter = const SetFilter();
+
   SetRef get _ref => (game: widget.game, code: widget.setCode);
+
+  /// Opens the filter sheet over the set's binder slots.
+  ///
+  /// The sheet is handed every slot, not the ones currently on show: the counts
+  /// beside each option describe the set, and a sheet that counted only what the
+  /// last filter left could never be used to widen it again.
+  Future<void> _openFilters(List<PrintingSlot> slots) async {
+    final chosen = await showSetFilterSheet(
+      context,
+      current: _filter,
+      slots: slots,
+    );
+    if (chosen == null || !mounted) return;
+    setState(() => _filter = chosen);
+  }
 
   @override
   void initState() {
@@ -148,6 +170,14 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                       ],
                     ),
                     actions: [
+                      _FilterButton(
+                        active: _filter.activeCount,
+                        onPressed: cardsAsync.value == null
+                            ? null
+                            : () => _openFilters(
+                                  groupIntoSlots(cardsAsync.value!),
+                                ),
+                      ),
                       IconButton(
                         tooltip: _grid ? 'List view' : 'Grid view',
                         onPressed: () => setState(() => _grid = !_grid),
@@ -183,6 +213,22 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     ),
                   ),
                 ),
+                if (_filter.isActive)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: _FilterSummary(
+                        filter: _filter,
+                        onEdit: cardsAsync.value == null
+                            ? null
+                            : () => _openFilters(
+                                  groupIntoSlots(cardsAsync.value!),
+                                ),
+                        onClear: () =>
+                            setState(() => _filter = const SetFilter()),
+                      ),
+                    ),
+                  ),
                 SliverAsyncView<List<TcgCard>>(
                   value: cardsAsync,
                   loadingHeight: 420,
@@ -195,19 +241,39 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     // lists a Yu-Gi-Oh! card several times over - by rarity and
                     // by region - and three tiles that differ only in small
                     // print is noise. The versions live inside the slot.
-                    final slots = groupIntoSlots(cards);
+                    final slots = _filter.apply(groupIntoSlots(cards));
                     final visible = _ownedOnly
                         ? slots.where((s) => s.ownedWith(owned) > 0).toList()
                         : slots;
                     if (visible.isEmpty) {
-                      return const SliverToBoxAdapter(
+                      // Which of the two ways of seeing nothing happened, said
+                      // plainly: the filter can be cleared from here, and a
+                      // collector who narrowed a set to nothing should not have
+                      // to hunt for the control that did it.
+                      final filteredOut = _filter.isActive && slots.isEmpty;
+                      return SliverToBoxAdapter(
                         child: Padding(
-                          padding: EdgeInsets.only(top: 80),
-                          child: EmptyState(
-                            icon: Icons.inbox_rounded,
-                            title: 'Nothing owned here yet',
-                            message: 'You have not added any cards from this set.',
-                          ),
+                          padding: const EdgeInsets.only(top: 80),
+                          child: filteredOut
+                              ? EmptyState(
+                                  icon: Icons.filter_alt_off_rounded,
+                                  title: 'No cards match',
+                                  message:
+                                      'None of the ${cards.length} printings in '
+                                      'this set fits the filter.',
+                                  action: FilledButton.tonal(
+                                    onPressed: () => setState(
+                                      () => _filter = const SetFilter(),
+                                    ),
+                                    child: const Text('Clear filters'),
+                                  ),
+                                )
+                              : const EmptyState(
+                                  icon: Icons.inbox_rounded,
+                                  title: 'Nothing owned here yet',
+                                  message:
+                                      'You have not added any cards from this set.',
+                                ),
                         ),
                       );
                     }
@@ -226,6 +292,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                               itemBuilder: (context, i) => _SlotGridTile(
                                 slot: visible[i],
                                 owned: visible[i].ownedWith(owned),
+                                price: _filter.summarise(visible[i]),
                                 index: i,
                               ),
                             ),
@@ -239,6 +306,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                                 child: _SlotListTile(
                                   slot: visible[i],
                                   owned: visible[i].ownedWith(owned),
+                                  price: _filter.summarise(visible[i]),
                                   index: i,
                                 ),
                               ),
@@ -262,6 +330,7 @@ class _CardGridTile extends StatelessWidget {
     required this.owned,
     required this.index,
     this.slot,
+    this.slotPrice,
     this.onTap,
   });
 
@@ -281,13 +350,24 @@ class _CardGridTile extends StatelessWidget {
   /// Overrides the default tap, which opens this single printing.
   final VoidCallback? onTap;
 
+  /// The prices the filter leaves on show for this slot.
+  ///
+  /// Passed in rather than read off the slot, so a "$100 and up" pass does not
+  /// headline a card with the price of a version it has just hidden.
+  final SlotPrice? slotPrice;
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     final rarity = CardRarity.fromCode(card.rarity);
     final versions = slot;
-    final spread = versions != null && versions.hasPriceSpread;
-    final price = versions != null ? versions.lowestPrice : card.prices.from;
+    final shown = slotPrice ??
+        SlotPrice(
+          versions?.lowestPrice ?? card.prices.from,
+          versions?.highestPrice ?? card.prices.from,
+        );
+    final spread = shown.hasSpread;
+    final price = shown.low;
 
     return GestureDetector(
       onTap: onTap ??
@@ -373,6 +453,7 @@ class _CardListTile extends StatelessWidget {
     required this.owned,
     required this.index,
     this.slot,
+    this.slotPrice,
     this.onTap,
   });
 
@@ -387,13 +468,21 @@ class _CardListTile extends StatelessWidget {
   /// Overrides the default tap, which opens this single printing.
   final VoidCallback? onTap;
 
+  /// The prices the filter leaves on show. See [_CardGridTile.slotPrice].
+  final SlotPrice? slotPrice;
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     final rarity = CardRarity.fromCode(card.rarity);
     final versions = slot;
-    final spread = versions != null && versions.hasPriceSpread;
-    final price = versions != null ? versions.lowestPrice : card.prices.from;
+    final shown = slotPrice ??
+        SlotPrice(
+          versions?.lowestPrice ?? card.prices.from,
+          versions?.highestPrice ?? card.prices.from,
+        );
+    final spread = shown.hasSpread;
+    final price = shown.low;
     final premium = card.game.finishes
         .where((f) => f.isPremium && (card.prices.priceFor(f) ?? 0) > 0)
         .toList();
@@ -495,11 +584,13 @@ class _SlotGridTile extends StatelessWidget {
   const _SlotGridTile({
     required this.slot,
     required this.owned,
+    required this.price,
     required this.index,
   });
 
   final PrintingSlot slot;
   final int owned;
+  final SlotPrice price;
   final int index;
 
   @override
@@ -508,6 +599,7 @@ class _SlotGridTile extends StatelessWidget {
         owned: owned,
         index: index,
         slot: slot,
+        slotPrice: price,
         onTap: () => openSlot(context, slot),
       );
 }
@@ -517,11 +609,13 @@ class _SlotListTile extends StatelessWidget {
   const _SlotListTile({
     required this.slot,
     required this.owned,
+    required this.price,
     required this.index,
   });
 
   final PrintingSlot slot;
   final int owned;
+  final SlotPrice price;
   final int index;
 
   @override
@@ -530,6 +624,7 @@ class _SlotListTile extends StatelessWidget {
         owned: owned,
         index: index,
         slot: slot,
+        slotPrice: price,
         onTap: () => openSlot(context, slot),
       );
 }
@@ -690,6 +785,134 @@ class _VersionChip extends StatelessWidget {
           color: c.accent,
           height: 1.1,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+/// The control that opens the filter sheet, carrying how much is set.
+class _FilterButton extends StatelessWidget {
+  const _FilterButton({required this.active, required this.onPressed});
+
+  /// How many filters are on, for the badge.
+  final int active;
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final button = IconButton(
+      tooltip: active == 0 ? 'Filter cards' : 'Filter cards, $active on',
+      onPressed: onPressed,
+      icon: Icon(
+        active == 0 ? Icons.tune_rounded : Icons.filter_alt_rounded,
+        color: active == 0 ? null : c.accent,
+      ),
+    );
+    if (active == 0) return button;
+    return Badge(
+      label: Text('$active'),
+      backgroundColor: c.accent,
+      child: button,
+    );
+  }
+}
+
+/// What a filter is currently doing, said in chips that can be tapped away.
+///
+/// The grid alone cannot explain why cards are missing. A row naming the filter
+/// that removed them turns a screen that looks broken into one that is
+/// obviously narrowed - and the chips are the way back out.
+class _FilterSummary extends StatelessWidget {
+  const _FilterSummary({
+    required this.filter,
+    required this.onEdit,
+    required this.onClear,
+  });
+
+  final SetFilter filter;
+
+  /// Opens the sheet again, or null while the set has not loaded.
+  final VoidCallback? onEdit;
+
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final rarities = filter.rarities.toList()..sort();
+    final labels = <String>[
+      if (filter.filtersPrice) describePrice(filter.price),
+      ...rarities,
+      if (filter.sort != SetSort.number) filter.sort.label,
+    ];
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        for (final label in labels)
+          _SummaryChip(label: label, onTap: onEdit),
+        _SummaryChip(
+          label: 'Clear',
+          icon: Icons.close_rounded,
+          onTap: onClear,
+          muted: true,
+        ),
+      ],
+    );
+  }
+}
+
+/// One chip of the filter summary.
+class _SummaryChip extends StatelessWidget {
+  const _SummaryChip({
+    required this.label,
+    required this.onTap,
+    this.icon,
+    this.muted = false,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+  final IconData? icon;
+
+  /// Whether the chip is the way out rather than part of the filter.
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final tint = muted ? c.textSecondary : c.accent;
+    return Material(
+      color: c.surfaceRaised,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: muted ? c.hairline : tint.withValues(alpha: 0.55),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              if (icon != null) ...<Widget>[
+                Icon(icon, size: 13, color: tint),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                label,
+                style: context.t.labelMedium?.copyWith(color: tint),
+              ),
+            ],
+          ),
         ),
       ),
     );
