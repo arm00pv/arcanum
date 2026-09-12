@@ -13,6 +13,7 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/domain/quant/quant.dart';
 import 'package:arcanum/features/alerts/alerts_screen.dart' show showSetAlertSheet;
 import 'package:arcanum/features/card/add_to_collection_sheet.dart';
+import 'package:arcanum/features/card/owned_finishes.dart';
 import 'package:arcanum/features/card/price_chart.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
@@ -364,6 +365,16 @@ class _OwnedSection extends ConsumerWidget {
 
     final total = entries.fold<int>(0, (a, e) => a + e.quantity);
 
+    // The same printing can be owned in several finishes at once, and the
+    // quantity steppers below can only ever grow a stack that already exists.
+    // Offering the finishes that are still missing is what makes "one foil and
+    // one non-foil of the same card" reachable without a detour through the
+    // price chips.
+    final missing = missingFinishes(entries, game);
+
+    Future<void> addFinish(CardFinish finish) =>
+        showAddToCollectionSheet(context, ref, card, initialFinish: finish);
+
     Future<void> setQuantity(int id, int qty) async {
       await ref.read(bootstrapProvider).collectionFor(game).setQuantity(id, qty);
       ref.invalidate(collectionOverviewProvider(game));
@@ -380,6 +391,11 @@ class _OwnedSection extends ConsumerWidget {
           subtitle: '$total ${total == 1 ? 'copy' : 'copies'} across ${entries.length} '
               '${entries.length == 1 ? 'entry' : 'entries'}',
           padding: EdgeInsets.zero,
+          trailing: TextButton.icon(
+            onPressed: () => addFinish(finish),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add'),
+          ),
         ),
         for (final e in entries)
           Padding(
@@ -432,7 +448,86 @@ class _OwnedSection extends ConsumerWidget {
               ),
             ),
           ),
+        if (missing.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Add another finish',
+            style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final f in missing)
+                _AddFinishChip(
+                  finish: f,
+                  price: card.prices.priceFor(f),
+                  onTap: () => addFinish(f),
+                ),
+            ],
+          ),
+        ],
       ],
+    );
+  }
+}
+
+/// A one-tap offer to add a finish of this printing the user does not hold yet.
+///
+/// It shows the market price for that finish so the choice is informed: a foil
+/// copy of a bulk common and a foil copy of a mythic look identical in a list of
+/// finish names, and only one of them is worth a trip to the binder.
+class _AddFinishChip extends StatelessWidget {
+  const _AddFinishChip({
+    required this.finish,
+    required this.price,
+    required this.onTap,
+  });
+
+  final CardFinish finish;
+
+  /// This finish's market price, or null when the provider quotes none.
+  final double? price;
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final p = price;
+    return Material(
+      color: c.surfaceRaised,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.accent.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add_rounded, size: 16, color: c.accent),
+              const SizedBox(width: 6),
+              Text(
+                finish.label,
+                style: context.t.labelLarge?.copyWith(color: c.accent),
+              ),
+              if (p != null && p > 0) ...[
+                const SizedBox(width: 6),
+                Text(
+                  Fmt.money(p),
+                  style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

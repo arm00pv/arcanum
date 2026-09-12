@@ -18,12 +18,17 @@ import 'package:arcanum/widgets/glass.dart';
 /// added to another game's vault.
 ///
 /// Returns true when something was added, so the caller can refresh.
+///
+/// This sheet only ever *adds*. Editing an entry that already exists - its
+/// grade, its binder, what was paid for it - means loading that row and writing
+/// it back through [CollectionDao.updateEntry], which is a different job from
+/// this one; a parameter that appeared to offer it would instead merge into the
+/// existing stack and quietly inflate the quantity.
 Future<bool> showAddToCollectionSheet(
   BuildContext context,
   WidgetRef ref,
   TcgCard card, {
   CardFinish? initialFinish,
-  int? editingEntryId,
 }) async {
   final CardGame game = card.game;
   final result = await showModalBottomSheet<bool>(
@@ -34,7 +39,6 @@ Future<bool> showAddToCollectionSheet(
     builder: (_) => _AddToCollectionSheet(
       card: card,
       initialFinish: initialFinish,
-      editingEntryId: editingEntryId,
     ),
   );
   if (result == true) {
@@ -51,7 +55,6 @@ class _AddToCollectionSheet extends ConsumerStatefulWidget {
   const _AddToCollectionSheet({
     required this.card,
     this.initialFinish,
-    this.editingEntryId,
   });
 
   final TcgCard card;
@@ -59,8 +62,6 @@ class _AddToCollectionSheet extends ConsumerStatefulWidget {
   /// Preferred finish, when the caller has one in mind. Ignored if the card's
   /// game does not actually have that finish.
   final CardFinish? initialFinish;
-
-  final int? editingEntryId;
 
   @override
   ConsumerState<_AddToCollectionSheet> createState() => _AddToCollectionSheetState();
