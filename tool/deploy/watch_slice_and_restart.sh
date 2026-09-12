@@ -6,6 +6,8 @@
 # finished rebuild is invisible to it until it restarts. The weekly rebuild
 # timer does this in its own ExecStartPost; this script is the same step for a
 # rebuild that was started by hand.
-while pgrep -f slice_prices.py > /dev/null; do sleep 60; done
+# The bracket keeps pgrep from matching this script's own command line, which
+# would otherwise contain the pattern and make the wait loop spin forever.
+while pgrep -f '[s]lice_prices.py' > /dev/null; do sleep 60; done
 /bin/systemctl restart arcanum-sync.service
 echo "arcanum-sync restarted after the slice finished"

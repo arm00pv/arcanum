@@ -104,12 +104,17 @@ def history_for(card_id):
 
 # Counting 13M rows takes tens of seconds, so the health figures are computed
 # once per process and then served from memory.
+#
+# A count that fails is never cached. The database is rewritten in place by the
+# weekly slice, and reading it mid-swap used to raise "database is locked" -
+# which the old code reported as a confident "0 printings" for the life of the
+# process. Zeros now mean the cache is cold, not that the archive is empty.
 _STATS = None
 
 
 def _counts(path, column):
     if not path or not os.path.exists(path):
-        return (0, 0, 0)
+        return None
     with _LOCK:
         try:
             c = conn(path)
@@ -119,26 +124,41 @@ def _counts(path, column):
             points = c.execute("SELECT COUNT(*) FROM history").fetchone()[0]
             days = c.execute("SELECT COUNT(DISTINCT date) FROM history").fetchone()[0]
         except sqlite3.Error:
-            return (0, 0, 0)
+            return None
     return (printings, points, days)
+
+
+def _empty():
+    return {"printings": 0, "points": 0, "days": 0}
 
 
 def stats():
     global _STATS
-    if _STATS is None:
-        mtg = _counts(DB_PATH, "scryfall_id")
-        pkm = _counts(POKEMON_DB_PATH, "card_id")
-        _STATS = {
-            "ok": True,
-            "printings": mtg[0],
-            "points": mtg[1],
-            "days": mtg[2],
-            "games": {
-                "mtg": {"printings": mtg[0], "points": mtg[1], "days": mtg[2]},
-                "pokemon": {"printings": pkm[0], "points": pkm[1], "days": pkm[2]},
-            },
-        }
-    return _STATS
+    if _STATS is not None:
+        return _STATS
+    mtg = _counts(DB_PATH, "scryfall_id")
+    pkm = _counts(POKEMON_DB_PATH, "card_id")
+    payload = {
+        "ok": True,
+        "printings": (mtg or (0, 0, 0))[0],
+        "points": (mtg or (0, 0, 0))[1],
+        "days": (mtg or (0, 0, 0))[2],
+        "games": {
+            "mtg": (
+                {"printings": mtg[0], "points": mtg[1], "days": mtg[2]}
+                if mtg
+                else _empty()
+            ),
+            "pokemon": (
+                {"printings": pkm[0], "points": pkm[1], "days": pkm[2]}
+                if pkm
+                else _empty()
+            ),
+        },
+    }
+    if mtg and pkm:
+        _STATS = payload
+    return payload
 
 
 class Handler(BaseHTTPRequestHandler):
