@@ -195,8 +195,13 @@ void main() {
       final dio = Dio();
       final fake = _FakeGitHub(200, releaseJson('v9.9.9'));
       dio.httpClientAdapter = fake;
-      // The placeholder shipped in the source until the project is published.
-      final service = UpdateService(dio: dio, currentVersion: '1.0.0');
+      // A build with no repository named, which is what the placeholder used to
+      // be before the project was published.
+      final service = UpdateService(
+        dio: dio,
+        currentVersion: '1.0.0',
+        slug: 'OWNER/REPO',
+      );
 
       expect(service.isConfigured, isFalse);
       final result = await service.check();

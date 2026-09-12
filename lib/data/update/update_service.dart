@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 /// The update check is the one request the app makes that is not about cards or
 /// prices, which is why it never runs on its own: it happens only when the user
 /// asks for it from Settings.
-const String arcanumReleaseSlug = 'OWNER/REPO';
+const String arcanumReleaseSlug = 'arm00pv/arcanum';
 
 /// A published release the app could move to.
 class ReleaseInfo {
