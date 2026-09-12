@@ -281,6 +281,28 @@ class TcgCard {
     return stripped.isEmpty ? null : stripped;
   }
 
+  /// The provider's printing code for this card, when its id carries one.
+  ///
+  /// Yu-Gi-Oh! catalogue ids are built as passcode:set:printing:rarity, and the
+  /// printing field is the region-bearing code printed on the card itself -
+  /// LOB-000, LOB-E000, LOB-EN000. Those three share a card, a collector number
+  /// and a rarity while being worth $54.11, $93.53 and $4.68, so without this
+  /// the version list shows three identical rows at three different prices and
+  /// no way to tell which is which.
+  ///
+  /// Other games build ids that are not shaped like this - a Scryfall UUID has
+  /// no colons at all - so the getter returns null for them rather than reading
+  /// a code out of an id that never held one.
+  String? get printingCode {
+    final parts = id.split(':');
+    if (parts.length < 3) return null;
+    // The passcode test is what tells a Yu-Gi-Oh! id from any other.
+    final passcode = int.tryParse(parts.first.trim());
+    if (passcode == null) return null;
+    final code = parts[2].trim();
+    return code.isEmpty ? null : code;
+  }
+
   TcgCard copyWith({
     String? id,
     String? setCode,

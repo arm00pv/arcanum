@@ -8,6 +8,7 @@ import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/features/card/card_detail_screen.dart';
+import 'package:arcanum/features/sets/printing_groups.dart';
 import 'package:arcanum/features/sets/sets_screen.dart' show SetGlyph;
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
@@ -58,6 +59,18 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     super.dispose();
   }
 
+  /// How much the set holds, in the terms that actually matter.
+  ///
+  /// A set's printing count and its binder-slot count differ wherever the
+  /// provider lists one card several times, which is most Yu-Gi-Oh! sets. The
+  /// grid shows slots, so a header quoting only printings would look like a
+  /// miscount; quoting both says why the two numbers disagree.
+  static String _holdingsLabel(List<TcgCard> cards) {
+    final slots = groupIntoSlots(cards).length;
+    if (slots == cards.length) return '${cards.length} printings';
+    return '$slots cards · ${cards.length} printings';
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;
@@ -67,8 +80,13 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     final owned = ref.watch(ownedQuantityProvider(game)).value ?? const <String, int>{};
     final set = setAsync.value;
 
-    final ownedInSet =
-        cardsAsync.value?.where((x) => (owned[x.id] ?? 0) > 0).length ?? 0;
+    // Counted in binder slots, matching what the grid shows and what the
+    // "Owned" filter selects.
+    final ownedInSet = cardsAsync.value == null
+        ? 0
+        : groupIntoSlots(cardsAsync.value!)
+            .where((slot) => slot.ownedWith(owned) > 0)
+            .length;
 
     return Scaffold(
       body: Stack(
@@ -121,7 +139,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                             // what it is actually listing rather than repeating
                             // the word and contradicting the number.
                             if (cardsAsync.value != null)
-                              '${cardsAsync.value!.length} printings',
+                              _holdingsLabel(cardsAsync.value!),
                           ].join('  ·  '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -173,9 +191,14 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   emptyTitle: 'No cards cached',
                   emptyMessage: 'Pull down to download this set from ${game.dataSource}.',
                   builder: (cards) {
+                    // One tile per binder slot, not per printing: the provider
+                    // lists a Yu-Gi-Oh! card several times over - by rarity and
+                    // by region - and three tiles that differ only in small
+                    // print is noise. The versions live inside the slot.
+                    final slots = groupIntoSlots(cards);
                     final visible = _ownedOnly
-                        ? cards.where((x) => (owned[x.id] ?? 0) > 0).toList()
-                        : cards;
+                        ? slots.where((s) => s.ownedWith(owned) > 0).toList()
+                        : slots;
                     if (visible.isEmpty) {
                       return const SliverToBoxAdapter(
                         child: Padding(
@@ -200,9 +223,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                                 childAspectRatio: 0.52,
                               ),
                               itemCount: visible.length,
-                              itemBuilder: (context, i) => _CardGridTile(
-                                card: visible[i],
-                                owned: owned[visible[i].id] ?? 0,
+                              itemBuilder: (context, i) => _SlotGridTile(
+                                slot: visible[i],
+                                owned: visible[i].ownedWith(owned),
                                 index: i,
                               ),
                             ),
@@ -213,9 +236,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                               itemCount: visible.length,
                               itemBuilder: (context, i) => Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
-                                child: _CardListTile(
-                                  card: visible[i],
-                                  owned: owned[visible[i].id] ?? 0,
+                                child: _SlotListTile(
+                                  slot: visible[i],
+                                  owned: visible[i].ownedWith(owned),
                                   index: i,
                                 ),
                               ),
@@ -234,24 +257,46 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
 
 /// A card as a poster: art forward, with the collector number always visible.
 class _CardGridTile extends StatelessWidget {
-  const _CardGridTile({required this.card, required this.owned, required this.index});
+  const _CardGridTile({
+    required this.card,
+    required this.owned,
+    required this.index,
+    this.slot,
+    this.onTap,
+  });
 
   final TcgCard card;
   final int owned;
   final int index;
 
+  /// The binder slot this tile stands for, when it stands for one.
+  ///
+  /// Set from the set grid and null when a tile is shown on its own. When it is
+  /// present the tile speaks for every version at that number: the price
+  /// becomes a starting point and the rarity gives way to the version count,
+  /// because a slot holding four different rarities cannot be summarised by
+  /// showing one of them.
+  final PrintingSlot? slot;
+
+  /// Overrides the default tap, which opens this single printing.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     final rarity = CardRarity.fromCode(card.rarity);
-    final price = card.prices.from;
+    final versions = slot;
+    final spread = versions != null && versions.hasPriceSpread;
+    final price = versions != null ? versions.lowestPrice : card.prices.from;
 
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => CardDetailScreen(game: card.game, cardId: card.id),
-        ),
-      ),
+      onTap: onTap ??
+          () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      CardDetailScreen(game: card.game, cardId: card.id),
+                ),
+              ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -282,7 +327,11 @@ class _CardGridTile extends StatelessWidget {
               const Spacer(),
               if (price != null)
                 Text(
-                  Fmt.moneyAdaptive(price),
+                  // A slot whose versions are worth different money says so
+                  // rather than quoting one of them as if it were the price.
+                  spread
+                      ? 'from ${Fmt.moneyAdaptive(price)}'
+                      : Fmt.moneyAdaptive(price),
                   style: context.t.labelMedium?.copyWith(color: c.textSecondary),
                 ),
             ],
@@ -299,12 +348,13 @@ class _CardGridTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              // One card printed at several rarities inside a set becomes
-              // several tiles here, and they are otherwise indistinguishable:
-              // same art, same collector number, often the same price. The
-              // rarity is the only thing that tells them apart, so it earns its
-              // place on the tile even at this size.
-              RarityBadge(rarity: rarity, compact: true, code: card.rarityCode),
+              // A slot holding versions shows how many instead of a rarity:
+              // the rarity varies inside it, so any one of them would be a
+              // claim about the whole slot that is not true.
+              if (versions != null && versions.hasVersions)
+                _VersionChip(count: versions.versionCount)
+              else
+                RarityBadge(rarity: rarity, compact: true, code: card.rarityCode),
             ],
           ),
         ],
@@ -318,27 +368,45 @@ class _CardGridTile extends StatelessWidget {
 
 /// A card as a row: dense, price-forward, with the game's own identifying marks.
 class _CardListTile extends StatelessWidget {
-  const _CardListTile({required this.card, required this.owned, required this.index});
+  const _CardListTile({
+    required this.card,
+    required this.owned,
+    required this.index,
+    this.slot,
+    this.onTap,
+  });
 
   final TcgCard card;
   final int owned;
   final int index;
 
+  /// The binder slot this row stands for, when it stands for one. See
+  /// [_CardGridTile.slot].
+  final PrintingSlot? slot;
+
+  /// Overrides the default tap, which opens this single printing.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     final rarity = CardRarity.fromCode(card.rarity);
+    final versions = slot;
+    final spread = versions != null && versions.hasPriceSpread;
+    final price = versions != null ? versions.lowestPrice : card.prices.from;
     final premium = card.game.finishes
         .where((f) => f.isPremium && (card.prices.priceFor(f) ?? 0) > 0)
         .toList();
 
     return GlassCard(
       padding: EdgeInsets.zero,
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => CardDetailScreen(game: card.game, cardId: card.id),
-        ),
-      ),
+      onTap: onTap ??
+          () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      CardDetailScreen(game: card.game, cardId: card.id),
+                ),
+              ),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Row(
@@ -372,7 +440,14 @@ class _CardListTile extends StatelessWidget {
                         style: context.t.labelSmall?.copyWith(color: c.textTertiary),
                       ),
                       const SizedBox(width: 6),
-                      RarityBadge(rarity: rarity, compact: true, code: card.rarityCode),
+                      if (versions != null && versions.hasVersions)
+                        _VersionChip(count: versions.versionCount)
+                      else
+                        RarityBadge(
+                          rarity: rarity,
+                          compact: true,
+                          code: card.rarityCode,
+                        ),
                       const SizedBox(width: 6),
                       // Magic identifies cards by mana cost, Pokémon by energy
                       // type — showing the wrong one would be nonsense.
@@ -394,7 +469,10 @@ class _CardListTile extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(Fmt.money(card.prices.from), style: context.t.titleSmall),
+                Text(
+                  spread ? 'from ${Fmt.money(price)}' : Fmt.money(price),
+                  style: context.t.titleSmall,
+                ),
                 if (premium.isNotEmpty)
                   Text(
                     '${premium.first.shortLabel} '
@@ -409,3 +487,212 @@ class _CardListTile extends StatelessWidget {
     ).animate().fadeIn(duration: 180.ms, delay: (index.clamp(0, 14) * 16).ms);
   }
 }
+/// A grid tile standing for a whole binder slot.
+///
+/// The rendering is the ordinary card tile's, because a slot's versions share
+/// the artwork and the number; only the tap and the two summary figures differ.
+class _SlotGridTile extends StatelessWidget {
+  const _SlotGridTile({
+    required this.slot,
+    required this.owned,
+    required this.index,
+  });
+
+  final PrintingSlot slot;
+  final int owned;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) => _CardGridTile(
+        card: slot.primary,
+        owned: owned,
+        index: index,
+        slot: slot,
+        onTap: () => openSlot(context, slot),
+      );
+}
+
+/// A list row standing for a whole binder slot.
+class _SlotListTile extends StatelessWidget {
+  const _SlotListTile({
+    required this.slot,
+    required this.owned,
+    required this.index,
+  });
+
+  final PrintingSlot slot;
+  final int owned;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) => _CardListTile(
+        card: slot.primary,
+        owned: owned,
+        index: index,
+        slot: slot,
+        onTap: () => openSlot(context, slot),
+      );
+}
+
+/// Opens a slot: straight to the card when there is one version, and to the
+/// list of versions when there are several.
+///
+/// Choosing between versions is a real decision - they are worth different
+/// money and they are different cards to own - so a slot holding more than one
+/// asks rather than picking silently on the collector's behalf.
+Future<void> openSlot(BuildContext context, PrintingSlot slot) {
+  if (!slot.hasVersions) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            CardDetailScreen(game: slot.primary.game, cardId: slot.primary.id),
+      ),
+    );
+  }
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => _VersionSheet(slot: slot),
+  );
+}
+
+/// The versions of one card at one collector number, cheapest first.
+class _VersionSheet extends StatelessWidget {
+  const _VersionSheet({required this.slot});
+
+  final PrintingSlot slot;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+        child: GlassCard(
+          radius: 22,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(slot.name, style: context.t.titleMedium),
+              const SizedBox(height: 2),
+              Text(
+                // The count earns its place here: it is the reason the set
+                // showed one tile where the provider lists several rows.
+                '#${slot.collectorNumber} · ${slot.versionCount} versions, '
+                'cheapest first',
+                style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: slot.printings.length,
+                  itemBuilder: (BuildContext context, int i) {
+                    final card = slot.printings[i];
+                    final rarity = CardRarity.fromCode(card.rarity);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: GlassCard(
+                        radius: 14,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => CardDetailScreen(
+                                game: card.game,
+                                cardId: card.id,
+                              ),
+                            ),
+                          );
+                        },
+                        child: Row(
+                          children: <Widget>[
+                            RarityBadge(
+                              rarity: rarity,
+                              compact: true,
+                              code: card.rarityCode,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Text(
+                                    card.rarity,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: context.t.titleSmall,
+                                  ),
+                                  // The region code is the only thing telling
+                                  // two same-rarity versions apart.
+                                  if (card.printingCode != null)
+                                    Text(
+                                      card.printingCode!,
+                                      maxLines: 1,
+                                      style: context.t.labelSmall
+                                          ?.copyWith(color: c.textTertiary),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              Fmt.moneyAdaptive(card.prices.from),
+                              style: context.t.titleSmall,
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              size: 18,
+                              color: c.textTertiary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A small chip saying how many versions a slot holds.
+class _VersionChip extends StatelessWidget {
+  const _VersionChip({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: c.accent.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: c.accent.withValues(alpha: 0.40)),
+      ),
+      child: Text(
+        '$count×',
+        style: context.t.labelSmall?.copyWith(
+          color: c.accent,
+          height: 1.1,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
