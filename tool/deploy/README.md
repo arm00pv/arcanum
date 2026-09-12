@@ -64,3 +64,21 @@ The slice takes tens of minutes on a shared host. The service holds the old
 database open, so it has to be restarted to serve the new one — the timer's
 unit does that itself, and `watch_slice_and_restart.sh` is the same step for a
 rebuild started by hand.
+
+Watch for the wait loop in that script matching its own command line: `pgrep -f
+slice_prices.py` sees the bash that is running the loop, so the pattern is
+written with a bracket (`[s]lice_prices.py`) and the loop can actually end.
+
+## What the Magic database does and does not hold
+
+MTGJSON's `AllPrices` carries roughly 100,000 printings — about four fifths of
+the 123,000 entries in `AllIdentifiers` — and only for the providers it
+publishes at the time. Coverage is uneven across sets, and recent sets are thin:
+of 175 Bloomburrow printings sampled by Scryfall id, 8 answer from the
+companion.
+
+This is why the companion is the app's *first* Magic source and not its only
+one. When it has nothing for a printing, Arcanum falls back to MTGStocks, which
+carries multi-year daily series for essentially every printing (the same
+Bloomburrow card answers with 789 daily points). Before treating a missing card
+as a companion bug, check the printing against both.
