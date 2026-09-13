@@ -95,7 +95,9 @@ class _DeckSuggestionsScreenState extends ConsumerState<DeckSuggestionsScreen> {
                   sliver: SliverList.builder(
                     itemCount: value.length + 1,
                     itemBuilder: (BuildContext context, int i) {
-                      if (i == 0) return const _Explainer();
+                      if (i == 0) {
+                        return _Explainer(noCommander: hasCommander);
+                      }
                       final suggestion = value[i - 1];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -149,18 +151,53 @@ class _DeckSuggestionsScreenState extends ConsumerState<DeckSuggestionsScreen> {
 
 /// One line explaining what the ranking is and is not.
 class _Explainer extends StatelessWidget {
-  const _Explainer();
+  const _Explainer({required this.noCommander});
+
+  /// True when the format wants a commander and the deck has not named one, in
+  /// which case there is no colour identity to narrow the list to - which is
+  /// worth saying, because the list is longer and stranger for it.
+  final bool noCommander;
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        'Ranked on what this deck is actually short of, then on the tribe it '
-        'already plays, then on how popular a card is. Only cards you own are '
-        'offered, and nothing its format forbids.',
-        style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Ranked on what this deck is actually short of, then on the tribe '
+            'it already plays, then on how popular a card is. Only cards you '
+            'own are offered, and nothing its format forbids.',
+            style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+          ),
+          if (noCommander)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      size: 14,
+                      color: c.gold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'No commander named yet, so nothing is being filtered by '
+                      'colour. Name one and this list narrows to its identity.',
+                      style: context.t.bodySmall?.copyWith(color: c.gold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -230,7 +267,7 @@ class _SuggestionRow extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 1),
                       child: Text(
                         suggestion.reasons.skip(1).join('  ·  '),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: context.t.labelSmall?.copyWith(
                           color: c.textTertiary,
