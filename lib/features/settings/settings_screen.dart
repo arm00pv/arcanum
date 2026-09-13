@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/material.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:arcanum/core/legal.dart';
+import 'package:arcanum/data/backup/backup_archive.dart';
 import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/core/utils/formatters.dart';
@@ -14,6 +17,8 @@ import 'package:arcanum/features/transfer/transfer_screen.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/common.dart';
 import 'package:arcanum/widgets/glass.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// The Settings screen.
 ///
@@ -56,6 +61,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   late final TextEditingController _keyController;
 
+  /// Where backups go, and the token that authorises writing there.
+  late final TextEditingController _backupEndpointController;
+  late final TextEditingController _backupTokenController;
+
   /// The mode the pill shows.
   ///
   /// [AppSettings] stores the mode by name, but its getter only maps 'light'
@@ -65,6 +74,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   ThemeMode _themeMode = ThemeMode.dark;
 
   bool _obscureKey = true;
+  bool _obscureBackupToken = true;
+  /// True while a backup, a restore or a shared copy is in flight.
+  bool _busy = false;
   bool _testing = false;
   bool _backfilling = false;
   int _backfillDone = 0;
@@ -88,6 +100,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _pokemonEndpointController =
         TextEditingController(text: settings.pokemonHistoryEndpoint);
     _keyController = TextEditingController(text: settings.justTcgKey);
+    _backupEndpointController =
+        TextEditingController(text: settings.backupEndpoint);
+    _backupTokenController = TextEditingController(text: settings.backupToken);
     _loadVersion();
   }
 
@@ -134,6 +149,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _endpointController.dispose();
     _pokemonEndpointController.dispose();
     _keyController.dispose();
+    _backupEndpointController.dispose();
+    _backupTokenController.dispose();
     super.dispose();
   }
 
@@ -175,6 +192,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _gameHeader(context, game),
           const SizedBox(height: 12),
           _collection(context, settings, game),
+          const SectionHeader(
+            title: 'Backup',
+            subtitle: 'Your data stays on this phone; keep a copy on your server',
+          ),
+          _backup(context, settings),
           SectionHeader(
             title: 'Data',
             subtitle: 'On this device only - ${game.shortLabel} figures',
@@ -185,6 +207,252 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  // ---------------------------------------------------------------- backup
+
+  /// The backup section: what it does, where it goes, and the two buttons.
+  ///
+  /// App-wide rather than per game, because the archive holds every game's
+  /// holdings in one file - restoring one game would mean restoring a database
+  /// that no longer matches the file.
+  Widget _backup(BuildContext context, AppSettings settings) {
+    final c = context.c;
+    final bool ready = settings.backupEndpoint.isNotEmpty &&
+        settings.backupToken.isNotEmpty;
+    final DateTime? last = settings.lastBackupAt;
+
+    return _group(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Arcanum keeps your collection, your binders and your purchase '
+            'prices on this phone and nowhere else. A backup writes one '
+            'compressed file - every game, every holding, your alerts and the '
+            'price snapshots the app recorded itself - to your own server. The '
+            'catalogue is left out: it is re-downloadable, and a backup that '
+            'carried it would be mostly cache.',
+            style: context.t.bodySmall
+                ?.copyWith(color: c.textSecondary, height: 1.45),
+          ),
+          const SizedBox(height: 18),
+          const SizedBox(height: 4),
+          Text('Backup server', style: context.t.titleSmall),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _backupEndpointController,
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+            onChanged: (String value) {
+              ref.read(settingsProvider).backupEndpoint = value;
+              setState(() {});
+            },
+            decoration: const InputDecoration(
+              hintText: 'https://host/arcanum',
+              helperText: 'the same companion that serves price history',
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text('Backup token', style: context.t.titleSmall),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _backupTokenController,
+            obscureText: _obscureBackupToken,
+            autocorrect: false,
+            enableSuggestions: false,
+            onChanged: (String value) {
+              ref.read(settingsProvider).backupToken = value;
+              setState(() {});
+            },
+            decoration: InputDecoration(
+              hintText: 'Required',
+              helperText: 'the token your companion was given in '
+                  '~/arcanum/backup.token - without it the server refuses '
+                  'every write, which is deliberate',
+              suffixIcon: IconButton(
+                tooltip: _obscureBackupToken ? 'Show token' : 'Hide token',
+                icon: Icon(
+                  _obscureBackupToken
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
+                  size: 18,
+                  color: c.textSecondary,
+                ),
+                onPressed: () =>
+                    setState(() => _obscureBackupToken = !_obscureBackupToken),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: (_busy || !ready) ? null : () => _backUpNow(),
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.cloud_upload_outlined, size: 18),
+                  label: const Text('Back up now'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: (_busy || !ready) ? null : () => _restoreFromServer(),
+                icon: const Icon(Icons.settings_backup_restore_rounded, size: 18),
+                label: const Text('Restore'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: <Widget>[
+              OutlinedButton.icon(
+                onPressed: _busy ? null : () => _shareArchive(),
+                icon: const Icon(Icons.ios_share_rounded, size: 18),
+                label: const Text('Save a copy'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: <Widget>[
+              Icon(
+                ready ? Icons.schedule_rounded : Icons.remove_circle_outline_rounded,
+                size: 16,
+                color: ready ? c.textTertiary : c.textTertiary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  last == null
+                      ? (ready
+                          ? 'No backup taken yet.'
+                          : 'Enter a server and token to enable backups.')
+                      : 'Last backup ${Fmt.ago(last)}',
+                  style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds the archive and uploads it.
+  Future<void> _backUpNow() async {
+    setState(() => _busy = true);
+    try {
+      final service = ref.read(backupServiceProvider);
+      final archive = await service.build(appVersion: _version);
+      final result = await service.upload(archive, deviceLabel: 'phone');
+      if (!mounted) return;
+      _snack(
+        'Backed up ${Fmt.count(archive.totalRows)} rows '
+        '(${(result.bytes / 1024).round()} KB); the server now keeps '
+        '${result.kept}.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _snack('Could not back up: $error', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Downloads the newest backup, says what is in it, and only then applies it.
+  Future<void> _restoreFromServer() async {
+    setState(() => _busy = true);
+    BackupArchive? archive;
+    try {
+      archive = await ref.read(backupServiceProvider).downloadLatest();
+    } catch (error) {
+      if (mounted) _snack('Could not read the backup: $error', error: true);
+      if (mounted) setState(() => _busy = false);
+      return;
+    }
+    setState(() => _busy = false);
+
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text('Restore this backup?'),
+        content: Text(
+          'Taken ${Fmt.ago(archive!.created)} by Arcanum ${archive.appVersion}'
+          '\n\n'
+          'It holds ${Fmt.count(archive.tables['collection_entries']?.length ?? 0)}'
+          ' collection entries and '
+          '${Fmt.count(archive.tables['price_history']?.length ?? 0)} recorded '
+          'price points across every game.\n\n'
+          'Your current holdings, alerts and recorded prices will be replaced. '
+          'The card catalogue and your saved settings stay as they are.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Replace my data'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await ref.read(backupServiceProvider).restore(archive);
+      ref.invalidate(collectionOverviewProvider(CardGame.mtg));
+      for (final g in CardGame.values) {
+        ref.invalidate(collectionOverviewProvider(g));
+        ref.invalidate(ownedQuantityProvider(g));
+        ref.invalidate(gameSummariesProvider);
+      }
+      if (!mounted) return;
+      _snack('Restored from the backup of ${Fmt.ago(archive.created)}.');
+    } catch (error) {
+      if (!mounted) return;
+      _snack('Could not restore: $error', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Writes the same archive out through the share sheet.
+  ///
+  /// The server is the convenient place for a copy; a file is the one that
+  /// survives the server, the account and this app all going away.
+  Future<void> _shareArchive() async {
+    setState(() => _busy = true);
+    try {
+      final archive =
+          await ref.read(backupServiceProvider).build(appVersion: _version);
+      final dir = await getTemporaryDirectory();
+      final stamp = DateTime.now().toIso8601String().substring(0, 10);
+      final path = '${dir.path}${Platform.pathSeparator}arcanum-backup-$stamp.json.gz';
+      await File(path).writeAsBytes(archive.encode(), flush: true);
+      await SharePlus.instance.share(
+        ShareParams(
+          files: <XFile>[XFile(path, mimeType: 'application/gzip')],
+          subject: 'Arcanum backup',
+        ),
+      );
+      if (!mounted) return;
+      _snack('Saved a copy of ${Fmt.count(archive.totalRows)} rows.');
+    } catch (error) {
+      if (!mounted) return;
+      _snack('Could not save a copy: $error', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   /// A grouped glass block: 20px radius, 16px padding, 20px page gutters.

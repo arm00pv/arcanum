@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Arcanum Sync - a tiny read-only price-history service for the Arcanum app.
+"""Arcanum Sync - a tiny price-history and backup service for the Arcanum app.
 
 Scryfall exposes only *current* card prices, so real trend analysis needs a
 history provider. This service reads the compact SQLite databases the tools in
@@ -20,6 +20,25 @@ The four games address a printing differently - Scryfall UUIDs, TCGdex ids,
 Lorcast's crd_ ids and Yu-Gi-Oh!'s compound ids - and those id spaces do not
 overlap, so the id alone decides which database answers.
 
+Backups, for the collector whose collection exists only on the phone:
+
+  POST /v1/backup      body: the archive bytes (the app sends gzip)
+      {"ok": true, "saved": "arcanum-backup-...json.gz", "bytes": N, "kept": K}
+  GET  /v1/backup/latest
+      the newest archive as application/gzip, or 404 when there is none
+  GET  /v1/backup/status
+      {"ok": true, "enabled": true, "backups": N, "latest": "<ISO8601 or null>", "bytes": N}
+
+Every backup route demands an X-Arcanum-Token header matching the token in
+--backup-token (~/arcanum/backup.token by default), which is read on each
+request so it can be rotated without a restart. The routes above answer to
+anyone, as they always have; these three must not, because a stranger who found
+the URL could otherwise read a collection - what the collector owns and what
+they paid for it - or overwrite the only backup of it. With no token installed
+there is no write path at all: every backup route answers 503 and stores
+nothing. The newest 14 archives are kept, so an upload adds history rather than
+replacing it.
+
 Run:
     python sync_server.py --port 8787 --db tool/prices/prices.db
 """
@@ -27,8 +46,11 @@ Run:
 from __future__ import annotations
 
 import argparse
+import hmac
 import json
 import os
+import shutil
+import socket
 import sqlite3
 import sys
 import threading
@@ -40,8 +62,22 @@ DB_PATH = ""
 POKEMON_DB_PATH = ""
 LORCANA_DB_PATH = ""
 YUGIOH_DB_PATH = ""
+BACKUP_TOKEN_PATH = ""
+BACKUPS_DIR = ""
 _LOCK = threading.Lock()
 _CONNS = {}
+
+# Backups. The archive is the collector's whole collection, so the write path
+# is deliberately narrow: one token, one directory, one shape of filename.
+BACKUP_PREFIX = "arcanum-backup-"
+BACKUP_SUFFIX = ".json.gz"
+BACKUP_STAMP = "%Y-%m-%dT%H%M%SZ"
+BACKUP_STAMP_WIDTH = len("YYYY-MM-DDTHHMMSSZ")
+INCOMING_PREFIX = ".incoming-"
+KEEP_BACKUPS = 14
+MAX_BACKUP_BYTES = 64 * 1024 * 1024
+DRAIN_LIMIT = 64 * 1024
+DRAIN_TIMEOUT = 0.5
 
 
 def conn(path=None):
@@ -190,17 +226,201 @@ def stats():
     return payload
 
 
+# ---------------------------------------------------------------------------
+# Backups
+# ---------------------------------------------------------------------------
+#
+# The app's collection lives in SQLite on the phone and is the only copy of it
+# that exists, so the server keeps a short history of the archives the app
+# uploads. Everything below is written for a URL strangers can find: a token
+# file decides whether there is a write path at all, the token is read on every
+# request so it can be rotated, and nothing an unauthenticated caller can send
+# changes what is stored.
+
+
+def installed_token():
+    """The token a backup request must carry, or None when there is none.
+
+    Read on every request rather than once at startup: a token can then be
+    rotated - or deleted, which closes the write path again - without a
+    restart. A file that is missing, unreadable or empty means no write path
+    at all, which is the safe way round for a service that is otherwise
+    read-only.
+    """
+    try:
+        with open(BACKUP_TOKEN_PATH, "r", encoding="utf-8") as fh:
+            token = fh.read().strip()
+    except OSError:
+        return None
+    return token or None
+
+
+def token_matches(supplied, expected):
+    """Compares two tokens in constant time, so a guess cannot be timed.
+
+    hmac.compare_digest is the only comparison a token is ever put through:
+    == stops at the first byte that differs, and over enough requests that
+    difference in timing is a way to learn a token without ever seeing it.
+    """
+    return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
+
+
+def device_slug(raw):
+    """The uploader's own name for the phone, reduced to a safe filename tail.
+
+    X-Arcanum-Device is client-supplied, so it is allowed to decide nothing but
+    the text before the extension: everything outside [A-Za-z0-9._-] is
+    dropped, which is also what keeps a path separator, or the quote that would
+    end the Content-Disposition filename, out of a stored name.
+    """
+    kept = [c for c in (raw or "") if c.isascii() and (c.isalnum() or c in "._-")]
+    return "".join(kept)[:32].strip(".")
+
+
+def backup_name(stamp, device="", attempt=1):
+    """The name one archive is stored under.
+
+    arcanum-backup-YYYY-MM-DDTHHMMSSZ[-device].json.gz, with ".2", ".3" ...
+    in front of the extension when two uploads land in the same second, so the
+    second one is kept beside the first rather than replacing it.
+    """
+    tail = "-" + device if device else ""
+    again = "" if attempt == 1 else ".%d" % attempt
+    return "%s%s%s%s%s" % (BACKUP_PREFIX, stamp, tail, again, BACKUP_SUFFIX)
+
+
+def archive_time(name):
+    """The moment an archive records in its name, or None when it is not ours."""
+    stamp = name[len(BACKUP_PREFIX):len(BACKUP_PREFIX) + BACKUP_STAMP_WIDTH]
+    try:
+        return datetime.strptime(stamp, BACKUP_STAMP).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def backup_files():
+    """Every stored archive, newest last.
+
+    Names sort chronologically because the timestamp in them is fixed width,
+    which is what lets retention work on names alone. Two archives uploaded
+    inside the same second carry names that cannot say which came first, so
+    those - and only those - are ordered by the time they were written.
+    """
+    try:
+        names = os.listdir(BACKUPS_DIR)
+    except OSError:
+        return []
+    names = [n for n in names
+             if n.startswith(BACKUP_PREFIX) and n.endswith(BACKUP_SUFFIX)]
+
+    def order(name):
+        try:
+            written = os.path.getmtime(os.path.join(BACKUPS_DIR, name))
+        except OSError:
+            written = 0.0
+        return (name[:len(BACKUP_PREFIX) + BACKUP_STAMP_WIDTH], written, name)
+
+    return sorted(names, key=order)
+
+
+def prune_backups(keep=KEEP_BACKUPS):
+    """Deletes all but the newest `keep` archives and returns how many remain.
+
+    Run after a successful upload, so uploading grows a short history of the
+    collection instead of replacing the one copy of it. An archive that cannot
+    be deleted is left where it is: it is a backup, and a stubborn one is not a
+    reason to report the upload that just succeeded as a failure.
+    """
+    names = backup_files()
+    for name in names[:max(0, len(names) - keep)]:
+        try:
+            os.remove(os.path.join(BACKUPS_DIR, name))
+        except OSError:
+            pass
+    return len(backup_files())
+
+
+def discard(path):
+    """Removes an upload that never became an archive; failure is not news."""
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def backup_status():
+    """What the app shows about the backups it has made.
+
+    "bytes" is the size of the newest archive - the same figure an upload
+    reports for what it just stored - and "latest" is when it was uploaded,
+    read back out of its name.
+    """
+    names = backup_files()
+    if not names:
+        return {"ok": True, "enabled": True, "backups": 0, "latest": None, "bytes": 0}
+    newest = names[-1]
+    try:
+        size = os.path.getsize(os.path.join(BACKUPS_DIR, newest))
+    except OSError:
+        size = 0
+    when = archive_time(newest)
+    return {
+        "ok": True,
+        "enabled": True,
+        "backups": len(names),
+        "latest": when.isoformat() if when else None,
+        "bytes": size,
+    }
+
+
+def drain_body(sock, rfile, length):
+    """Reads and discards a refused request's body, up to DRAIN_LIMIT bytes.
+
+    A refusal that leaves the body unread in the socket can be answered with a
+    reset instead of the 401 just written, so the client sees a broken pipe
+    rather than being told why it was refused. What has already arrived is read
+    off the wire, which leaves the connection usable for the next request;
+    anything past DRAIN_LIMIT is left alone, which is the body the cap exists to
+    avoid reading. The wait for more is short and never a wait for the whole
+    declared body: a client that is being refused has usually stopped sending,
+    and a client that has not must not be able to hold a thread by going quiet.
+    True means every declared byte was read and the next request will line up.
+    """
+    if length <= 0:
+        return length == 0
+    was = sock.gettimeout()
+    read = 0
+    try:
+        sock.settimeout(DRAIN_TIMEOUT)
+        while read < length and read < DRAIN_LIMIT:
+            try:
+                chunk = rfile.read(min(length - read, 8192))
+            except OSError:
+                break
+            if not chunk:
+                return False
+            read += len(chunk)
+    finally:
+        sock.settimeout(was)
+    return read == length
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ArcanumSync/1.0"
     protocol_version = "HTTP/1.1"
 
-    def _send(self, code, payload):
+    def _send(self, code, payload, cache="public, max-age=3600", close=False):
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Cache-Control", "public, max-age=3600")
+        self.send_header("Cache-Control", cache)
+        if close:
+            # A body that was not read leaves the socket in the middle of a
+            # request, so this connection cannot carry another one.
+            self.close_connection = True
+            self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(body)
 
@@ -223,6 +443,18 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self._send(200, data)
                 return
+            if path == "/v1/backup/status":
+                if not self._backup_gate():
+                    return
+                self._send(200, backup_status(), cache="no-store")
+                return
+            if path == "/v1/backup/latest":
+                if not self._backup_gate():
+                    return
+                names = backup_files()
+                if not names or not self._send_archive(names[-1]):
+                    self._send(404, {"error": "no backup"}, cache="no-store")
+                return
             self._send(404, {"error": "not found", "path": path})
         except BrokenPipeError:
             pass
@@ -232,12 +464,161 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
+    def _send_archive(self, name):
+        """Streams one stored archive back exactly as it was uploaded."""
+        path = os.path.join(BACKUPS_DIR, name)
+        try:
+            size = os.path.getsize(path)
+            handle = open(path, "rb")
+        except OSError:
+            return False
+        self.send_response(200)
+        self.send_header("Content-Type", "application/gzip")
+        self.send_header("Content-Length", str(size))
+        self.send_header("Content-Disposition", 'attachment; filename="%s"' % name)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        with handle:
+            shutil.copyfileobj(handle, self.wfile, 1 << 20)
+        return True
+
+    def _refuse(self, code, payload, length=0):
+        """Answers a request whose body this server is not going to store."""
+        self._send(code, payload, cache="no-store",
+                   close=not drain_body(self.connection, self.rfile, length))
+
+    def _backup_gate(self, length=0):
+        """Refuses the request unless it carries the token that is installed.
+
+        Returns True when the request may go on. The two refusals say the least
+        they can: with no token file there is no write path to protect and the
+        answer is 503, and with one installed a request that does not carry it
+        is told only that - never whether the file is there, what it holds, or
+        how close a guess came.
+        """
+        token = installed_token()
+        if token is None:
+            self._refuse(503, {"ok": False, "enabled": False,
+                               "error": "backups disabled"}, length)
+            return False
+        supplied = self.headers.get("X-Arcanum-Token") or ""
+        if not token_matches(supplied, token):
+            self._refuse(401, {"ok": False, "error": "unauthorized"}, length)
+            return False
+        return True
+
+    def do_POST(self):
+        path = unquote(urlparse(self.path).path)
+        try:
+            try:
+                length = int(self.headers.get("Content-Length") or "")
+            except ValueError:
+                length = -1
+            if path != "/v1/backup":
+                self._refuse(404, {"error": "not found", "path": path}, length)
+                return
+            if not self._backup_gate(length):
+                return
+            if length < 0:
+                self._refuse(411, {"ok": False, "error": "length required"}, length)
+                return
+            if length == 0:
+                self._refuse(400, {"ok": False, "error": "empty body"}, length)
+                return
+            if length > MAX_BACKUP_BYTES:
+                # Refused on the declared length, before a byte of the body is
+                # read: an archive that size is not a collection, and reading
+                # it to find out is the denial of service the cap exists to
+                # stop.
+                self._refuse(413, {"ok": False, "error": "too large",
+                                   "limit": MAX_BACKUP_BYTES}, length)
+                return
+            self._store_backup(length)
+        except BrokenPipeError:
+            pass
+        except Exception as exc:
+            try:
+                self._send(500, {"error": str(exc)}, cache="no-store")
+            except Exception:
+                pass
+
+    def _store_backup(self, length):
+        """Stores one uploaded archive, or leaves what is stored untouched.
+
+        The body is streamed to a temporary file beside the archives and moved
+        into place only once every declared byte has arrived and been flushed,
+        so an upload that stops halfway - the phone losing signal, the socket
+        dying - can leave neither a half-written archive where the app expects
+        a whole one, nor a mark on the backup that was already there.
+        """
+        try:
+            os.makedirs(BACKUPS_DIR, exist_ok=True)
+        except OSError as exc:
+            self._refuse(500, {"ok": False, "error": str(exc)}, length)
+            return
+        stamp = datetime.now(timezone.utc).strftime(BACKUP_STAMP)
+        device = device_slug(self.headers.get("X-Arcanum-Device"))
+        name, tmp, handle = "", "", None
+        for attempt in range(1, 1000):
+            candidate = backup_name(stamp, device, attempt)
+            if os.path.exists(os.path.join(BACKUPS_DIR, candidate)):
+                continue
+            tmp = os.path.join(BACKUPS_DIR, INCOMING_PREFIX + candidate)
+            try:
+                # O_EXCL, so two uploads landing in the same second cannot both
+                # decide on one name and then lose an archive to each other.
+                fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY
+                             | getattr(os, "O_BINARY", 0))
+            except FileExistsError:
+                continue
+            except OSError as exc:
+                self._refuse(500, {"ok": False, "error": str(exc)}, length)
+                return
+            name, handle = candidate, os.fdopen(fd, "wb")
+            break
+        if handle is None:
+            self._refuse(500, {"ok": False, "error": "no name for the archive"}, length)
+            return
+        written = 0
+        try:
+            with handle:
+                while written < length:
+                    chunk = self.rfile.read(min(length - written, 1 << 20))
+                    if not chunk:
+                        break
+                    handle.write(chunk)
+                    written += len(chunk)
+                # Flushed onto the disk before the name is moved into place:
+                # this file is a backup, and a rename that outruns the data it
+                # names would report a backup that is not there.
+                handle.flush()
+                os.fsync(handle.fileno())
+        except OSError as exc:
+            discard(tmp)
+            self._refuse(500, {"ok": False, "error": str(exc)}, length - written)
+            return
+        if written != length:
+            discard(tmp)
+            self._refuse(400, {"ok": False, "error": "incomplete body",
+                               "got": written}, length - written)
+            return
+        try:
+            os.replace(tmp, os.path.join(BACKUPS_DIR, name))
+        except OSError as exc:
+            discard(tmp)
+            self._refuse(500, {"ok": False, "error": str(exc)}, length)
+            return
+        self._send(200, {"ok": True, "saved": name, "bytes": written,
+                         "kept": prune_backups()}, cache="no-store")
+
     def log_message(self, fmt, *args):
         sys.stderr.write("  " + (fmt % args) + "\n")
 
 
 def main():
-    global DB_PATH, POKEMON_DB_PATH, LORCANA_DB_PATH, YUGIOH_DB_PATH, _STATS
+    global DB_PATH, POKEMON_DB_PATH, LORCANA_DB_PATH, YUGIOH_DB_PATH
+    global BACKUP_TOKEN_PATH, BACKUPS_DIR, _STATS
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser()
     default_db = os.path.join(here, "prices", "prices.db")
@@ -259,6 +640,17 @@ def main():
     )
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=8787)
+    ap.add_argument(
+        "--backups-dir",
+        default=os.path.join(os.path.expanduser("~"), "arcanum", "backups"),
+        help="where the archives uploaded by the app are kept",
+    )
+    ap.add_argument(
+        "--backup-token",
+        default=os.path.join(os.path.expanduser("~"), "arcanum", "backup.token"),
+        help="file holding the token a backup request must send; while it is "
+             "missing or empty the backup routes answer 503 and store nothing",
+    )
     args = ap.parse_args()
 
     if not os.path.exists(args.db):
@@ -271,6 +663,8 @@ def main():
     POKEMON_DB_PATH = args.pokemon_db if os.path.exists(args.pokemon_db) else ""
     LORCANA_DB_PATH = args.lorcana_db if os.path.exists(args.lorcana_db) else ""
     YUGIOH_DB_PATH = args.yugioh_db if os.path.exists(args.yugioh_db) else ""
+    BACKUPS_DIR = args.backups_dir
+    BACKUP_TOKEN_PATH = args.backup_token
     _STATS = None
     s = stats()
     print("Arcanum Sync serving {:,} printings / {:,} points ({} days) on http://{}:{}".format(
@@ -285,6 +679,12 @@ def main():
                 game, counts["printings"], counts["points"], counts["days"]))
         else:
             print("  (no {} database yet - run {} to build one)".format(game, poller))
+    if installed_token() is None:
+        print("  backups disabled: no token in {} (backup routes answer 503)".format(
+            args.backup_token))
+    else:
+        print("  backups enabled: keeping the newest {} archives in {}".format(
+            KEEP_BACKUPS, args.backups_dir))
     ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
     return 0
 

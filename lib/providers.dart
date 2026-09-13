@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:arcanum/core/theme/mana.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
+import 'package:arcanum/data/backup/backup_service.dart';
 import 'package:arcanum/data/catalog/lorcana_catalog.dart';
 import 'package:arcanum/data/catalog/mtg_catalog.dart';
 import 'package:arcanum/data/catalog/pokemon_catalog.dart';
@@ -156,6 +157,19 @@ final historyServiceProvider =
 
 final alertRepositoryProvider =
     Provider<AlertRepository>((ref) => ref.watch(bootstrapProvider).alerts);
+
+/// Keeps a copy of the collector's own data on their own server.
+///
+/// Its own provider rather than a method on the bootstrap, because everything
+/// it does is user-initiated: nothing here runs unless the collector presses a
+/// button in Settings.
+final backupServiceProvider = Provider<BackupService>((ref) {
+  final bootstrap = ref.watch(bootstrapProvider);
+  return BackupService(
+    database: bootstrap.database,
+    settings: bootstrap.settings,
+  );
+});
 
 // --------------------------------------------------------------------- alerts
 

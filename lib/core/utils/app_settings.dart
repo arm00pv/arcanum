@@ -25,6 +25,32 @@ class AppSettings extends ChangeNotifier {
   static const _kActiveGame = 'active_game';
   static const _kOnboarded = 'onboarded';
   static const _kLastSnapshotPrefix = 'last_snapshot_';
+  /// One stored preference by its raw key, for the backup service.
+  ///
+  /// A backup carries a short named list of preferences - endpoints and display
+  /// choices, never credentials - so it reads and writes them by key rather
+  /// than growing a getter and setter pair per field on this class.
+  Object? rawPreference(String key) => _prefs.get(key);
+
+  /// Writes one preference back, preserving its type.
+  Future<void> writeRawPreference(String key, Object? value) async {
+    if (value == null) {
+      await _prefs.remove(key);
+    } else if (value is bool) {
+      await _prefs.setBool(key, value);
+    } else if (value is int) {
+      await _prefs.setInt(key, value);
+    } else if (value is double) {
+      await _prefs.setDouble(key, value);
+    } else {
+      await _prefs.setString(key, value.toString());
+    }
+    notifyListeners();
+  }
+
+  static const _kBackupEndpoint = 'backup_endpoint';
+  static const _kBackupToken = 'backup_token';
+  static const _kLastBackupAt = 'last_backup_at';
 
   static Future<AppSettings> load() async =>
       AppSettings._(await SharedPreferences.getInstance());
@@ -142,6 +168,51 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Where backups are pushed, and the token that authorises it.
+  ///
+  /// A dedicated endpoint rather than reusing a history one: history is open
+  /// and read-only, while the backup route is the only thing on the companion
+  /// that writes, and it is the only one that needs a secret. Pointing one at
+  /// the other would conflate two very different trust levels.
+  static const defaultBackupEndpoint = defaultHistoryEndpoint;
+
+  String get backupEndpoint {
+    final String stored = _prefs.getString(_kBackupEndpoint)?.trim() ?? '';
+    return stored.isEmpty ? defaultBackupEndpoint : stored;
+  }
+
+  set backupEndpoint(String v) {
+    _prefs.setString(_kBackupEndpoint, v.trim());
+    notifyListeners();
+  }
+
+  /// The shared secret the companion's backup routes require.
+  ///
+  /// Empty means the app never tries to write, which is also what the server
+  /// does when it has no token file of its own: both ends default to refusing
+  /// rather than to an unauthenticated write path.
+  String get backupToken => _prefs.getString(_kBackupToken) ?? '';
+
+  set backupToken(String v) {
+    _prefs.setString(_kBackupToken, v.trim());
+    notifyListeners();
+  }
+
+  /// When a backup was last uploaded, so Settings can say how stale it is.
+  DateTime? get lastBackupAt {
+    final ms = _prefs.getInt(_kLastBackupAt);
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  set lastBackupAt(DateTime? d) {
+    if (d == null) {
+      _prefs.remove(_kLastBackupAt);
+    } else {
+      _prefs.setInt(_kLastBackupAt, d.millisecondsSinceEpoch);
+    }
+    notifyListeners();
+  }
+
   String get justTcgKey => _prefs.getString(_kJustTcgKey) ?? '';
 
   set justTcgKey(String v) {
@@ -192,12 +263,11 @@ class AppSettings extends ChangeNotifier {
   /// True when at least one provider serves this game.
   ///
   /// Must agree with [PriceHistoryService.providersFor], because the settings
-  /// screen uses it to tell the user whether trends have a source. Yu-Gi-Oh! has
-  /// no provider at all - neither JustTCG nor either self-hosted endpoint
-  /// carries it - so a key left over from another game must not make the app
-  /// claim one is configured.
+  /// screen uses it to tell the user whether trends have a source. Every game
+  /// is served by the companion now - Magic from the MTGJSON slice and the
+  /// other three from their daily samplers - so the question is only whether
+  /// that companion is configured at all.
   bool hasHistoryProvider(CardGame game) {
-    if (game == CardGame.yugioh) return false;
     if (justTcgKey.isNotEmpty) return true;
     if (game == CardGame.mtg) return historyEndpoint.isNotEmpty;
     return pokemonHistoryEndpoint.isNotEmpty;
