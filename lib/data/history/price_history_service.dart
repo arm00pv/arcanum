@@ -34,28 +34,27 @@ class PriceHistoryService {
 
   /// Network providers configured for a game, most preferred first.
   ///
-  /// Yu-Gi-Oh! has none, and that is not an oversight: YGOPRODeck publishes
-  /// current prices only, with no history endpoint anywhere in the API and no
-  /// free archive of the kind Pokémon has. The game therefore runs on the daily
-  /// snapshots Arcanum records itself, which is why this returns an empty list
-  /// rather than a provider that would only ever answer with nothing.
+  /// Every game now has at least one. The companion used to answer for Magic
+  /// and Pokémon only, and Yu-Gi-Oh! and Lorcana had nothing at all: neither
+  /// YGOPRODeck nor Lorcast publishes a history endpoint, and no free archive
+  /// of either exists anywhere. What changed is the samplers - the companion
+  /// now records every card of both games once a day, so the one source that
+  /// can exist for them is the app's own infrastructure. A trend for those two
+  /// starts from the day the sampler was switched on and grows from there,
+  /// which is why the companion is listed ahead of the game's own snapshots.
   List<PriceHistorySource> providersFor(CardGame game) {
-    // Yu-Gi-Oh! and Lorcana have nothing to backfill from: YGOPRODeck keeps no
-    // history at all, and Lorcast publishes only today's prices. Both run on
-    // the daily snapshots Arcanum records itself, which is why this returns an
-    // empty list rather than a provider that would only ever answer with
-    // nothing. Magic and Pokémon each have at least one real source.
-    if (game == CardGame.yugioh || game == CardGame.lorcana) {
-      return const <PriceHistorySource>[];
-    }
     final out = <PriceHistorySource>[];
-    if (_settings.historyEndpoint.isNotEmpty) {
-      final hasPokemonEndpoint = _settings.pokemonHistoryEndpoint.isNotEmpty;
-      if (game == CardGame.mtg) {
-        out.add(BackfillPackSource(baseUrl: _settings.historyEndpoint));
-      } else if (hasPokemonEndpoint) {
-        out.add(BackfillPackSource(baseUrl: _settings.pokemonHistoryEndpoint));
-      }
+    // Magic has its own endpoint preference because its companion database is
+    // rebuilt from MTGJSON and is a different thing entirely; every other game
+    // is served by the daily samplers behind the other endpoint.
+    final companion = game == CardGame.mtg
+        ? _settings.historyEndpoint
+        : _settings.pokemonHistoryEndpoint;
+    if (companion.isNotEmpty) {
+      // serveGame is not decoration: the source declares which games it serves
+      // and is filtered out for the others, so leaving it at its Magic default
+      // would have quietly dropped this source for every other game.
+      out.add(BackfillPackSource(baseUrl: companion, serveGame: game));
     }
     if (_settings.justTcgKey.isNotEmpty) {
       out.add(JustTcgHistorySource(apiKey: _settings.justTcgKey, game: game));
@@ -63,11 +62,11 @@ class PriceHistoryService {
     if (game == CardGame.mtg) {
       // Free, keyless, and the only source with multi-year depth for Magic.
       out.add(MtgStocksHistorySource(cache: _dao));
-    } else {
+    } else if (game == CardGame.pokemon) {
       // Free, keyless, and roughly two years deep — but the scrape stopped in
       // September 2024, so it is a historical archive rather than a live feed.
-      // Live Pokémon data comes from JustTCG (when keyed) and the app's own
-      // daily snapshots.
+      // Live Pokémon data comes from JustTCG (when keyed), the companion and
+      // the app's own daily snapshots.
       out.add(TcgDexPriceHistorySource());
     }
     out.retainWhere((p) => p.supportedGames.contains(game));

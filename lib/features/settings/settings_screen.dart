@@ -306,16 +306,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   ) {
     final c = context.c;
     final bool isMtg = game == CardGame.mtg;
-    // Yu-Gi-Oh! and Lorcana are the two games with no history source at all, so
-    // both get the short section and neither offers a key field or a probe.
+    // Neither YGOPRODeck nor Lorcast publishes any price history, and no free
+    // archive of either game exists, so these two have no JustTCG plan to offer
+    // either: the field is hidden rather than promising a source that would
+    // never answer.
     final bool isYgo = game == CardGame.yugioh || game == CardGame.lorcana;
     final bool configured = settings.hasHistoryProvider(game);
-    // A Pokémon companion is genuinely optional, so the probe only appears
-    // once an endpoint has actually been typed in. Yu-Gi-Oh! and Lorcana have
-    // no endpoint to probe in the first place, so the button is never offered
-    // for them.
-    final bool canTest = !isYgo &&
-        (isMtg || _pokemonEndpointController.text.trim().isNotEmpty);
+    // Every game can now be probed, because the companion answers for all four:
+    // Magic from the MTGJSON slice, and the rest from their daily samplers. A
+    // companion is still optional, so the probe appears only once its endpoint
+    // has been typed in.
+    final bool canTest = (isMtg
+            ? _endpointController.text
+            : _pokemonEndpointController.text)
+        .trim()
+        .isNotEmpty;
 
     return _group(
       child: Column(
@@ -325,11 +330,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Text('Lorcana price history', style: context.t.titleSmall),
             const SizedBox(height: 8),
             Text(
-              'Lorcast publishes what a card is worth today and nothing else. '
-              'No free archive of Lorcana prices exists to stand in for a '
-              'history endpoint, so trends for this game come from the daily '
-              'snapshots Arcanum records for every card you own, which start '
-              'building the day you add your first card.',
+              'Lorcast publishes what a card is worth today and nothing else, '
+              'and no free archive of Lorcana prices exists to stand in for a '
+              'history endpoint. Lorcana therefore has one source and it is '
+              'yours: the Arcanum Sync companion records the price of every '
+              'Lorcana card once a day, so the history of every card is '
+              'complete from the day the sampler was switched on. Arcanum adds '
+              'its own daily snapshot of everything you own on top.',
               style: context.t.bodySmall
                   ?.copyWith(color: c.textSecondary, height: 1.45),
             ),
@@ -338,11 +345,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 8),
             Text(
               'YGOPRODeck publishes what a card is worth today and nothing '
-              'else: the API has no history endpoint, and there is no free '
-              'archive of Yu-Gi-Oh! prices to stand in for one. Trends for this '
-              'game therefore come from the daily snapshots Arcanum records for '
-              'every card you own, which start building the day you add your '
-              'first card.',
+              'else: the API has no history endpoint, and no free archive of '
+              'Yu-Gi-Oh! prices exists to stand in for one. The game therefore '
+              'has one source and it is yours: the Arcanum Sync companion '
+              'records the price of every Yu-Gi-Oh! printing once a day, so the '
+              'history of every card is complete from the day the sampler was '
+              'switched on. Arcanum adds its own daily snapshot of everything '
+              'you own on top.',
               style: context.t.bodySmall
                   ?.copyWith(color: c.textSecondary, height: 1.45),
             ),
@@ -385,10 +394,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'so it is a historical archive rather than a live feed. Live '
               'Pokémon history therefore needs a JustTCG API key - the free tier '
               'allows 100 requests a day. On top of that, Arcanum records its own '
-              'daily snapshot of everything you own, which is the one series that '
-              'always stays current. The hosted Arcanum Sync companion carries a '
-              'Pokémon database sampled once a day as well, so the endpoint below '
-              'works for this game too.',
+              'daily snapshot of everything you own, and the Arcanum Sync '
+              'companion samples every Pokémon card once a day as well. The '
+              'endpoint below is the companion for every game except Magic.',
               style: context.t.bodySmall
                   ?.copyWith(color: c.textSecondary, height: 1.45),
             ),

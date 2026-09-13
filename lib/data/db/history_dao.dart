@@ -27,6 +27,9 @@ class HistoryDao {
   /// anything the app recorded itself.
   static const sourcePriority = <String>[
     'backfill',
+    'companion',
+    // Written by the first release that had samplers; kept so those rows keep
+    // the priority they were stored with.
     'pokemon_backfill',
     'mtgstocks',
     'snapshot',

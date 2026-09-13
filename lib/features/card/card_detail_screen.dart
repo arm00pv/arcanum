@@ -740,15 +740,17 @@ class _AnalyticsSection extends StatelessWidget {
                               'about three weeks of data — a JustTCG key in Settings '
                               'adds live history immediately.',
                         CardGame.yugioh =>
-                          'Arcanum records a Yu-Gi-Oh! price snapshot every day '
-                              'you open the app. YGOPRODeck keeps no price history '
-                              'at all, so these snapshots are the only source of a '
-                              'trend and analysis begins after a couple of weeks.',
+                          'YGOPRODeck keeps no price history at all, so this '
+                              'game has one source and it is yours: the Arcanum '
+                              'Sync companion records every Yu-Gi-Oh! printing '
+                              'once a day, and the app snapshots the cards you '
+                              'own. Analysis begins after a couple of weeks.',
                         CardGame.lorcana =>
-                          'Arcanum records a Lorcana price snapshot every day you '
-                              'open the app. Lorcast publishes only current '
-                              'prices, so those snapshots are the only source of a '
-                              'trend and analysis begins after a couple of weeks.',
+                          'Lorcast publishes only current prices, so this game '
+                              'has one source and it is yours: the Arcanum Sync '
+                              'companion records every Lorcana card once a day, '
+                              'and the app snapshots the cards you own. Analysis '
+                              'begins after a couple of weeks.',
                       },
                       textAlign: TextAlign.center,
                       style: context.t.bodySmall,

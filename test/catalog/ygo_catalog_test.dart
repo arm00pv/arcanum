@@ -765,6 +765,48 @@ void main() {
     });
   });
 
+  group('ids the companion sampler depends on', () {
+    test('the catalogue emits the compound id the sampler writes', () async {
+      // tool/poll_yugioh_prices.py stores one price series per printing under
+      // an id rebuilt from the passcode, the set code, the printing code and
+      // the rarity. If the two ever disagree the sampler keeps writing rows the
+      // app never asks for, and Yu-Gi-Oh! silently loses the only history it
+      // has. This is the contract, pinned from the app's side.
+      final catalog = catalogWith(
+        bySetName: <String, String>{
+          'Legend of Blue Eyes White Dragon': lobBody,
+        },
+      );
+
+      final cards = await catalog.fetchCardsInSet('lob');
+
+      expect(
+        cards.map((c) => c.id),
+        contains('89631139:lob:lob-en001:ultra-rare'),
+      );
+    });
+
+    test('a printing with no rarity keeps the sampler placeholder', () async {
+      const bare = '''
+{"id":77777777,"name":"No Rarity","type":"Spell Card",
+ "humanReadableCardType":"Spell Card","frameType":"spell","desc":"Test.",
+ "card_sets":[{"set_name":"Starter Deck: Kaiba","set_code":"SDK-042",
+   "set_rarity":"","set_rarity_code":"","set_price":"2.00"}],
+ "card_prices":[{"cardmarket_price":"0.10","tcgplayer_price":"2.00",
+   "ebay_price":"0.00","amazon_price":"0.00","coolstuffinc_price":"0.00"}]}
+''';
+      final catalog = catalogWith(
+        bySetName: <String, String>{
+          'Starter Deck: Kaiba': cardData(<String>[bare]),
+        },
+      );
+
+      final cards = await catalog.fetchCardsInSet('sdk');
+
+      expect(cards.single.id, '77777777:sdk:sdk-042:unknown');
+    });
+  });
+
   group('malformed responses', () {
     test('a set list that is not a list is reported, not guessed at', () async {
       final catalog = catalogWith(setsBody: '{"data":[]}');

@@ -1,0 +1,21 @@
+[Unit]
+Description=Arcanum - sample Lorcana prices once a day
+Documentation=https://github.com/arm00pv/arcanum
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=zixen
+Group=zixen
+WorkingDirectory=/home/zixen/arcanum
+ExecStart=/usr/bin/python3 /home/zixen/arcanum/poll_lorcana_prices.py --db /home/zixen/arcanum/data/lorcana_prices.db
+# A day that is not sampled is a day permanently missing from the trend: no
+# source anywhere holds this game's price history, so it cannot be backfilled
+# later. Nice and idle keep the sweep out of the way of everything else on a
+# host that runs close to its limits.
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=3600
+StandardOutput=append:/home/zixen/arcanum/logs/poll_lorcana_prices.log
+StandardError=append:/home/zixen/arcanum/logs/poll_lorcana_prices.log

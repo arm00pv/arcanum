@@ -33,14 +33,34 @@ Paths on the host:
 
 | Unit | What it does | When |
 | --- | --- | --- |
-| `arcanum-sync.service` | serves the two databases on 172.19.0.1:8787 | always |
+| `arcanum-sync.service` | serves all four databases on 172.19.0.1:8787 | always |
 | `arcanum-pokemon-poll.timer` | samples TCGdex into the Pokemon database | daily, 04:20 UTC |
+| `arcanum-lorcana-poll.timer` | samples Lorcast into the Lorcana database | daily, 04:40 UTC |
+| `arcanum-yugioh-poll.timer` | samples YGOPRODeck into the Yu-Gi-Oh! database | daily, 04:55 UTC |
 | `arcanum-mtg-rebuild.timer` | re-slices the Magic history from MTGJSON | Mondays, 05:30 UTC |
 
 The listening address is the docker bridge gateway on purpose. The host has a
 public address and no host firewall, so binding every interface would publish
 the database to the internet in cleartext; bound this way only the Caddy
 container can reach it, and everything public arrives over TLS.
+
+## Why three of the four games are sampled rather than backfilled
+
+Magic is rebuilt from MTGJSON weekly, which is a real archive: 89 days and
+thirteen million points, and it can be rebuilt from scratch at any time.
+
+Pokemon, Lorcana and Yu-Gi-Oh! have nothing to backfill from. TCGdex gives live
+Pokemon prices but its community archive stopped in September 2024; Lorcast and
+YGOPRODeck publish today's price and no history at all, and no free archive of
+either exists anywhere. For those three the sampler **is** the history: a day
+that is not sampled is a day permanently missing from every future trend, which
+is why their timers carry `Persistent=true` and why they run before the weekly
+Magic rebuild rather than after it.
+
+Sampling cost is small: Lorcana is 23 requests for all 3,198 cards, Yu-Gi-Oh!
+is one 21 MB response for all 14,549, and Pokemon is the heaviest at one
+request per card. A full day's sweep of all three is a few minutes of quiet
+work.
 
 ## Public route
 

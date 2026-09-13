@@ -1,0 +1,14 @@
+[Unit]
+Description=Arcanum - sample Lorcana prices once a day
+Documentation=https://github.com/arm00pv/arcanum
+
+[Timer]
+OnCalendar=*-*-* 04:40:00 UTC
+# Persistent matters more here than for the other timers: if the host is down
+# or overloaded at the scheduled minute, the run happens at the next
+# opportunity instead of the day being skipped for good.
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target

@@ -129,8 +129,16 @@ class BackfillPackSource implements PriceHistorySource {
   final CardGame serveGame;
   final Dio _dio;
 
+  /// The label these points are stored under.
+  ///
+  /// Magic keeps `backfill` because its database is rebuilt from MTGJSON and
+  /// that is what every stored Magic row already says. Everything else is
+  /// served by a daily sampler, and since the companion now samples four games
+  /// rather than one, the label names the source rather than a game that is no
+  /// longer the only one using it. `pokemon_backfill` stays in the history
+  /// DAO's priority list so rows written before this still merge correctly.
   @override
-  String get id => serveGame == CardGame.mtg ? 'backfill' : 'pokemon_backfill';
+  String get id => serveGame == CardGame.mtg ? 'backfill' : 'companion';
 
   @override
   String get label => 'Arcanum Sync (${serveGame.shortLabel})';
