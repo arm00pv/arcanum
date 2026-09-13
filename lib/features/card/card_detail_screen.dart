@@ -414,6 +414,20 @@ class _OwnedSection extends ConsumerWidget {
       ref.invalidate(cardEntriesProvider((game: game, id: card.id)));
     }
 
+    /// Moves a stack on and off the trade pile.
+    ///
+    /// The overview is invalidated rather than patched, because the trade
+    /// screen and the ledger both read it and neither should be the one place
+    /// that has to remember to update itself.
+    Future<void> setForTrade(int id, bool value) async {
+      await ref
+          .read(bootstrapProvider)
+          .collectionFor(game)
+          .setForTrade(id, value);
+      ref.invalidate(collectionOverviewProvider(game));
+      ref.invalidate(cardEntriesProvider((game: game, id: card.id)));
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -467,6 +481,20 @@ class _OwnedSection extends ConsumerWidget {
                             ),
                           ),
                       ],
+                    ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: e.forTrade
+                        ? 'Take off the trade pile'
+                        : 'Put on the trade pile',
+                    onPressed: () => setForTrade(e.id!, !e.forTrade),
+                    icon: Icon(
+                      e.forTrade
+                          ? Icons.handshake_rounded
+                          : Icons.handshake_outlined,
+                      size: 20,
+                      color: e.forTrade ? c.accent : c.textTertiary,
                     ),
                   ),
                   IconButton(

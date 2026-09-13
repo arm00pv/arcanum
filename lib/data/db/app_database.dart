@@ -31,7 +31,8 @@ class AppDatabase {
   ///      (see [unwrapQuotedSubtitles]).
   /// v6 — a `wanted_cards` table, so a want survives closing the card.
   /// v7 — `decks` and `deck_cards`, so a deck is a thing the app knows about.
-  static const _version = 7;
+  /// v8 — `collection_entries.for_trade`, so a trade pile exists.
+  static const _version = 8;
 
   static AppDatabase? _instance;
 
@@ -56,6 +57,7 @@ class AppDatabase {
         if (from < 5) await unwrapQuotedSubtitles(d);
         if (from < 6) await createWantedCards(d);
         if (from < 7) await createDecks(d);
+        if (from < 8) await addForTrade(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -180,6 +182,7 @@ class AppDatabase {
         purchase_date  INTEGER,
         binder         TEXT NOT NULL DEFAULT '',
         notes          TEXT,
+        for_trade      INTEGER NOT NULL DEFAULT 0,
         created_at     INTEGER NOT NULL,
         updated_at     INTEGER NOT NULL
       )
@@ -320,6 +323,18 @@ class AppDatabase {
   ''',
     'CREATE INDEX idx_deck_cards_deck ON deck_cards(deck_id, board, sort)',
   ];
+
+  /// v8: a stack can be marked as up for trade.
+  ///
+  /// A column rather than a table: what is for trade is a fact about cards the
+  /// collector already owns, and every existing row is correctly "not for
+  /// trade" the moment the column appears.
+  static Future<void> addForTrade(DatabaseExecutor d) async {
+    await d.execute(
+      'ALTER TABLE collection_entries '
+      'ADD COLUMN for_trade INTEGER NOT NULL DEFAULT 0',
+    );
+  }
 
   /// v7: decks, and the cards in them.
   ///

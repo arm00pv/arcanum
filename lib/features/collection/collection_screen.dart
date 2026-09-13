@@ -10,7 +10,11 @@ import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/features/card/card_detail_screen.dart';
+import 'package:arcanum/features/collection/binders_screen.dart';
+import 'package:arcanum/features/collection/purchases_screen.dart';
+import 'package:arcanum/features/collection/trade_screen.dart';
 import 'package:arcanum/features/collection/wants_screen.dart';
+import 'package:arcanum/features/transfer/paste_import_screen.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
 import 'package:arcanum/widgets/common.dart';
@@ -48,6 +52,17 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       final o = _scrollController.offset;
       if ((o - _scrollOffset).abs() > 4) setState(() => _scrollOffset = o);
     });
+  }
+
+  /// Opens one of the other views of the collection.
+  void _open(BuildContext context, String choice) {
+    final Widget screen = switch (choice) {
+      'purchases' => const PurchasesScreen(),
+      'binders' => const BindersScreen(),
+      'paste' => const PasteImportScreen(),
+      _ => const TradeScreen(),
+    };
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
   }
 
   @override
@@ -138,6 +153,30 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                               ? Icons.grid_view_rounded
                               : Icons.view_list_rounded,
                         ),
+                      ),
+                      // The collection seen three other ways: by what it cost,
+                      // by where it is filed, and by what is up for trade.
+                      PopupMenuButton<String>(
+                        onSelected: (String choice) => _open(context, choice),
+                        itemBuilder: (BuildContext context) =>
+                            const <PopupMenuEntry<String>>[
+                              PopupMenuItem<String>(
+                                value: 'purchases',
+                                child: Text('Purchases'),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'binders',
+                                child: Text('Binders'),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'trade',
+                                child: Text('For trade'),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'paste',
+                                child: Text('Paste a list'),
+                              ),
+                            ],
                       ),
                     ],
                   ),

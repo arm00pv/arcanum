@@ -128,6 +128,20 @@ class CatalogRepository {
   Future<TcgCard?> cardById(CardGame game, String id) =>
       _dao.cardById(game, id);
 
+  /// A printing addressed by set code and collector number.
+  Future<TcgCard?> cardByNumber(
+    CardGame game,
+    String setCode,
+    String collectorNumber,
+  ) => _dao.cardByNumber(game, setCode, collectorNumber);
+
+  /// Printings of one name inside one set.
+  Future<List<TcgCard>> cardsByNameInSet(
+    CardGame game,
+    String name,
+    String setCode,
+  ) => _dao.cardsByNameInSet(game, name, setCode);
+
   Future<Map<String, TcgCard>> cardsByIds(CardGame game, List<String> ids) =>
       _dao.cardsByIds(game, ids);
 

@@ -408,6 +408,41 @@ class CatalogDao {
     return rows.isEmpty ? null : _cardFromRow(game, rows.first);
   }
 
+  /// A single printing, addressed the way a deck list writes one.
+  ///
+  /// `(LEA) 161` is how every deck site, every trade list and every spreadsheet
+  /// names a card, and it is the only address that survives a card being
+  /// reprinted: a name alone matches thirty printings and picks the wrong one.
+  /// Set codes are folded to lowercase because that is how they are stored.
+  Future<TcgCard?> cardByNumber(
+    CardGame game,
+    String setCode,
+    String collectorNumber,
+  ) async {
+    final rows = await _db.query(
+      'cards',
+      where: 'game = ? AND set_code = ? AND collector_number = ?',
+      whereArgs: <Object?>[game.id, setCode.toLowerCase(), collectorNumber],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _cardFromRow(game, rows.first);
+  }
+
+  /// Every printing of this name in this set, cheapest-first by number.
+  Future<List<TcgCard>> cardsByNameInSet(
+    CardGame game,
+    String name,
+    String setCode,
+  ) async {
+    final rows = await _db.query(
+      'cards',
+      where: 'game = ? AND set_code = ? AND name = ? COLLATE NOCASE',
+      whereArgs: <Object?>[game.id, setCode.toLowerCase(), name.trim()],
+      orderBy: 'collector_sort ASC, collector_number ASC',
+    );
+    return rows.map((Map<String, Object?> r) => _cardFromRow(game, r)).toList();
+  }
+
   /// Many printings by id, keyed by id.
   Future<Map<String, TcgCard>> cardsByIds(
     CardGame game,

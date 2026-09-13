@@ -209,8 +209,7 @@ void main() {
         ),
         ...given,
       ];
-      var have =
-          1 + given.fold<int>(0, (int a, DeckEntry e) => a + e.quantity);
+      var have = 1 + given.fold<int>(0, (int a, DeckEntry e) => a + e.quantity);
       var n = 0;
       while (have < 100) {
         entries.add(

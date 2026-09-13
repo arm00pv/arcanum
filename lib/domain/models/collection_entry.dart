@@ -1,4 +1,5 @@
 import 'package:arcanum/core/theme/mana.dart';
+import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// One physical stack of identical cards in the user's collection.
 ///
@@ -19,6 +20,7 @@ class CollectionEntry {
     this.purchaseDate,
     this.binder = '',
     this.notes,
+    this.forTrade = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -45,6 +47,15 @@ class CollectionEntry {
   final String binder;
 
   final String? notes;
+
+  /// True when this stack is up for trade or sale.
+  ///
+  /// A flag on the stack rather than a separate list, because what is for
+  /// trade is a fact about the cards in the box: pulling a card out of the
+  /// trade pile means taking it out of the box, and a second list that could
+  /// disagree with the first would be worse than no list.
+  final bool forTrade;
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -65,6 +76,7 @@ class CollectionEntry {
     Object? purchaseDate = _unset,
     String? binder,
     Object? notes = _unset,
+    bool? forTrade,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -83,6 +95,7 @@ class CollectionEntry {
           : purchaseDate as DateTime?,
       binder: binder ?? this.binder,
       notes: notes == _unset ? this.notes : notes as String?,
+      forTrade: forTrade ?? this.forTrade,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -101,6 +114,7 @@ class CollectionEntry {
     'purchase_date': purchaseDate?.millisecondsSinceEpoch,
     'binder': binder,
     'notes': notes,
+    'for_trade': forTrade ? 1 : 0,
     'created_at': createdAt.millisecondsSinceEpoch,
     'updated_at': updatedAt.millisecondsSinceEpoch,
   };
@@ -118,6 +132,7 @@ class CollectionEntry {
         : DateTime.fromMillisecondsSinceEpoch(r['purchase_date'] as int),
     binder: (r['binder'] as String?) ?? '',
     notes: r['notes'] as String?,
+    forTrade: ((r['for_trade'] as num?)?.toInt() ?? 0) != 0,
     createdAt: DateTime.fromMillisecondsSinceEpoch(
       (r['created_at'] as int?) ?? 0,
     ),
@@ -146,11 +161,19 @@ class ValuedEntry {
   const ValuedEntry({
     required this.entry,
     required this.unitValue,
+    this.card,
     this.dayChangePercent,
     this.trendScore,
   });
 
   final CollectionEntry entry;
+
+  /// The catalogue record for the stack's printing, when it is cached.
+  ///
+  /// Carried along because every screen that shows a holding wants the name and
+  /// the picture, and looking them up again at the point of drawing means every
+  /// such screen needs the catalogue plumbed into it as well.
+  final TcgCard? card;
 
   /// Market value of a single copy, already adjusted for finish and condition.
   final double? unitValue;

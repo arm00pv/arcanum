@@ -162,6 +162,10 @@ class CollectionRepository {
 
   Future<void> removeEntry(int entryId) => _col.delete(entryId);
 
+  /// Puts a stack on the trade pile, or takes it off.
+  Future<void> setForTrade(int entryId, bool forTrade) =>
+      _col.setForTrade(entryId, forTrade);
+
   Future<void> updateEntry(CollectionEntry entry) => _col.updateEntry(entry);
 
   Future<List<CollectionEntry>> entriesForCard(String cardId) =>
@@ -238,7 +242,7 @@ class CollectionRepository {
       final unit = card == null
           ? null
           : unitValueFor(card, finish: e.finish, condition: e.condition);
-      final v = ValuedEntry(entry: e, unitValue: unit);
+      final v = ValuedEntry(entry: e, unitValue: unit, card: card);
       valued.add(v);
 
       if (unit == null) {
@@ -325,6 +329,7 @@ class CollectionRepository {
         ValuedEntry(
           entry: v.entry,
           unitValue: v.unitValue,
+          card: v.card,
           dayChangePercent: pct,
         ),
       );

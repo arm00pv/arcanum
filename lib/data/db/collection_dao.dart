@@ -226,6 +226,19 @@ class CollectionDao {
     );
   }
 
+  /// Marks a stack as up for trade, or takes it off the trade pile.
+  Future<void> setForTrade(int id, bool forTrade) async {
+    await _db.update(
+      'collection_entries',
+      {
+        'for_trade': forTrade ? 1 : 0,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> delete(int id) async {
     await _db.delete('collection_entries', where: 'id = ?', whereArgs: [id]);
   }
