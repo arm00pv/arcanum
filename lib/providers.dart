@@ -12,12 +12,17 @@ import 'package:arcanum/data/db/alert_dao.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/data/db/collection_dao.dart';
+import 'package:arcanum/data/db/deck_dao.dart';
 import 'package:arcanum/data/db/history_dao.dart';
 import 'package:arcanum/data/db/wanted_dao.dart';
+import 'package:arcanum/data/decks/ban_list_service.dart';
 import 'package:arcanum/data/history/price_history_service.dart';
 import 'package:arcanum/data/repositories/alert_repository.dart';
 import 'package:arcanum/data/repositories/catalog_repository.dart';
 import 'package:arcanum/data/repositories/collection_repository.dart';
+import 'package:arcanum/data/repositories/deck_repository.dart';
+import 'package:arcanum/domain/decks/deck.dart';
+import 'package:arcanum/domain/decks/deck_format.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/price_alert.dart';
@@ -538,6 +543,81 @@ final setCompletionProvider =
       await ref.watch(collectionOverviewProvider(game).future);
       return ref.watch(bootstrapProvider).catalogDao.setCompletion(game);
     });
+
+// -------------------------------------------------------------------- decks
+
+/// Reads and writes decks and the cards in them.
+final deckDaoProvider = Provider<DeckDao>(
+  (ref) => DeckDao(ref.watch(bootstrapProvider).database.db),
+);
+
+/// Decks, with their cards priced against the catalogue.
+final deckRepositoryProvider = Provider<DeckRepository>(
+  (ref) => DeckRepository(
+    dao: ref.watch(deckDaoProvider),
+    catalog: ref.watch(catalogRepositoryProvider),
+  ),
+);
+
+/// Bumped whenever a deck or its contents change.
+class DeckRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  /// Signals that the decks changed.
+  void bump() => state = state + 1;
+}
+
+final deckRevisionProvider = NotifierProvider<DeckRevision, int>(
+  DeckRevision.new,
+);
+
+/// Every deck of a game, priced and counted against what is owned.
+final decksProvider = FutureProvider.family<List<DeckContents>, CardGame>((
+  ref,
+  game,
+) async {
+  ref.watch(deckRevisionProvider);
+  final owned = await ref.watch(ownedQuantityProvider(game).future);
+  return ref.watch(deckRepositoryProvider).all(game, owned: owned);
+});
+
+/// One deck by id, priced and counted against what is owned.
+final deckProvider = FutureProvider.family<DeckContents?, int>((
+  ref,
+  deckId,
+) async {
+  ref.watch(deckRevisionProvider);
+  final repository = ref.watch(deckRepositoryProvider);
+  final deck = await repository.contents(deckId);
+  if (deck == null) return null;
+  final owned = await ref.watch(ownedQuantityProvider(deck.deck.game).future);
+  return repository.contents(deckId, owned: owned);
+});
+
+/// How many decks hold one printing, for the card screen.
+final cardDeckCountProvider = FutureProvider.family<int, CardRef>((
+  ref,
+  card,
+) async {
+  ref.watch(deckRevisionProvider);
+  return ref.watch(deckDaoProvider).decksHolding(card.game, card.id);
+});
+
+/// A format's banned list, fetched once and cached in the database.
+///
+/// Null for formats with no list Arcanum can check, and null while a first
+/// fetch is in flight; the legality check reads null as 'not checked' rather
+/// than as 'nothing is banned'.
+final banListProvider = FutureProvider.family<BanList?, String>((
+  ref,
+  formatId,
+) async {
+  final format = DeckFormats.byId(formatId);
+  if (format == null || !format.checksBanList) return null;
+  return BanListService(db: ref.watch(bootstrapProvider).database.db)
+      .get(format);
+});
 
 // ------------------------------------------------------------------ analytics
 

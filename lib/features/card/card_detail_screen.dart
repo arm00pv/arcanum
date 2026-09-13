@@ -17,6 +17,7 @@ import 'package:arcanum/features/card/add_to_collection_sheet.dart';
 import 'package:arcanum/features/card/owned_finishes.dart';
 import 'package:arcanum/features/card/price_chart.dart';
 import 'package:arcanum/features/collection/want_button.dart';
+import 'package:arcanum/features/decks/add_to_deck_sheet.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
 import 'package:arcanum/widgets/common.dart';
@@ -115,6 +116,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                         style: context.t.titleLarge,
                       ),
                       actions: [
+                        _DeckButton(card: card),
                         WantButton(card: card),
                         IconButton(
                           tooltip: 'Set a price alert',
@@ -1219,6 +1221,36 @@ class _CardTextSection extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The button that puts a printing into one of the game's decks.
+///
+/// The count is shown because a card in three decks is a card the collector
+/// may not want to also trade away, and because a button that looks unused on
+/// a card already in two decks is a button that lies.
+class _DeckButton extends ConsumerWidget {
+  const _DeckButton({required this.card});
+
+  final TcgCard card;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count =
+        ref
+            .watch(cardDeckCountProvider((game: card.game, id: card.id)))
+            .value ??
+        0;
+
+    return IconButton(
+      tooltip: count == 0 ? 'Add to a deck' : 'In $count decks',
+      icon: Badge(
+        isLabelVisible: count > 0,
+        label: Text('$count'),
+        child: const Icon(Icons.style_outlined),
+      ),
+      onPressed: () => showAddToDeckSheet(context, ref, card),
     );
   }
 }

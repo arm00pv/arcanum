@@ -30,7 +30,8 @@ class AppDatabase {
   /// v5 — Lorcana names carrying a whole-subtitle quote artefact are rewritten
   ///      (see [unwrapQuotedSubtitles]).
   /// v6 — a `wanted_cards` table, so a want survives closing the card.
-  static const _version = 6;
+  /// v7 — `decks` and `deck_cards`, so a deck is a thing the app knows about.
+  static const _version = 7;
 
   static AppDatabase? _instance;
 
@@ -54,6 +55,7 @@ class AppDatabase {
         if (from < 4) await normaliseLorcanaCodes(d);
         if (from < 5) await unwrapQuotedSubtitles(d);
         if (from < 6) await createWantedCards(d);
+        if (from < 7) await createDecks(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -247,6 +249,11 @@ class AppDatabase {
       'CREATE INDEX idx_wanted_game ON wanted_cards(game, created_at DESC)',
     );
 
+    // --------------------------------------------------------------- decks
+    for (final sql in _deckSql) {
+      batch.execute(sql);
+    }
+
     // ------------------------------------------------------------ metadata
     batch.execute('''
       CREATE TABLE meta (
@@ -280,6 +287,48 @@ class AppDatabase {
     await d.execute(
       'CREATE INDEX idx_wanted_game ON wanted_cards(game, created_at DESC)',
     );
+  }
+
+  /// The deck tables, shared by [_createSchema] and the v7 upgrade.
+  ///
+  /// `deck_cards` references `decks` so that deleting a deck cannot leave its
+  /// lines behind: the app opens its database with foreign keys on, and a
+  /// cascade is one statement instead of two that can disagree.
+  static const _deckSql = <String>[
+    '''
+    CREATE TABLE decks (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      game       TEXT NOT NULL DEFAULT 'mtg',
+      name       TEXT NOT NULL,
+      format_id  TEXT NOT NULL DEFAULT '',
+      notes      TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  ''',
+    'CREATE INDEX idx_decks_game ON decks(game, updated_at DESC)',
+    '''
+    CREATE TABLE deck_cards (
+      deck_id  INTEGER NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
+      card_id  TEXT NOT NULL,
+      board    TEXT NOT NULL DEFAULT 'main',
+      quantity INTEGER NOT NULL DEFAULT 1,
+      sort     INTEGER NOT NULL DEFAULT 0,
+      category TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (deck_id, card_id, board)
+    )
+  ''',
+    'CREATE INDEX idx_deck_cards_deck ON deck_cards(deck_id, board, sort)',
+  ];
+
+  /// v7: decks, and the cards in them.
+  ///
+  /// Created rather than converted: nothing before this version recorded a
+  /// deck, so there is nothing to move and an empty deck list is the truth.
+  static Future<void> createDecks(DatabaseExecutor d) async {
+    for (final sql in _deckSql) {
+      await d.execute(sql);
+    }
   }
 
   // -------------------------------------------------------------- migration

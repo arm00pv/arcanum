@@ -4,11 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/features/collection/collection_screen.dart';
 import 'package:arcanum/features/dashboard/dashboard_screen.dart';
+import 'package:arcanum/features/decks/decks_screen.dart';
 import 'package:arcanum/features/search/search_screen.dart';
 import 'package:arcanum/features/sets/sets_screen.dart';
 import 'package:arcanum/features/shell/game_switcher.dart';
 
-/// The four top-level destinations, plus the game switcher.
+/// The five top-level destinations, plus the game switcher.
 ///
 /// An [IndexedStack] keeps every tab alive, so scroll position survives a tab
 /// switch — which matters a lot when browsing a thousand sets.
@@ -45,6 +46,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           label: 'Collection',
         ),
         (
+          icon: Icons.style_outlined,
+          selected: Icons.style_rounded,
+          label: 'Decks',
+        ),
+        (
           icon: Icons.search_outlined,
           selected: Icons.search_rounded,
           label: 'Search',
@@ -66,6 +72,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 DashboardScreen(),
                 SetsScreen(),
                 CollectionScreen(),
+                DecksScreen(),
                 SearchScreen(),
               ],
             ),

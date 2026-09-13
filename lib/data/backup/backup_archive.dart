@@ -40,6 +40,8 @@ class BackupArchive {
   /// matters on restore, not on backup.
   static const userTables = <String>[
     'collection_entries',
+    'decks',
+    'deck_cards',
     'wanted_cards',
     'alerts',
     'portfolio_snapshots',
