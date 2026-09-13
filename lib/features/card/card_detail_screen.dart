@@ -16,6 +16,7 @@ import 'package:arcanum/features/alerts/alerts_screen.dart'
 import 'package:arcanum/features/card/add_to_collection_sheet.dart';
 import 'package:arcanum/features/card/owned_finishes.dart';
 import 'package:arcanum/features/card/price_chart.dart';
+import 'package:arcanum/features/collection/want_button.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
 import 'package:arcanum/widgets/common.dart';
@@ -114,6 +115,7 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                         style: context.t.titleLarge,
                       ),
                       actions: [
+                        WantButton(card: card),
                         IconButton(
                           tooltip: 'Set a price alert',
                           icon: const Icon(Icons.notifications_none_rounded),

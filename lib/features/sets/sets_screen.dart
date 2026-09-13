@@ -8,6 +8,7 @@ import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/domain/models/set_completion.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/features/sets/set_detail_screen.dart';
 import 'package:arcanum/providers.dart';
@@ -96,6 +97,9 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
     final setsAsync = ref.watch(setsProvider(game));
     final ownedBySet =
         ref.watch(ownedBySetProvider(game)).value ?? const <String, int>{};
+    final completions =
+        ref.watch(setCompletionProvider(game)).value ??
+        const <String, SetCompletion>{};
     final typeCounts =
         ref.watch(setTypeCountsProvider(game)).value ?? const <String, int>{};
 
@@ -276,6 +280,7 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
                           child: _SetTile(
                             set: filtered[i],
                             owned: ownedBySet[filtered[i].code] ?? 0,
+                            completion: completions[filtered[i].code],
                             index: i,
                           ),
                         ),
@@ -441,10 +446,21 @@ class _TypeChip extends StatelessWidget {
 
 /// One row in the set list: symbol, name, code, release date, size, owned count.
 class _SetTile extends StatelessWidget {
-  const _SetTile({required this.set, required this.owned, required this.index});
+  const _SetTile({
+    required this.set,
+    required this.owned,
+    required this.completion,
+    required this.index,
+  });
 
   final TcgSet set;
+
+  /// Physical copies of this set the collector holds, across every version.
   final int owned;
+
+  /// How much of the set is collected, or null while it is still unknown.
+  final SetCompletion? completion;
+
   final int index;
 
   @override
@@ -537,7 +553,11 @@ class _SetTile extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(7),
                               ),
                               child: Text(
-                                '$owned owned',
+                                // The bar below already says how far along the
+                                // set is; this says how many cards are in the
+                                // box, which is a different number whenever the
+                                // collector owns doubles.
+                                owned == 1 ? '1 card' : '$owned cards',
                                 style: context.t.labelSmall?.copyWith(
                                   color: c.positive,
                                 ),
@@ -546,6 +566,15 @@ class _SetTile extends StatelessWidget {
                           ],
                         ],
                       ),
+                      // Only once the set has been downloaded and something
+                      // is in it: an empty bar on every unseen set would be
+                      // a wall of zeroes rather than a progress report.
+                      if (completion != null &&
+                          completion!.known &&
+                          completion!.started) ...[
+                        const SizedBox(height: 8),
+                        _CompletionBar(completion: completion!),
+                      ],
                     ],
                   ),
                 ),
@@ -561,5 +590,50 @@ class _SetTile extends StatelessWidget {
         .animate()
         .fadeIn(duration: 220.ms, delay: (index.clamp(0, 12) * 22).ms)
         .slideX(begin: 0.04, end: 0, curve: Curves.easeOutCubic);
+  }
+}
+
+/// A thin bar showing how much of a set is collected.
+///
+/// It adds to the row rather than replacing anything in it: the number of
+/// copies is already there. This is the shape of the set - how far along it is,
+/// and whether it is worth opening to see what is left.
+class _CompletionBar extends StatelessWidget {
+  const _CompletionBar({required this.completion});
+
+  final SetCompletion completion;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final complete = completion.complete;
+
+    return Semantics(
+      label: '${completion.owned} of ${completion.total} collected',
+      child: Row(
+        children: [
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: completion.fraction,
+                minHeight: 4,
+                backgroundColor: c.hairline,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  complete ? c.positive : c.accent,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            complete ? 'Complete' : '${completion.owned}/${completion.total}',
+            style: context.t.labelSmall?.copyWith(
+              color: complete ? c.positive : c.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

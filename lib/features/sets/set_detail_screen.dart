@@ -9,6 +9,7 @@ import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/features/card/card_detail_screen.dart';
 import 'package:arcanum/features/sets/printing_groups.dart';
+import 'package:arcanum/features/sets/set_completion_strip.dart';
 import 'package:arcanum/features/sets/set_filter_sheet.dart';
 import 'package:arcanum/features/sets/set_filters.dart';
 import 'package:arcanum/features/sets/sets_screen.dart' show SetGlyph;
@@ -129,6 +130,10 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   .read(catalogRepositoryProvider)
                   .cardsInSet(game, widget.setCode, forceRefresh: true);
               ref.invalidate(setCardsProvider(_ref));
+              // A set that has just been downloaded has slots for the first
+              // time, so its completion figure is new information rather than
+              // a recalculation of the same numbers.
+              ref.invalidate(setCompletionProvider(game));
             },
             child: CustomScrollView(
               controller: _scrollController,
@@ -220,6 +225,21 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                     ),
                   ),
                 ),
+                // The bar sits above the list rather than in the app bar:
+                // the title row is already carrying three facts, and a
+                // completion figure that only appears once scrolled past is
+                // one nobody reads.
+                if (cardsAsync.value != null && cardsAsync.value!.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                      child: SetCompletionStrip(
+                        slots: groupIntoSlots(cardsAsync.value!),
+                        owned: owned,
+                        game: game,
+                      ),
+                    ),
+                  ),
                 if (_filter.isActive)
                   SliverToBoxAdapter(
                     child: Padding(

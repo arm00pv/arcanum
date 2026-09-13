@@ -17,6 +17,8 @@ import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/backup/backup_archive.dart';
 import 'package:arcanum/data/backup/backup_service.dart';
 import 'package:arcanum/data/db/app_database.dart';
+import 'package:arcanum/data/db/wanted_dao.dart';
+import 'package:arcanum/domain/models/card_game.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -575,6 +577,33 @@ void main() {
       await expectLater(service.upload(archive), throwsA(isA<DioException>()));
       expect(requests.length, 1);
       await db.close();
+    });
+  });
+  group('the wants list travels with the collection', () {
+    test('a want survives a backup and a restore', () async {
+      // A wants list is the collector's own work, like the collection itself:
+      // it exists nowhere else and cannot be re-derived from a price feed.
+      final (source, sourceSettings) = await fresh();
+      final wanted = WantedDao(source.db);
+      await wanted.add(CardGame.mtg, 'card-1');
+      await wanted.add(CardGame.lorcana, 'crd_1', note: 'birthday');
+
+      final archive = await BackupService(
+        database: source,
+        settings: sourceSettings,
+      ).build(appVersion: '1.8.0');
+      await source.close();
+
+      final (target, targetSettings) = await fresh();
+      await BackupService(
+        database: target,
+        settings: targetSettings,
+      ).restore(archive);
+
+      final restored = WantedDao(target.db);
+      expect(await restored.ids(CardGame.mtg), <String>['card-1']);
+      expect(await restored.count(CardGame.lorcana), 1);
+      await target.close();
     });
   });
 }

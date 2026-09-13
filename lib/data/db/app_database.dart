@@ -29,7 +29,8 @@ class AppDatabase {
   ///      [normaliseLorcanaCodes]).
   /// v5 — Lorcana names carrying a whole-subtitle quote artefact are rewritten
   ///      (see [unwrapQuotedSubtitles]).
-  static const _version = 5;
+  /// v6 — a `wanted_cards` table, so a want survives closing the card.
+  static const _version = 6;
 
   static AppDatabase? _instance;
 
@@ -52,6 +53,7 @@ class AppDatabase {
         if (from < 3) await _migrateV2ToV3(d);
         if (from < 4) await normaliseLorcanaCodes(d);
         if (from < 5) await unwrapQuotedSubtitles(d);
+        if (from < 6) await createWantedCards(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -239,6 +241,12 @@ class AppDatabase {
     ''');
     batch.execute('CREATE INDEX idx_alerts_card ON alerts(game, card_id)');
 
+    // --------------------------------------------------------------- wants
+    batch.execute(_wantedCardsSql);
+    batch.execute(
+      'CREATE INDEX idx_wanted_game ON wanted_cards(game, created_at DESC)',
+    );
+
     // ------------------------------------------------------------ metadata
     batch.execute('''
       CREATE TABLE meta (
@@ -248,6 +256,30 @@ class AppDatabase {
     ''');
 
     await batch.commit(noResult: true);
+  }
+
+  /// The wants table, shared by [_createSchema] and the v6 upgrade so a schema
+  /// and its migration cannot drift into different shapes.
+  static const _wantedCardsSql = '''
+    CREATE TABLE wanted_cards (
+      game       TEXT NOT NULL DEFAULT 'mtg',
+      card_id    TEXT NOT NULL,
+      note       TEXT,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (game, card_id)
+    )
+  ''';
+
+  /// v6: the collector can mark a card as wanted before owning it.
+  ///
+  /// The table is created rather than converted from anything: before this
+  /// version there was no way to record a want, so there is nothing to carry
+  /// over, and a wants list that started empty is the truth.
+  static Future<void> createWantedCards(DatabaseExecutor d) async {
+    await d.execute(_wantedCardsSql);
+    await d.execute(
+      'CREATE INDEX idx_wanted_game ON wanted_cards(game, created_at DESC)',
+    );
   }
 
   // -------------------------------------------------------------- migration

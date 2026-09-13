@@ -10,6 +10,7 @@ import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/features/card/card_detail_screen.dart';
+import 'package:arcanum/features/collection/wants_screen.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
 import 'package:arcanum/widgets/common.dart';
@@ -109,6 +110,26 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                       ],
                     ),
                     actions: [
+                      // Counted rather than assumed: an empty bookmark is a
+                      // dead end, and a number is the only reason to open it.
+                      IconButton(
+                        tooltip: 'Wants',
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => WantsScreen(game: game),
+                          ),
+                        ),
+                        icon: Badge(
+                          isLabelVisible:
+                              (ref.watch(wantedCountProvider(game)).value ??
+                                  0) >
+                              0,
+                          label: Text(
+                            '${ref.watch(wantedCountProvider(game)).value ?? 0}',
+                          ),
+                          child: const Icon(Icons.bookmark_border_rounded),
+                        ),
+                      ),
                       IconButton(
                         tooltip: _listMode ? 'Grid view' : 'List view',
                         onPressed: () => setState(() => _listMode = !_listMode),

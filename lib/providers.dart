@@ -13,6 +13,7 @@ import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/data/db/collection_dao.dart';
 import 'package:arcanum/data/db/history_dao.dart';
+import 'package:arcanum/data/db/wanted_dao.dart';
 import 'package:arcanum/data/history/price_history_service.dart';
 import 'package:arcanum/data/repositories/alert_repository.dart';
 import 'package:arcanum/data/repositories/catalog_repository.dart';
@@ -20,6 +21,7 @@ import 'package:arcanum/data/repositories/collection_repository.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/price_alert.dart';
+import 'package:arcanum/domain/models/set_completion.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/domain/quant/quant.dart';
 
@@ -457,6 +459,85 @@ final gameSummariesProvider = FutureProvider<Map<CardGame, GameSummary>>((
   }
   return out;
 });
+
+// ------------------------------------------------------------------- wants
+
+/// Reads and writes the collector's wants list.
+///
+/// A plain DAO over the shared database rather than part of the bootstrap: a
+/// want is one table with no catalogue, no network and no repository of its
+/// own to coordinate.
+final wantedDaoProvider = Provider<WantedDao>(
+  (ref) => WantedDao(ref.watch(bootstrapProvider).database.db),
+);
+
+/// Bumped whenever a want is added or removed, so the screens that show them
+/// recompute without every caller remembering to invalidate three providers.
+class WantedRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  /// Signals that the wants list changed.
+  void bump() => state = state + 1;
+}
+
+final wantedRevisionProvider = NotifierProvider<WantedRevision, int>(
+  WantedRevision.new,
+);
+
+/// The wanted printings of a game, most recently wanted first.
+final wantedIdsProvider = FutureProvider.family<List<String>, CardGame>((
+  ref,
+  game,
+) async {
+  ref.watch(wantedRevisionProvider);
+  return ref.watch(wantedDaoProvider).ids(game);
+});
+
+/// The wanted printings of a game, with their catalogue data.
+///
+/// The wants list holds ids; everything worth showing about a card - its name,
+/// its set, its price - lives in the catalogue, which is why this is a second
+/// provider rather than a join in the DAO.
+final wantedCardsProvider = FutureProvider.family<List<TcgCard>, CardGame>((
+  ref,
+  game,
+) async {
+  final ids = await ref.watch(wantedIdsProvider(game).future);
+  if (ids.isEmpty) return const <TcgCard>[];
+  final byId = await ref.watch(catalogRepositoryProvider).cardsByIds(game, ids);
+  // In the order they were wanted, not the order cardsByIds returned them.
+  return <TcgCard>[
+    for (final id in ids)
+      if (byId[id] != null) byId[id]!,
+  ];
+});
+
+/// How many printings are wanted in a game, for the tab badge.
+final wantedCountProvider = FutureProvider.family<int, CardGame>((
+  ref,
+  game,
+) async {
+  ref.watch(wantedRevisionProvider);
+  return ref.watch(wantedDaoProvider).count(game);
+});
+
+// ----------------------------------------------------------------- set progress
+
+/// How much of each cached set of a game the collector owns.
+///
+/// A holding changes this answer, so the collection overview is watched first.
+/// A download changes it too - a set of 180 becomes completable only once its
+/// 180 printings are on disk - which is why the set screen invalidates this
+/// provider after it stores a set rather than this one watching the catalogue.
+final setCompletionProvider =
+    FutureProvider.family<Map<String, SetCompletion>, CardGame>((
+      ref,
+      game,
+    ) async {
+      await ref.watch(collectionOverviewProvider(game).future);
+      return ref.watch(bootstrapProvider).catalogDao.setCompletion(game);
+    });
 
 // ------------------------------------------------------------------ analytics
 

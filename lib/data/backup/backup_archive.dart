@@ -6,8 +6,8 @@ import 'dart:io';
 /// What is in it, and what deliberately is not, is the whole design:
 ///
 /// **The collection and its history are in.** Entries, purchase prices,
-/// binders, notes, price alerts, portfolio snapshots and the daily price
-/// snapshots Arcanum recorded itself. Those exist nowhere else - the companion
+/// binders, notes, price alerts, portfolio snapshots, the wants list and the
+/// daily price snapshots Arcanum recorded itself. Those exist nowhere else - the companion
 /// serves prices, not holdings - so losing them loses the collection.
 ///
 /// **The catalogue is not.** Sets and cards are megabytes of re-downloadable
@@ -40,6 +40,7 @@ class BackupArchive {
   /// matters on restore, not on backup.
   static const userTables = <String>[
     'collection_entries',
+    'wanted_cards',
     'alerts',
     'portfolio_snapshots',
     'price_history',

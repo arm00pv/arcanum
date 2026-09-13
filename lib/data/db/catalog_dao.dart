@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 
 import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/domain/models/set_completion.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// How a set list should be ordered.
@@ -180,6 +181,50 @@ class CatalogDao {
     );
     final t = (r.first['t'] as num?)?.toInt();
     return t == null ? null : DateTime.fromMillisecondsSinceEpoch(t);
+  }
+
+  /// How much of each cached set the collector owns, keyed by set code.
+  ///
+  /// Counted in binder slots, not printings, because that is the unit every
+  /// screen already counts in. Yu-Gi-Oh! lists one card several times over - by
+  /// rarity and by region - and a collector who owns Blue-Eyes at LOB-000 has
+  /// not left two thirds of that slot empty. A slot is a name at a collector
+  /// number, which is the identity `groupIntoSlots` uses, folded to lowercase
+  /// so a provider that varies the case of a name does not invent a second
+  /// slot.
+  ///
+  /// One query for the whole game rather than one per set: a game can hold a
+  /// thousand sets, and a progress bar per row is not worth a thousand round
+  /// trips to SQLite.
+  Future<Map<String, SetCompletion>> setCompletion(CardGame game) async {
+    final rows = await _db.rawQuery(
+      '''
+      SELECT s.code AS code,
+             s.name AS name,
+             s.card_count AS published,
+             (SELECT COUNT(DISTINCT lower(c.name) || '#' || c.collector_number)
+                FROM cards c
+               WHERE c.game = s.game AND c.set_code = s.code) AS slots,
+             (SELECT COUNT(DISTINCT lower(c.name) || '#' || c.collector_number)
+                FROM collection_entries e
+                JOIN cards c ON c.id = e.card_id AND c.game = e.game
+               WHERE e.game = s.game AND c.set_code = s.code) AS owned
+        FROM sets s
+       WHERE s.game = ?
+    ''',
+      [game.id],
+    );
+
+    return {
+      for (final r in rows)
+        (r['code'] as String): SetCompletion(
+          code: r['code'] as String,
+          name: (r['name'] as String?) ?? '',
+          owned: (r['owned'] as num?)?.toInt() ?? 0,
+          total: (r['slots'] as num?)?.toInt() ?? 0,
+          published: (r['published'] as num?)?.toInt() ?? 0,
+        ),
+    };
   }
 
   // ------------------------------------------------------------------ cards

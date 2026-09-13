@@ -249,8 +249,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Text(
             'Arcanum keeps your collection, your binders and your purchase '
             'prices on this phone and nowhere else. A backup writes one '
-            'compressed file - every game, every holding, your alerts and the '
-            'price snapshots the app recorded itself - to your own server. The '
+            'compressed file - every game, every holding, your wants, your '
+            'alerts and the price snapshots the app recorded itself - to your '
+            'own server. The '
             'catalogue is left out: it is re-downloadable, and a backup that '
             'carried it would be mostly cache.',
             style: context.t.bodySmall?.copyWith(
@@ -1078,6 +1079,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             value: _asyncText(
               ref.watch(collectionOverviewProvider(game)),
               (overview) => Fmt.count(overview.totalCards),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _StatRow(
+            icon: Icons.bookmark_border_rounded,
+            label: 'Wanted',
+            value: _asyncText<int>(
+              ref.watch(wantedCountProvider(game)),
+              (int count) => Fmt.count(count),
             ),
           ),
           const SizedBox(height: 12),
