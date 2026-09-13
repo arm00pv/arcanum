@@ -173,6 +173,29 @@ final String challengePromoJson = '''
 ]
 ''';
 
+/// A card from a numbered promo run, whose set code is the mixed-case "P1".
+/// The provider answers to that spelling and not to "p1", while the app stores
+/// and asks for the lowercase form.
+const String promoRunJson = '''
+[
+ {"id":"crd_p1a","name":"Mickey Mouse","version":"Brave Little Tailor",
+  "layout":"normal","released_at":"2023-08-18",
+  "image_uris":{"digital":{
+    "small":"https://cards.lorcast.io/card/digital/small/crd_p1a.avif?1",
+    "normal":"https://cards.lorcast.io/card/digital/normal/crd_p1a.avif?1",
+    "large":"https://cards.lorcast.io/card/digital/large/crd_p1a.avif?1"}},
+  "cost":8,"inkwell":true,"ink":"Ruby","inks":["Ruby"],
+  "type":["Character"],"classifications":["Dreamborn","Hero"],
+  "text":"Evasive.","keywords":["Evasive"],"move_cost":null,
+  "strength":3,"willpower":3,"lore":3,
+  "rarity":"Promo","illustrators":["Nicholas Kole"],"collector_number":"1",
+  "lang":"en","flavor_text":null,"tcgplayer_id":500001,
+  "legalities":{"core":"legal"},
+  "set":{"id":"set_c254adfc","code":"P1","name":"Promo Set 1"},
+  "prices":{"usd":"4.50","usd_foil":"9.00"}}
+]
+''';
+
 /// A second Elsa, from the same search: same name, different subtitle, so the
 /// two must not group as one card.
 final String snowQueenJson = '''
@@ -234,7 +257,7 @@ class _FakeLorcastApi implements HttpClientAdapter {
 /// [searchFails] answers the search endpoint with a 404, which is how the
 /// provider behaves when it is rate limiting or unreachable.
 LorcanaCatalog catalogWith({
-  String setsBody = setsJson,
+  String? setsBody = setsJson,
   Map<String, String>? bySet,
   Map<String, String>? byCard,
   String? searchBody,
@@ -246,6 +269,9 @@ LorcanaCatalog catalogWith({
       <String, String>{
         '11': winterspellJson,
         'cp': challengePromoJson,
+        // Keyed by the spelling the request must carry, not the one the app
+        // stores: a request for "p1" would not be routed at all.
+        'P1': promoRunJson,
       };
   final cards = byCard ?? <String, String>{elsaId: elsaJson};
   final log = requests ?? <Uri>[];
@@ -292,10 +318,22 @@ void main() {
       String typeOf(String code) =>
           sets.firstWhere((s) => s.code == code).setType;
 
-      expect(typeOf('P1'), 'promo');
+      expect(typeOf('p1'), 'promo');
       expect(typeOf('cp'), 'promo');
       expect(typeOf('1'), 'expansion');
       expect(typeOf('11'), 'expansion');
+    });
+
+    test('stores every set code in the casing the app queries with', () async {
+      // Lorcast answers to "P1" and not "p1", but the rest of the app stores,
+      // queries and compares codes in lowercase - the repository lowercases the
+      // code before it asks for a set. Keeping the provider's casing here meant
+      // nine promo and event sets were requested as "p1" and answered 404.
+      final sets = await catalogWith().fetchAllSets();
+
+      expect(sets.map((s) => s.code), contains('p1'));
+      expect(sets.map((s) => s.code), isNot(contains('P1')));
+      expect(sets.every((s) => s.code == s.code.toLowerCase()), isTrue);
     });
 
     test('reports progress once per set', () async {
@@ -311,6 +349,33 @@ void main() {
   });
 
   group('cards in a set', () {
+    test('asks for a set in the casing the provider needs', () async {
+      // The caller hands over the lowercase code the app stores; the request
+      // has to carry the provider's own spelling or the set comes back empty.
+      final requests = <Uri>[];
+      final cards = await catalogWith(requests: requests).fetchCardsInSet('p1');
+
+      expect(
+        requests.any((u) => u.path.endsWith('/sets/P1/cards')),
+        isTrue,
+      );
+      expect(
+        requests.any((u) => u.path.endsWith('/sets/p1/cards')),
+        isFalse,
+      );
+      expect(cards, isNotEmpty);
+    });
+
+    test('stamps the cards it downloads with the lowercase code', () async {
+      // Cards stamped with the provider's casing would be stored under a code
+      // the set screen never asks for, so the set would look empty even after a
+      // successful download.
+      final cards = await catalogWith().fetchCardsInSet('p1');
+
+      expect(cards, isNotEmpty);
+      expect(cards.every((c) => c.setCode == 'p1'), isTrue);
+    });
+
     test('maps both prices onto the two finishes Lorcana prints', () async {
       final cards = await catalogWith().fetchCardsInSet('11');
       final elsa = cards.firstWhere((c) => c.id == elsaId);
@@ -507,7 +572,38 @@ void main() {
       // field a row shows, prices included.
       expect(requests.where((u) => RegExp(r'/cards/[^/]+$').hasMatch(u.path)),
           isEmpty);
-      expect(requests, hasLength(1));
+      // The second call is the one-off set-list read that teaches the adapter
+      // the provider's own casing for set codes. It happens at most once per
+      // process, never per set and never per card.
+      expect(requests.where((u) => u.path.endsWith('/sets')), hasLength(1));
+      expect(requests, hasLength(2));
+    });
+
+    test('reads the set list once however many sets are opened', () async {
+      final requests = <Uri>[];
+      final catalog = catalogWith(requests: requests);
+
+      await catalog.fetchCardsInSet('11');
+      await catalog.fetchCardsInSet('cp');
+      await catalog.fetchCardsInSet('p1');
+
+      expect(requests.where((u) => u.path.endsWith('/sets')), hasLength(1));
+    });
+
+    test('still resolves a numbered set with no help from the set list',
+        () async {
+      // The fallback matters when the list cannot be read at all: a numbered
+      // code is the same string in either casing, so it must not become
+      // undownloadable just because the lookup failed.
+      final requests = <Uri>[];
+      final cards = await catalogWith(setsBody: null, requests: requests)
+          .fetchCardsInSet('11');
+
+      expect(cards, isNotEmpty);
+      expect(
+        requests.any((u) => RegExp(r'/sets/11/cards$').hasMatch(u.path)),
+        isTrue,
+      );
     });
 
     test('answers empty for a set the provider does not hold', () async {

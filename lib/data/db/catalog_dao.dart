@@ -34,11 +34,20 @@ class CatalogDao {
   // ------------------------------------------------------------------- sets
 
   /// Inserts or updates a batch of sets for one game.
+  ///
+  /// A published card count is never replaced by a zero. Not every provider
+  /// states one in its set list - Lorcast states none anywhere - and the size is
+  /// then learned from the set's own card list and written back by
+  /// [setCardCount]. Without this an ordinary refresh of the set list would wipe
+  /// every size the app had learned, which is both a lie in the row and the end
+  /// of sorting sets by size.
   Future<void> upsertSets(CardGame game, List<TcgSet> sets) async {
     if (sets.isEmpty) return;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final known = await _setCardCounts(game, [for (final s in sets) s.code]);
     final batch = _db.batch();
     for (final s in sets) {
+      final learned = known[s.code] ?? 0;
       batch.insert(
         'sets',
         {
@@ -48,7 +57,7 @@ class CatalogDao {
           'name': s.name,
           'set_type': s.setType,
           'released_at': s.releasedAt?.toIso8601String().split('T').first,
-          'card_count': s.cardCount,
+          'card_count': s.cardCount > 0 ? s.cardCount : learned,
           'printed_size': s.printedSize,
           'icon_svg_uri': s.iconSvgUri,
           'logo_uri': s.logoUri,
@@ -66,6 +75,27 @@ class CatalogDao {
       );
     }
     await batch.commit(noResult: true);
+  }
+
+  /// The stored card count for each of [codes], where one is known.
+  Future<Map<String, int>> _setCardCounts(
+    CardGame game,
+    List<String> codes,
+  ) async {
+    final out = <String, int>{};
+    for (var i = 0; i < codes.length; i += 400) {
+      final chunk = codes.sublist(i, i + 400 > codes.length ? codes.length : i + 400);
+      final marks = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.rawQuery(
+        'SELECT code, card_count FROM sets WHERE game = ? AND code IN ($marks)',
+        [game.id, ...chunk],
+      );
+      for (final r in rows) {
+        final count = (r['card_count'] as num?)?.toInt() ?? 0;
+        if (count > 0) out[r['code'] as String] = count;
+      }
+    }
+    return out;
   }
 
   /// All cached sets for a game, ordered by [sort].

@@ -1,5 +1,9 @@
 import 'dart:io';
 
+import 'package:arcanum/data/db/app_database.dart';
+import 'package:arcanum/data/db/catalog_dao.dart';
+import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -302,5 +306,127 @@ void main() {
     expect(pkTotal.first['n'], 0,
         reason: 'a Pokémon query must not see Magic holdings');
     await v2.close();
+  });
+
+  group('v3 -> v4, Lorcana set codes', () {
+    /// A database at the current schema, which is shape-identical to v3: the
+    /// step changes rows, not columns.
+    Future<AppDatabase> openV4() async {
+      final db = await AppDatabase.openInMemory();
+      // The migration is written to run inside an upgrade; an in-memory
+      // database has no version to move from, so the step is applied directly.
+      return db;
+    }
+
+    test('folds the provider casing onto the casing the app queries with',
+        () async {
+      final db = await openV4();
+      final dao = CatalogDao(db.db);
+
+      // What 1.5.0 stored: Lorcast's own spelling, which the app then asked
+      // for in lowercase and got a 404 back for.
+      await dao.upsertSets(CardGame.lorcana, <TcgSet>[
+        const TcgSet(
+          game: CardGame.lorcana,
+          id: 'set_p1',
+          code: 'P1',
+          name: 'Promo Set 1',
+          setType: 'promo',
+        ),
+        const TcgSet(
+          game: CardGame.lorcana,
+          id: 'set_d23',
+          code: 'D23',
+          name: 'D23 Collection',
+          setType: 'expansion',
+        ),
+        const TcgSet(
+          game: CardGame.lorcana,
+          id: 'set_3',
+          code: '3',
+          name: 'Into the Inklands',
+          setType: 'expansion',
+        ),
+      ]);
+
+      await AppDatabase.normaliseLorcanaCodes(db.db);
+
+      final sets = await dao.sets(CardGame.lorcana);
+      expect(
+        sets.map((s) => s.code).toList()..sort(),
+        <String>['3', 'd23', 'p1'],
+      );
+      await db.close();
+    });
+
+    test('moves a printing with its set', () async {
+      final db = await openV4();
+      final dao = CatalogDao(db.db);
+
+      await dao.upsertCards(CardGame.lorcana, <TcgCard>[
+        const TcgCard(
+          game: CardGame.lorcana,
+          id: 'crd_p1a',
+          setCode: 'P1',
+          setName: 'Promo Set 1',
+          name: 'Mickey Mouse – Brave Little Tailor',
+          collectorNumber: '1',
+          rarity: 'Promo',
+        ),
+      ]);
+
+      await AppDatabase.normaliseLorcanaCodes(db.db);
+
+      // A card left under the old code would be invisible to the set screen,
+      // which asks for the lowercase one.
+      expect(await dao.cardsInSet(CardGame.lorcana, 'p1'), hasLength(1));
+      expect(await dao.cardsInSet(CardGame.lorcana, 'P1'), isEmpty);
+      await db.close();
+    });
+
+    test('leaves the other games alone', () async {
+      final db = await openV4();
+      final dao = CatalogDao(db.db);
+
+      // Magic set codes are lowercase already, but a provider that ever used
+      // mixed case must not have its rows rewritten by a Lorcana fix.
+      await dao.upsertSets(CardGame.mtg, <TcgSet>[
+        const TcgSet(
+          game: CardGame.mtg,
+          id: 'set_blb',
+          code: 'BLB',
+          name: 'Bloomburrow',
+          setType: 'expansion',
+        ),
+      ]);
+
+      await AppDatabase.normaliseLorcanaCodes(db.db);
+
+      expect((await dao.sets(CardGame.mtg)).single.code, 'BLB');
+      await db.close();
+    });
+
+    test('survives a database that already stores the lowercase code',
+        () async {
+      // Re-running the step must be a no-op rather than an error: an install
+      // that shipped the fix and then upgraded again would hit it twice.
+      final db = await openV4();
+      final dao = CatalogDao(db.db);
+
+      await dao.upsertSets(CardGame.lorcana, <TcgSet>[
+        const TcgSet(
+          game: CardGame.lorcana,
+          id: 'set_p1',
+          code: 'p1',
+          name: 'Promo Set 1',
+          setType: 'promo',
+        ),
+      ]);
+
+      await AppDatabase.normaliseLorcanaCodes(db.db);
+
+      expect((await dao.sets(CardGame.lorcana)).single.code, 'p1');
+      await db.close();
+    });
   });
 }

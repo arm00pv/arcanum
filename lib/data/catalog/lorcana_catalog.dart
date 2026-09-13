@@ -67,6 +67,18 @@ class LorcanaCatalog implements CardCatalog {
 
   final Dio _dio;
 
+  /// The provider's own spelling of every set code, keyed by its lowercase form.
+  ///
+  /// Lorcast addresses a set by a case-sensitive code - `P1` answers and `p1`
+  /// does not - while every other layer of the app stores, queries and compares
+  /// set codes in lowercase. Both cannot be true of one string, so the case the
+  /// provider needs is kept here and the lowercase form is what the app sees.
+  ///
+  /// Filled from the set list, and fetched once on demand when a set is opened
+  /// before that list has ever loaded.
+  final Map<String, String> _canonicalCodes = <String, String>{};
+  Future<void>? _codesInFlight;
+
   @override
   CardGame get game => CardGame.lorcana;
 
@@ -101,12 +113,16 @@ class LorcanaCatalog implements CardCatalog {
       if (code == null) continue;
       final name = item['name']?.toString() ?? code;
       final released = _string(item['released_at']);
+      _canonicalCodes[code.toLowerCase()] = code;
       sets.add(TcgSet(
         game: CardGame.lorcana,
         // Lorcast addresses a set by id or by code, and the code is the short
         // handle the rest of the app stores and prints.
         id: _string(item['id']) ?? code,
-        code: code,
+        // Lowercase, because that is the casing every other layer stores and
+        // queries. The provider's own spelling is kept in [_canonicalCodes] for
+        // the requests that need it.
+        code: code.toLowerCase(),
         name: name,
         setType: _setTypeFor(code, name),
         releasedAt: released == null ? null : DateTime.tryParse(released),
@@ -117,6 +133,31 @@ class LorcanaCatalog implements CardCatalog {
       onProgress?.call(sets.length, raw.length);
     }
     return sets;
+  }
+
+  /// The provider's spelling of [code], whatever case the caller used.
+  ///
+  /// Answers the lowercase form unchanged when the set list has never been
+  /// read, which is correct for the numbered sets and lets everything else fail
+  /// as an unknown set rather than as a network error.
+  Future<String> _canonicalCode(String code) async {
+    final lower = code.toLowerCase();
+    final known = _canonicalCodes[lower];
+    if (known != null) return known;
+    await _loadCodes();
+    return _canonicalCodes[lower] ?? lower;
+  }
+
+  /// Reads the set list once, purely to learn the casing of its codes.
+  ///
+  /// A failure is swallowed: the caller falls back to the lowercase code, which
+  /// still resolves every numbered set.
+  Future<void> _loadCodes() {
+    final pending = _codesInFlight;
+    if (pending != null) return pending;
+    final future = fetchAllSets().then((_) {}).catchError((Object _) {});
+    _codesInFlight = future;
+    return future;
   }
 
   /// Classifies a set from the two things Lorcast states about it.
@@ -145,12 +186,11 @@ class LorcanaCatalog implements CardCatalog {
     final Response<dynamic> res;
     // One request covers the whole set, so there is one unit of progress.
     onProgress?.call(0, 1);
+    // The caller hands over the lowercase code the app stores; Lorcast wants
+    // its own spelling of it, which is not always the same string.
+    final canonical = await _canonicalCode(setCode);
     try {
-      // Lorcast resolves a set by its code as readily as by its id, and the
-      // code is what [TcgSet.code] carries, so no lookup is needed first. The
-      // codes are case sensitive - `P1` answers and `p1` does not - which is
-      // why the caller's stored value is passed through untouched.
-      res = await _retry(() => _dio.get<dynamic>('/sets/$setCode/cards'));
+      res = await _retry(() => _dio.get<dynamic>('/sets/$canonical/cards'));
     } on DioException catch (e) {
       // An unknown set is an empty set, not a failure: the caller asked for
       // something Lorcast does not hold, and the screen should say there is
@@ -169,7 +209,7 @@ class LorcanaCatalog implements CardCatalog {
     final cards = <TcgCard>[];
     for (final item in raw) {
       if (item is! Map) continue;
-      final card = _cardFromJson(item, fallbackSetCode: setCode);
+      final card = _cardFromJson(item, fallbackSetCode: setCode.toLowerCase());
       if (card != null) cards.add(card);
     }
 
@@ -288,7 +328,11 @@ class LorcanaCatalog implements CardCatalog {
 
     final set = data['set'];
     final setMap = set is Map ? set : const <dynamic, dynamic>{};
-    final setCode = _string(setMap['code']) ?? fallbackSetCode ?? '';
+    // Lowercased for the same reason the set list is: the card's own response
+    // carries the provider's spelling, and a card fetched by id has to land in
+    // the same bucket as the set it was downloaded with.
+    final setCode =
+        (_string(setMap['code']) ?? fallbackSetCode ?? '').toLowerCase();
 
     // `inks` is the full list - a handful of cards are two inks - while `ink`
     // is Lorcast's single-ink shorthand. The list wins, and the shorthand is

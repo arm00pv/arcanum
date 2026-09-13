@@ -228,6 +228,48 @@ void main() {
       expect((await dao.set(CardGame.pokemon, 'base1'))!.cardCount, 102);
     });
 
+    test('keeps the learned size when the set list refreshes', () async {
+      // The set list is re-read every time the Sets tab opens, and for a
+      // provider that publishes no count it arrives with a zero every time.
+      await dao.upsertSets(CardGame.lorcana, <TcgSet>[set()]);
+      await dao.setCardCount(CardGame.lorcana, '1', 226);
+      await dao.upsertSets(CardGame.lorcana, <TcgSet>[set()]);
+
+      expect((await dao.set(CardGame.lorcana, '1'))!.cardCount, 226);
+    });
+
+    test('takes a published count over a learned one', () async {
+      // Pokémon does publish counts, and a corrected one must win.
+      await dao.upsertSets(
+        CardGame.pokemon,
+        <TcgSet>[
+          TcgSet(
+            game: CardGame.pokemon,
+            id: 'swsh1',
+            code: 'swsh1',
+            name: 'Sword & Shield',
+            setType: 'expansion',
+            cardCount: 202,
+          ),
+        ],
+      );
+      await dao.upsertSets(
+        CardGame.pokemon,
+        <TcgSet>[
+          TcgSet(
+            game: CardGame.pokemon,
+            id: 'swsh1',
+            code: 'swsh1',
+            name: 'Sword & Shield',
+            setType: 'expansion',
+            cardCount: 216,
+          ),
+        ],
+      );
+
+      expect((await dao.set(CardGame.pokemon, 'swsh1'))!.cardCount, 216);
+    });
+
     test('ignores a nonsense count', () async {
       await dao.upsertSets(CardGame.lorcana, <TcgSet>[set()]);
       await dao.setCardCount(CardGame.lorcana, '1', 0);

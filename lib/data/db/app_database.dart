@@ -25,7 +25,9 @@ class AppDatabase {
   ///      and `portfolio_snapshots`.
   /// v3 — price alerts gain a `baseline`, the price the rule was armed at, so
   ///      percentage alerts have something stable to measure against.
-  static const _version = 3;
+  /// v4 — Lorcana set codes are folded to lowercase (see
+  ///      [normaliseLorcanaCodes]).
+  static const _version = 4;
 
   static AppDatabase? _instance;
 
@@ -46,6 +48,7 @@ class AppDatabase {
       onUpgrade: (d, from, to) async {
         if (from < 2) await _migrateV1ToV2(d);
         if (from < 3) await _migrateV2ToV3(d);
+        if (from < 4) await normaliseLorcanaCodes(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -232,6 +235,28 @@ class AppDatabase {
   }
 
   // -------------------------------------------------------------- migration
+
+  /// v4: stores Lorcana set codes the way the rest of the app addresses them.
+  ///
+  /// Lorcast identifies a set by a case-sensitive code - `P1` answers and `p1`
+  /// does not - while every query in this app compares set codes in lowercase.
+  /// The first release to ship Lorcana kept the provider's casing in this table,
+  /// so the lowercased code the app then asked for matched nothing and nine
+  /// promo and event sets came back empty. Existing rows are folded to the
+  /// casing the app now stores; no cards were ever downloadable for those sets,
+  /// so there is nothing else to move.
+  ///
+  /// `OR REPLACE` because folding two rows onto one code would otherwise abort
+  /// the upgrade and leave the database half-migrated.
+  static Future<void> normaliseLorcanaCodes(DatabaseExecutor d) async {
+    await d.execute(
+      "UPDATE OR REPLACE sets SET code = lower(code) WHERE game = 'lorcana'",
+    );
+    await d.execute(
+      "UPDATE OR REPLACE cards SET set_code = lower(set_code) "
+      "WHERE game = 'lorcana'",
+    );
+  }
 
   /// v2 -> v3: alerts learn the price they were armed at.
   ///
