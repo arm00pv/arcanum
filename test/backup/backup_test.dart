@@ -17,8 +17,6 @@ import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/backup/backup_archive.dart';
 import 'package:arcanum/data/backup/backup_service.dart';
 import 'package:arcanum/data/db/app_database.dart';
-import 'package:arcanum/domain/models/card_game.dart';
-import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -55,10 +53,77 @@ class _FakeServer implements HttpClientAdapter {
     };
     final body = _respond(options.uri, options.method);
     if (body == null) {
-      return ResponseBody.fromString('{"error":"missing"}', 404,
-          headers: responseHeaders);
+      return ResponseBody.fromString(
+        '{"error":"missing"}',
+        404,
+        headers: responseHeaders,
+      );
     }
     return ResponseBody.fromString(body, 200, headers: responseHeaders);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// Fails the first [failures] requests the way a dropped connection does,
+/// then answers normally.
+class _UnreliableServer implements HttpClientAdapter {
+  _UnreliableServer(this.failures, this.requests);
+
+  final int failures;
+  final List<String> requests;
+  int _seen = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add('${options.method} ${options.uri.path}');
+    if (requestStream != null) {
+      await requestStream.drain<void>();
+    }
+    if (_seen++ < failures) {
+      throw const SocketException('connection reset by peer');
+    }
+    return ResponseBody.fromString(
+      '{"ok":true,"saved":"a.gz","bytes":10,"kept":5}',
+      200,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// Answers every request with a refusal, as a wrong token would.
+class _RefusingServer implements HttpClientAdapter {
+  _RefusingServer(this.requests);
+
+  final List<String> requests;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add('${options.method} ${options.uri.path}');
+    if (requestStream != null) {
+      await requestStream.drain<void>();
+    }
+    return ResponseBody.fromString(
+      '{"ok":false,"error":"bad token"}',
+      401,
+      headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+      },
+    );
   }
 
   @override
@@ -136,20 +201,24 @@ void main() {
   });
 
   group('what an archive holds', () {
-    test('carries the collection, the alerts and the app\'s own snapshots',
-        () async {
-      final (db, settings) = await fresh();
-      await seed(db, settings);
+    test(
+      'carries the collection, the alerts and the app\'s own snapshots',
+      () async {
+        final (db, settings) = await fresh();
+        await seed(db, settings);
 
-      final archive = await BackupService(database: db, settings: settings)
-          .build(appVersion: '1.6.0');
+        final archive = await BackupService(
+          database: db,
+          settings: settings,
+        ).build(appVersion: '1.6.0');
 
-      expect(archive.counts['collection_entries'], 1);
-      expect(archive.counts['alerts'], 1);
-      expect(archive.counts['portfolio_snapshots'], 1);
-      expect(archive.appVersion, '1.6.0');
-      await db.close();
-    });
+        expect(archive.counts['collection_entries'], 1);
+        expect(archive.counts['alerts'], 1);
+        expect(archive.counts['portfolio_snapshots'], 1);
+        expect(archive.appVersion, '1.6.0');
+        await db.close();
+      },
+    );
 
     test('leaves out the price rows a provider supplied', () async {
       // Those are re-downloadable; carrying them would bloat the file with
@@ -157,14 +226,13 @@ void main() {
       final (db, settings) = await fresh();
       await seed(db, settings);
 
-      final archive = await BackupService(database: db, settings: settings)
-          .build(appVersion: '1.6.0');
+      final archive = await BackupService(
+        database: db,
+        settings: settings,
+      ).build(appVersion: '1.6.0');
 
       expect(archive.counts['price_history'], 1);
-      expect(
-        archive.tables['price_history']!.single['source'],
-        'snapshot',
-      );
+      expect(archive.tables['price_history']!.single['source'], 'snapshot');
       await db.close();
     });
 
@@ -179,8 +247,10 @@ void main() {
         'fetched_at': 1,
       });
 
-      final archive = await BackupService(database: db, settings: settings)
-          .build(appVersion: '1.6.0');
+      final archive = await BackupService(
+        database: db,
+        settings: settings,
+      ).build(appVersion: '1.6.0');
 
       expect(archive.tables.keys, isNot(contains('sets')));
       expect(archive.tables.keys, isNot(contains('cards')));
@@ -194,8 +264,10 @@ void main() {
       final (db, settings) = await fresh();
       await seed(db, settings);
 
-      final archive = await BackupService(database: db, settings: settings)
-          .build(appVersion: '1.6.0');
+      final archive = await BackupService(
+        database: db,
+        settings: settings,
+      ).build(appVersion: '1.6.0');
       // Decompressed, because that is what a reader of the file would see.
       final encoded = utf8.decode(gzip.decode(archive.encode()));
 
@@ -206,36 +278,50 @@ void main() {
       await db.close();
     });
 
-    test('carries the endpoints, so a new phone keeps its own server',
-        () async {
-      final (db, settings) = await fresh(prefs: <String, Object>{
-        'history_endpoint': 'https://mine.example/arcanum',
-        'pokemon_history_endpoint': 'https://mine.example/arcanum',
-      });
+    test(
+      'carries the endpoints, so a new phone keeps its own server',
+      () async {
+        final (db, settings) = await fresh(
+          prefs: <String, Object>{
+            'history_endpoint': 'https://mine.example/arcanum',
+            'pokemon_history_endpoint': 'https://mine.example/arcanum',
+          },
+        );
 
-      final archive = await BackupService(database: db, settings: settings)
-          .build(appVersion: '1.6.0');
+        final archive = await BackupService(
+          database: db,
+          settings: settings,
+        ).build(appVersion: '1.6.0');
 
-      expect(
-        archive.settings['history_endpoint'],
-        'https://mine.example/arcanum',
-      );
-      await db.close();
-    });
+        expect(
+          archive.settings['history_endpoint'],
+          'https://mine.example/arcanum',
+        );
+        await db.close();
+      },
+    );
   });
 
   group('reading an archive back', () {
     test('survives a round trip through the bytes that travel', () async {
       final (db, settings) = await fresh();
       await seed(db, settings);
-      final archive = await BackupService(database: db, settings: settings)
-          .build(appVersion: '1.6.0');
+      final archive = await BackupService(
+        database: db,
+        settings: settings,
+      ).build(appVersion: '1.6.0');
 
       final restored = BackupArchive.decode(archive.encode());
 
       expect(restored.counts['collection_entries'], 1);
-      expect(restored.tables['collection_entries']!.single['binder'], 'Binder A');
-      expect(restored.tables['collection_entries']!.single['purchase_price'], 12.5);
+      expect(
+        restored.tables['collection_entries']!.single['binder'],
+        'Binder A',
+      );
+      expect(
+        restored.tables['collection_entries']!.single['purchase_price'],
+        12.5,
+      );
       await db.close();
     });
 
@@ -270,9 +356,10 @@ void main() {
     test('replaces the holdings and keeps provider prices', () async {
       final (source, sourceSettings) = await fresh();
       await seed(source, sourceSettings);
-      final archive =
-          await BackupService(database: source, settings: sourceSettings)
-              .build(appVersion: '1.6.0');
+      final archive = await BackupService(
+        database: source,
+        settings: sourceSettings,
+      ).build(appVersion: '1.6.0');
       await source.close();
 
       // A different phone: same card catalogue, no holdings.
@@ -286,8 +373,10 @@ void main() {
         'source': 'companion',
       });
 
-      await BackupService(database: target, settings: targetSettings)
-          .restore(archive);
+      await BackupService(
+        database: target,
+        settings: targetSettings,
+      ).restore(archive);
 
       final entries = await target.db.query('collection_entries');
       expect(entries, hasLength(1));
@@ -300,38 +389,45 @@ void main() {
     });
 
     test('restores the endpoints the archive carried', () async {
-      final (source, sourceSettings) = await fresh(prefs: <String, Object>{
-        'history_endpoint': 'https://mine.example/arcanum',
-      });
-      final archive =
-          await BackupService(database: source, settings: sourceSettings)
-              .build(appVersion: '1.6.0');
+      final (source, sourceSettings) = await fresh(
+        prefs: <String, Object>{
+          'history_endpoint': 'https://mine.example/arcanum',
+        },
+      );
+      final archive = await BackupService(
+        database: source,
+        settings: sourceSettings,
+      ).build(appVersion: '1.6.0');
       await source.close();
 
       final (target, targetSettings) = await fresh();
-      await BackupService(database: target, settings: targetSettings)
-          .restore(archive);
+      await BackupService(
+        database: target,
+        settings: targetSettings,
+      ).restore(archive);
 
       expect(targetSettings.historyEndpoint, 'https://mine.example/arcanum');
       await target.close();
     });
 
-    test('empties what the archive does not hold, rather than merging',
-        () async {
+    test('empties what the archive does not hold, rather than merging', () async {
       // A restore is a replacement, and the dialog says so. Merging would leave
       // the collector with a collection that is neither the old one nor the
       // backed-up one, and no way to tell which rows came from where.
       final (source, sourceSettings) = await fresh();
-      final archive =
-          await BackupService(database: source, settings: sourceSettings)
-              .build(appVersion: '1.6.0');
+      final archive = await BackupService(
+        database: source,
+        settings: sourceSettings,
+      ).build(appVersion: '1.6.0');
       await source.close();
 
       final (target, targetSettings) = await fresh();
       await seed(target, targetSettings);
 
-      await BackupService(database: target, settings: targetSettings)
-          .restore(archive);
+      await BackupService(
+        database: target,
+        settings: targetSettings,
+      ).restore(archive);
 
       expect(await target.db.query('collection_entries'), isEmpty);
       await target.close();
@@ -345,17 +441,20 @@ void main() {
       final headers = <Map<String, dynamic>>[];
       final (db, settings) = await fresh();
       final dio = Dio(BaseOptions(baseUrl: 'https://mine.example/arcanum'));
-      dio.httpClientAdapter = _FakeServer((Uri uri, String method) {
-        if (method == 'POST' && uri.path.endsWith('/v1/backup')) {
-          return '{"ok":true,"saved":"a.gz","bytes":10,"kept":2}';
-        }
-        return null;
-      }, requests, bodies, headers);
+      dio.httpClientAdapter = _FakeServer(
+        (Uri uri, String method) {
+          if (method == 'POST' && uri.path.endsWith('/v1/backup')) {
+            return '{"ok":true,"saved":"a.gz","bytes":10,"kept":2}';
+          }
+          return null;
+        },
+        requests,
+        bodies,
+        headers,
+      );
 
-      final service =
-          BackupService(database: db, settings: settings, dio: dio);
-      final archive =
-          await service.build(appVersion: '1.6.0');
+      final service = BackupService(database: db, settings: settings, dio: dio);
+      final archive = await service.build(appVersion: '1.6.0');
       final result = await service.upload(archive, deviceLabel: 'phone');
 
       expect(requests, contains('POST /arcanum/v1/backup'));
@@ -378,7 +477,9 @@ void main() {
     });
 
     test('needs both a server and a token to be configured', () async {
-      final (db, settings) = await fresh(prefs: <String, Object>{'backup_token': ''});
+      final (db, settings) = await fresh(
+        prefs: <String, Object>{'backup_token': ''},
+      );
       final service = BackupService(database: db, settings: settings);
 
       // The token is the gate. A blank endpoint means the hosted default,
@@ -402,8 +503,7 @@ void main() {
         <Map<String, dynamic>>[],
       );
 
-      final service =
-          BackupService(database: db, settings: settings, dio: dio);
+      final service = BackupService(database: db, settings: settings, dio: dio);
 
       await expectLater(
         service.downloadLatest(),
@@ -428,14 +528,52 @@ void main() {
         'created_at': 1,
         'updated_at': 1,
       });
-      final archive = await BackupService(database: db, settings: settings)
-          .build(appVersion: '1.6.0');
+      final archive = await BackupService(
+        database: db,
+        settings: settings,
+      ).build(appVersion: '1.6.0');
 
       final restored = BackupArchive.decode(archive.encode());
       final row = restored.tables['collection_entries']!.single;
 
       expect(row['finish'], CardFinish.foil.code);
       expect(row['condition'], CardCondition.lightPlayed.code);
+      await db.close();
+    });
+  });
+  group('a companion that is briefly unreachable', () {
+    test('is asked again rather than failing the backup', () async {
+      // The companion is the collector's own machine and is not always up.
+      // A dropped connection says nothing about whether the request was
+      // reasonable, and a collector who has to press the button twice will
+      // stop believing the first press did anything.
+      final requests = <String>[];
+      final (db, settings) = await fresh();
+      final dio = Dio(BaseOptions(baseUrl: 'https://mine.example/arcanum'));
+      dio.httpClientAdapter = _UnreliableServer(2, requests);
+
+      final service = BackupService(database: db, settings: settings, dio: dio);
+      final archive = await service.build(appVersion: '1.7.2');
+      final result = await service.upload(archive);
+
+      expect(requests.length, 3);
+      expect(result.kept, 5);
+      await db.close();
+    });
+
+    test('gives up once the companion has answered, even to refuse', () async {
+      // A refusal is an answer. Retrying a 401 three times would only make
+      // the wrong token slower to diagnose.
+      final requests = <String>[];
+      final (db, settings) = await fresh();
+      final dio = Dio(BaseOptions(baseUrl: 'https://mine.example/arcanum'));
+      dio.httpClientAdapter = _RefusingServer(requests);
+
+      final service = BackupService(database: db, settings: settings, dio: dio);
+      final archive = await service.build(appVersion: '1.7.2');
+
+      await expectLater(service.upload(archive), throwsA(isA<DioException>()));
+      expect(requests.length, 1);
       await db.close();
     });
   });

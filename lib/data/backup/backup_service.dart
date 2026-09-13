@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'package:arcanum/core/utils/app_settings.dart';
@@ -57,15 +58,21 @@ class BackupUpload {
 /// has not named - there is no hosted account, and the default endpoint is
 /// their own companion.
 class BackupService {
-  BackupService({required AppDatabase database, required AppSettings settings, Dio? dio})
-      : _db = database.db,
-        _settings = settings,
-        _dio = dio ??
-            Dio(BaseOptions(
-              connectTimeout: const Duration(seconds: 10),
-              receiveTimeout: const Duration(seconds: 60),
-              sendTimeout: const Duration(seconds: 60),
-            ));
+  BackupService({
+    required AppDatabase database,
+    required AppSettings settings,
+    Dio? dio,
+  }) : _db = database.db,
+       _settings = settings,
+       _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 20),
+               receiveTimeout: const Duration(seconds: 60),
+               sendTimeout: const Duration(seconds: 60),
+             ),
+           );
 
   final Database _db;
   final AppSettings _settings;
@@ -79,8 +86,42 @@ class BackupService {
   String get _root => _settings.backupEndpoint.replaceAll(RegExp(r'/+$'), '');
 
   Map<String, String> get _authHeaders => <String, String>{
-        'X-Arcanum-Token': _settings.backupToken.trim(),
-      };
+    'X-Arcanum-Token': _settings.backupToken.trim(),
+  };
+
+  /// Asks again when a request died before the server answered it.
+  ///
+  /// The companion runs on the collector's own machine, which is by turns
+  /// busy, rebooting and behind a domestic connection. A transport failure
+  /// says nothing about whether the request was reasonable, so it is worth
+  /// asking again; an answer - even a refusal - is not retried, because a
+  /// second 401 is still a 401 and the collector would rather be told once,
+  /// immediately, than three times slowly.
+  Future<T> _withRetry<T>(String what, Future<T> Function() send) async {
+    const List<Duration> backoff = <Duration>[
+      Duration(milliseconds: 400),
+      Duration(milliseconds: 1200),
+    ];
+    for (int attempt = 0; ; attempt++) {
+      try {
+        return await send();
+      } on DioException catch (error) {
+        final bool unreachable = error.response == null;
+        if (!unreachable || attempt >= backoff.length) {
+          debugPrint(
+            '[backup] $what gave up after ${attempt + 1} attempt(s): '
+            '${error.type} ${error.message}',
+          );
+          rethrow;
+        }
+        debugPrint(
+          '[backup] $what attempt ${attempt + 1} failed: '
+          '${error.type} ${error.message} - trying again',
+        );
+        await Future<void>.delayed(backoff[attempt]);
+      }
+    }
+  }
 
   /// Reads everything the collector created out of the database.
   Future<BackupArchive> build({required String appVersion}) async {
@@ -124,19 +165,22 @@ class BackupService {
     String deviceLabel = '',
   }) async {
     final bytes = archive.encode();
-    final res = await _dio.post<dynamic>(
-      '$_root/v1/backup',
-      // The bytes, not a stream of them: a streamed body goes out chunked, and
-      // the companion is a stdlib Python server that reads Content-Length and
-      // does not decode chunked transfer encoding. A List<int> makes Dio set
-      // the length and send the archive whole.
-      data: bytes,
-      options: Options(
-        headers: <String, String>{
-          ..._authHeaders,
-          'Content-Type': 'application/octet-stream',
-          if (deviceLabel.isNotEmpty) 'X-Arcanum-Device': deviceLabel,
-        },
+    final res = await _withRetry(
+      'upload',
+      () => _dio.post<dynamic>(
+        '$_root/v1/backup',
+        // The bytes, not a stream of them: a streamed body goes out chunked, and
+        // the companion is a stdlib Python server that reads Content-Length and
+        // does not decode chunked transfer encoding. A List<int> makes Dio set
+        // the length and send the archive whole.
+        data: bytes,
+        options: Options(
+          headers: <String, String>{
+            ..._authHeaders,
+            'Content-Type': 'application/octet-stream',
+            if (deviceLabel.isNotEmpty) 'X-Arcanum-Device': deviceLabel,
+          },
+        ),
       ),
     );
     final body = res.data is String ? jsonDecode(res.data as String) : res.data;
@@ -148,9 +192,12 @@ class BackupService {
   /// What the companion currently holds.
   Future<BackupStatus> status() async {
     try {
-      final res = await _dio.get<dynamic>(
-        '$_root/v1/backup/status',
-        options: Options(headers: _authHeaders),
+      final res = await _withRetry(
+        'status',
+        () => _dio.get<dynamic>(
+          '$_root/v1/backup/status',
+          options: Options(headers: _authHeaders),
+        ),
       );
       return BackupStatus.fromJson(res.data);
     } on DioException {
@@ -161,11 +208,14 @@ class BackupService {
   /// Downloads the newest archive without applying it, so the collector can be
   /// told what is in it before anything changes on the phone.
   Future<BackupArchive> downloadLatest() async {
-    final res = await _dio.get<List<int>>(
-      '$_root/v1/backup/latest',
-      options: Options(
-        headers: _authHeaders,
-        responseType: ResponseType.bytes,
+    final res = await _withRetry(
+      'download',
+      () => _dio.get<List<int>>(
+        '$_root/v1/backup/latest',
+        options: Options(
+          headers: _authHeaders,
+          responseType: ResponseType.bytes,
+        ),
       ),
     );
     final data = res.data;
@@ -204,7 +254,11 @@ class BackupService {
         }
         final batch = txn.batch();
         for (final row in rows) {
-          batch.insert(table, row, conflictAlgorithm: ConflictAlgorithm.replace);
+          batch.insert(
+            table,
+            row,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
         }
         await batch.commit(noResult: true);
       }
