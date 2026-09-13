@@ -42,15 +42,18 @@ abstract final class Legal {
       'are trademarks of their respective owners.';
 
   /// What the app does with the user's data. Written to match the app's actual
-  /// behaviour, which is the point: it collects nothing.
+  /// behaviour, which is the point: it collects nothing, and the one thing that
+  /// ever leaves the phone leaves it only because the collector asked.
   static const privacySummary =
       'Arcanum stores your collection only on this device, in a private local '
       'database. There is no account, no sign-in, no analytics and no crash '
-      'reporting, and nothing you enter is uploaded anywhere. The app contacts '
-      'third-party card and price services to fetch catalogue data and prices; '
-      'those requests contain no information about you or your collection. '
+      'reporting. The app contacts third-party card and price services to fetch '
+      'catalogue data and prices; those requests contain no information about '
+      'you or your collection. The one thing that ever leaves this phone is a '
+      'backup, and only when you press Back up now: it goes to the server you '
+      'named, under your own settings, and nothing is sent anywhere else. '
       'Uninstalling the app, or using Settings to clear a collection, deletes '
-      'the data permanently and Arcanum keeps no copy.';
+      'the data permanently, so keep a backup if you care about it.';
 
   /// Credits for every third-party service the app depends on.
   static const dataSources = <({String name, String purpose, String url})>[
