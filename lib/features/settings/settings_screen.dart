@@ -20,6 +20,23 @@ import 'package:arcanum/widgets/glass.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+/// Which backup action the collector is waiting on.
+enum _BackupAction { upload, restore, share }
+
+/// The small spinner a button shows in place of its icon while it works.
+class _ButtonSpinner extends StatelessWidget {
+  const _ButtonSpinner();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 16,
+      height: 16,
+      child: CircularProgressIndicator(strokeWidth: 2),
+    );
+  }
+}
+
 /// The Settings screen.
 ///
 /// Everything here is stored in [AppSettings] (SharedPreferences), so it
@@ -41,7 +58,6 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-
   /// Where the data that powers Arcanum is documented.
   static const String _scryfallApiUrl = 'https://scryfall.com/docs/api';
 
@@ -75,8 +91,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   bool _obscureKey = true;
   bool _obscureBackupToken = true;
-  /// True while a backup, a restore or a shared copy is in flight.
-  bool _busy = false;
+
+  /// Which backup action is in flight, if any.
+  ///
+  /// Which one matters: a spinner on the wrong button tells the collector the
+  /// app is doing something they did not ask for.
+  _BackupAction? _busy;
   bool _testing = false;
   bool _backfilling = false;
   int _backfillDone = 0;
@@ -97,11 +117,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final AppSettings settings = ref.read(settingsProvider);
     _themeMode = settings.themeMode;
     _endpointController = TextEditingController(text: settings.historyEndpoint);
-    _pokemonEndpointController =
-        TextEditingController(text: settings.pokemonHistoryEndpoint);
+    _pokemonEndpointController = TextEditingController(
+      text: settings.pokemonHistoryEndpoint,
+    );
     _keyController = TextEditingController(text: settings.justTcgKey);
-    _backupEndpointController =
-        TextEditingController(text: settings.backupEndpoint);
+    _backupEndpointController = TextEditingController(
+      text: settings.backupEndpoint,
+    );
     _backupTokenController = TextEditingController(text: settings.backupToken);
     _loadVersion();
   }
@@ -132,10 +154,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _update = null;
     });
     try {
-      final service = UpdateService(
-        dio: Dio(),
-        currentVersion: _version,
-      );
+      final service = UpdateService(dio: Dio(), currentVersion: _version);
       final result = await service.check();
       if (!mounted) return;
       setState(() => _update = result);
@@ -194,7 +213,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _collection(context, settings, game),
           const SectionHeader(
             title: 'Backup',
-            subtitle: 'Your data stays on this phone; keep a copy on your server',
+            subtitle:
+                'Your data stays on this phone; keep a copy on your server',
           ),
           _backup(context, settings),
           SectionHeader(
@@ -218,8 +238,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// that no longer matches the file.
   Widget _backup(BuildContext context, AppSettings settings) {
     final c = context.c;
-    final bool ready = settings.backupEndpoint.isNotEmpty &&
-        settings.backupToken.isNotEmpty;
+    final bool ready =
+        settings.backupEndpoint.isNotEmpty && settings.backupToken.isNotEmpty;
     final DateTime? last = settings.lastBackupAt;
 
     return _group(
@@ -233,8 +253,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             'price snapshots the app recorded itself - to your own server. The '
             'catalogue is left out: it is re-downloadable, and a backup that '
             'carried it would be mostly cache.',
-            style: context.t.bodySmall
-                ?.copyWith(color: c.textSecondary, height: 1.45),
+            style: context.t.bodySmall?.copyWith(
+              color: c.textSecondary,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: 18),
           const SizedBox(height: 4),
@@ -267,7 +289,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             },
             decoration: InputDecoration(
               hintText: 'Required',
-              helperText: 'the token your companion was given in '
+              helperText:
+                  'the token your companion was given in '
                   '~/arcanum/backup.token - without it the server refuses '
                   'every write, which is deliberate',
               suffixIcon: IconButton(
@@ -289,21 +312,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             children: <Widget>[
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: (_busy || !ready) ? null : () => _backUpNow(),
-                  icon: _busy
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                  onPressed: (_busy != null || !ready)
+                      ? null
+                      : () => _backUpNow(),
+                  icon: _busy == _BackupAction.upload
+                      ? const _ButtonSpinner()
                       : const Icon(Icons.cloud_upload_outlined, size: 18),
                   label: const Text('Back up now'),
                 ),
               ),
               const SizedBox(width: 12),
               OutlinedButton.icon(
-                onPressed: (_busy || !ready) ? null : () => _restoreFromServer(),
-                icon: const Icon(Icons.settings_backup_restore_rounded, size: 18),
+                onPressed: (_busy != null || !ready)
+                    ? null
+                    : () => _restoreFromServer(),
+                icon: _busy == _BackupAction.restore
+                    ? const _ButtonSpinner()
+                    : const Icon(
+                        Icons.settings_backup_restore_rounded,
+                        size: 18,
+                      ),
                 label: const Text('Restore'),
               ),
             ],
@@ -312,8 +340,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Row(
             children: <Widget>[
               OutlinedButton.icon(
-                onPressed: _busy ? null : () => _shareArchive(),
-                icon: const Icon(Icons.ios_share_rounded, size: 18),
+                onPressed: _busy != null ? null : () => _shareArchive(),
+                icon: _busy == _BackupAction.share
+                    ? const _ButtonSpinner()
+                    : const Icon(Icons.ios_share_rounded, size: 18),
                 label: const Text('Save a copy'),
               ),
             ],
@@ -322,7 +352,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           Row(
             children: <Widget>[
               Icon(
-                ready ? Icons.schedule_rounded : Icons.remove_circle_outline_rounded,
+                ready
+                    ? Icons.schedule_rounded
+                    : Icons.remove_circle_outline_rounded,
                 size: 16,
                 color: ready ? c.textTertiary : c.textTertiary,
               ),
@@ -331,8 +363,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Text(
                   last == null
                       ? (ready
-                          ? 'No backup taken yet.'
-                          : 'Enter a server and token to enable backups.')
+                            ? 'No backup taken yet.'
+                            : 'Enter a server and token to enable backups.')
                       : 'Last backup ${Fmt.ago(last)}',
                   style: context.t.bodySmall?.copyWith(color: c.textTertiary),
                 ),
@@ -346,7 +378,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   /// Builds the archive and uploads it.
   Future<void> _backUpNow() async {
-    setState(() => _busy = true);
+    setState(() => _busy = _BackupAction.upload);
     try {
       final service = ref.read(backupServiceProvider);
       final archive = await service.build(appVersion: _version);
@@ -361,22 +393,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (!mounted) return;
       _snack('Could not back up: $error', error: true);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _busy = null);
     }
   }
 
   /// Downloads the newest backup, says what is in it, and only then applies it.
   Future<void> _restoreFromServer() async {
-    setState(() => _busy = true);
+    setState(() => _busy = _BackupAction.restore);
     BackupArchive? archive;
     try {
       archive = await ref.read(backupServiceProvider).downloadLatest();
     } catch (error) {
       if (mounted) _snack('Could not read the backup: $error', error: true);
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _busy = null);
       return;
     }
-    setState(() => _busy = false);
+    setState(() => _busy = null);
 
     if (!mounted) return;
     final confirmed = await showDialog<bool>(
@@ -407,7 +439,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    setState(() => _busy = true);
+    setState(() => _busy = _BackupAction.restore);
     try {
       await ref.read(backupServiceProvider).restore(archive);
       ref.invalidate(collectionOverviewProvider(CardGame.mtg));
@@ -422,7 +454,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (!mounted) return;
       _snack('Could not restore: $error', error: true);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _busy = null);
     }
   }
 
@@ -431,13 +463,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// The server is the convenient place for a copy; a file is the one that
   /// survives the server, the account and this app all going away.
   Future<void> _shareArchive() async {
-    setState(() => _busy = true);
+    setState(() => _busy = _BackupAction.share);
     try {
-      final archive =
-          await ref.read(backupServiceProvider).build(appVersion: _version);
+      final archive = await ref
+          .read(backupServiceProvider)
+          .build(appVersion: _version);
       final dir = await getTemporaryDirectory();
       final stamp = DateTime.now().toIso8601String().substring(0, 10);
-      final path = '${dir.path}${Platform.pathSeparator}arcanum-backup-$stamp.json.gz';
+      final path =
+          '${dir.path}${Platform.pathSeparator}arcanum-backup-$stamp.json.gz';
       await File(path).writeAsBytes(archive.encode(), flush: true);
       await SharePlus.instance.share(
         ShareParams(
@@ -451,7 +485,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (!mounted) return;
       _snack('Could not save a copy: $error', error: true);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _busy = null);
     }
   }
 
@@ -542,7 +576,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     '${game.dataSource} · cards since ${game.catalogueSince}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                    style: context.t.labelSmall?.copyWith(
+                      color: c.textTertiary,
+                    ),
                   ),
                 ],
               ),
@@ -584,11 +620,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // Magic from the MTGJSON slice, and the rest from their daily samplers. A
     // companion is still optional, so the probe appears only once its endpoint
     // has been typed in.
-    final bool canTest = (isMtg
-            ? _endpointController.text
-            : _pokemonEndpointController.text)
-        .trim()
-        .isNotEmpty;
+    final bool canTest =
+        (isMtg ? _endpointController.text : _pokemonEndpointController.text)
+            .trim()
+            .isNotEmpty;
 
     return _group(
       child: Column(
@@ -605,8 +640,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'Lorcana card once a day, so the history of every card is '
               'complete from the day the sampler was switched on. Arcanum adds '
               'its own daily snapshot of everything you own on top.',
-              style: context.t.bodySmall
-                  ?.copyWith(color: c.textSecondary, height: 1.45),
+              style: context.t.bodySmall?.copyWith(
+                color: c.textSecondary,
+                height: 1.45,
+              ),
             ),
           ] else if (isYgo) ...<Widget>[
             Text('Yu-Gi-Oh! price history', style: context.t.titleSmall),
@@ -620,8 +657,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'history of every card is complete from the day the sampler was '
               'switched on. Arcanum adds its own daily snapshot of everything '
               'you own on top.',
-              style: context.t.bodySmall
-                  ?.copyWith(color: c.textSecondary, height: 1.45),
+              style: context.t.bodySmall?.copyWith(
+                color: c.textSecondary,
+                height: 1.45,
+              ),
             ),
           ] else if (isMtg) ...<Widget>[
             Text(
@@ -631,8 +670,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'you own, an Arcanum Sync companion (hosted by default, and '
               'replaceable with your own), and MTGStocks (free, no API key) for '
               'longer daily series.',
-              style: context.t.bodySmall
-                  ?.copyWith(color: c.textSecondary, height: 1.45),
+              style: context.t.bodySmall?.copyWith(
+                color: c.textSecondary,
+                height: 1.45,
+              ),
             ),
             const SizedBox(height: 18),
             Text('Arcanum Sync endpoint', style: context.t.titleSmall),
@@ -647,7 +688,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               },
               decoration: const InputDecoration(
                 hintText: 'https://host/arcanum',
-                helperText: 'defaults to the hosted companion — point it at '
+                helperText:
+                    'defaults to the hosted companion — point it at '
                     'your own if you run one',
               ),
             ),
@@ -665,8 +707,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'daily snapshot of everything you own, and the Arcanum Sync '
               'companion samples every Pokémon card once a day as well. The '
               'endpoint below is the companion for every game except Magic.',
-              style: context.t.bodySmall
-                  ?.copyWith(color: c.textSecondary, height: 1.45),
+              style: context.t.bodySmall?.copyWith(
+                color: c.textSecondary,
+                height: 1.45,
+              ),
             ),
             const SizedBox(height: 18),
             Text('Arcanum Sync endpoint', style: context.t.titleSmall),
@@ -681,7 +725,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               },
               decoration: const InputDecoration(
                 hintText: 'https://host/arcanum',
-                helperText: 'defaults to the hosted companion — point it at '
+                helperText:
+                    'defaults to the hosted companion — point it at '
                     'your own if you run one',
               ),
             ),
@@ -722,10 +767,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 hintText: 'Optional',
                 helperText: isMtg
                     ? 'The free tier is rate limited, so long backfills take a '
-                        'while. Leave empty to rely on snapshots only.'
+                          'while. Leave empty to rely on snapshots only.'
                     : 'The free tier allows 100 requests a day and is the only '
-                        'source of live Pokémon history. Leave empty to rely on '
-                        'snapshots and the 2024 TCGdex archive.',
+                          'source of live Pokémon history. Leave empty to rely on '
+                          'snapshots and the 2024 TCGdex archive.',
                 suffixIcon: IconButton(
                   tooltip: _obscureKey ? 'Show key' : 'Hide key',
                   icon: Icon(
@@ -756,7 +801,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   configured
                       ? 'History provider configured for ${game.shortLabel}'
                       : 'No history provider configured - trends fall back to '
-                          'the snapshots Arcanum records itself.',
+                            'the snapshots Arcanum records itself.',
                   style: context.t.bodySmall?.copyWith(
                     color: configured ? c.positive : c.textTertiary,
                   ),
@@ -772,15 +817,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// Probes /v1/health on the endpoint configured for [game] and reports what
   /// it said.
   Future<void> _testConnection(CardGame game) async {
-    final TextEditingController controller =
-        game == CardGame.mtg ? _endpointController : _pokemonEndpointController;
+    final TextEditingController controller = game == CardGame.mtg
+        ? _endpointController
+        : _pokemonEndpointController;
     final String raw = controller.text.trim();
     if (raw.isEmpty) {
       _snack('Enter an endpoint URL first.', error: true);
       return;
     }
-    final String endpoint =
-        raw.endsWith('/') ? raw.substring(0, raw.length - 1) : raw;
+    final String endpoint = raw.endsWith('/')
+        ? raw.substring(0, raw.length - 1)
+        : raw;
 
     setState(() => _testing = true);
 
@@ -792,8 +839,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
 
     try {
-      final Response<dynamic> response =
-          await dio.get<dynamic>('$endpoint/v1/health');
+      final Response<dynamic> response = await dio.get<dynamic>(
+        '$endpoint/v1/health',
+      );
       if (!mounted) return;
       _snack(_healthSummary(response.data, response.statusCode));
     } on DioException catch (error) {
@@ -947,8 +995,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     child: LinearProgressIndicator(
                       value: _backfillTotal > 0
                           ? (_backfillDone / _backfillTotal)
-                              .clamp(0.0, 1.0)
-                              .toDouble()
+                                .clamp(0.0, 1.0)
+                                .toDouble()
                           : null,
                     ),
                   ),
@@ -957,7 +1005,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     _backfillTotal > 0
                         ? 'Fetched $_backfillDone of $_backfillTotal cards...'
                         : 'Contacting the history provider...',
-                    style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                    style: context.t.labelSmall?.copyWith(
+                      color: c.textTertiary,
+                    ),
                   ),
                 ],
               ],
@@ -982,14 +1032,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           .read(bootstrapProvider)
           .collectionFor(game)
           .backfillCollection(
-        onProgress: (int done, int total) {
-          if (!mounted) return;
-          setState(() {
-            _backfillDone = done;
-            _backfillTotal = total;
-          });
-        },
-      );
+            onProgress: (int done, int total) {
+              if (!mounted) return;
+              setState(() {
+                _backfillDone = done;
+                _backfillTotal = total;
+              });
+            },
+          );
       if (!mounted) return;
       ref.invalidate(collectionOverviewProvider(game));
       _snack(
@@ -1099,7 +1149,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         'Update checks appear once Arcanum has a published release '
         'repository. This build was installed directly, so nothing updates '
         'it in the background.',
-        style: context.t.bodySmall?.copyWith(color: c.textTertiary, height: 1.4),
+        style: context.t.bodySmall?.copyWith(
+          color: c.textTertiary,
+          height: 1.4,
+        ),
       );
     }
 
@@ -1151,23 +1204,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   /// What the last check found, in one sentence.
   String _updateMessage(UpdateResult result) => switch (result.status) {
-        UpdateStatus.updateAvailable =>
-          'Version ${result.release!.version} is available.',
-        UpdateStatus.upToDate => 'This is the newest release.',
-        UpdateStatus.noReleasesYet => 'No releases have been published yet.',
-        UpdateStatus.unreachable =>
-          result.message ?? 'GitHub could not be reached.',
-      };
+    UpdateStatus.updateAvailable =>
+      'Version ${result.release!.version} is available.',
+    UpdateStatus.upToDate => 'This is the newest release.',
+    UpdateStatus.noReleasesYet => 'No releases have been published yet.',
+    UpdateStatus.unreachable =>
+      result.message ?? 'GitHub could not be reached.',
+  };
 
   /// Renders a value that may still be loading, or may have failed.
   Widget _asyncText<T>(AsyncValue<T> value, String Function(T data) format) {
     final c = context.c;
     return value.when(
-      data: (T data) => Text(
-        format(data),
-        maxLines: 1,
-        style: context.t.titleSmall,
-      ),
+      data: (T data) =>
+          Text(format(data), maxLines: 1, style: context.t.titleSmall),
       loading: () => const LoadingShimmer(
         width: 56,
         height: 16,
@@ -1249,7 +1299,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       _version.isEmpty
                           ? 'Installed on this device'
                           : 'Version $_version',
-                      style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+                      style: context.t.bodySmall?.copyWith(
+                        color: c.textTertiary,
+                      ),
                     ),
                   ],
                 ),
@@ -1263,26 +1315,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // the app ships every catalogue, so every licence applies to it.
           Text(
             Legal.wizardsFanContent,
-            style: context.t.bodySmall
-                ?.copyWith(color: c.textTertiary, height: 1.4),
+            style: context.t.bodySmall?.copyWith(
+              color: c.textTertiary,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 10),
           Text(
             Legal.pokemonNotice,
-            style: context.t.bodySmall
-                ?.copyWith(color: c.textTertiary, height: 1.4),
+            style: context.t.bodySmall?.copyWith(
+              color: c.textTertiary,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 10),
           Text(
             Legal.lorcanaNotice,
-            style: context.t.bodySmall
-                ?.copyWith(color: c.textTertiary, height: 1.4),
+            style: context.t.bodySmall?.copyWith(
+              color: c.textTertiary,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 14),
           Text(
             Legal.nonCommercial,
-            style: context.t.bodySmall
-                ?.copyWith(color: c.textSecondary, height: 1.4),
+            style: context.t.bodySmall?.copyWith(
+              color: c.textSecondary,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 14),
           Text(
@@ -1292,8 +1352,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 6),
           Text(
             Legal.privacySummary,
-            style: context.t.bodySmall
-                ?.copyWith(color: c.textSecondary, height: 1.4),
+            style: context.t.bodySmall?.copyWith(
+              color: c.textSecondary,
+              height: 1.4,
+            ),
           ),
           const SizedBox(height: 14),
           Text(
@@ -1337,8 +1399,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _openScryfallApi() async {
     final Uri uri = Uri.parse(_scryfallApiUrl);
     try {
-      final bool launched =
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final bool launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
       if (!launched && mounted) {
         _snack('Could not open $_scryfallApiUrl', error: true);
       }
@@ -1377,7 +1441,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
 /// A label/value line used by the Data section.
 class _StatRow extends StatelessWidget {
-  const _StatRow({required this.icon, required this.label, required this.value});
+  const _StatRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   final IconData icon;
   final String label;
