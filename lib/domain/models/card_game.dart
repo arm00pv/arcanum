@@ -118,11 +118,11 @@ enum CardGame {
   /// Named [tag] rather than reusing the game itself because the condition and
   /// finish tables live in the theme layer, which must not import the domain.
   CardGameTag get tag => switch (this) {
-        CardGame.mtg => CardGameTag.mtg,
-        CardGame.pokemon => CardGameTag.pokemon,
-        CardGame.yugioh => CardGameTag.yugioh,
-        CardGame.lorcana => CardGameTag.lorcana,
-      };
+    CardGame.mtg => CardGameTag.mtg,
+    CardGame.pokemon => CardGameTag.pokemon,
+    CardGame.yugioh => CardGameTag.yugioh,
+    CardGame.lorcana => CardGameTag.lorcana,
+  };
 
   /// The finishes and print variants that physically exist for this game.
   ///
@@ -130,35 +130,29 @@ enum CardGame {
   /// collection entry, a price alert and a history series all fall back to it
   /// when the user has not chosen a finish.
   List<CardFinish> get finishes => switch (this) {
-        CardGame.mtg => const [
-            CardFinish.nonfoil,
-            CardFinish.foil,
-            CardFinish.etched,
-          ],
-        CardGame.pokemon => const [
-            CardFinish.nonfoil,
-            CardFinish.holofoil,
-            CardFinish.reverseHolofoil,
-            CardFinish.firstEdition,
-            CardFinish.firstEditionHolofoil,
-          ],
-        // Yu-Gi-Oh! prints exactly two things: ordinary cards and foil
-        // treatments. The provider folds every foil treatment - Ultra, Secret,
-        // Ultimate, Ghost, Starlight - into one price, so the app offers the
-        // pair a collector actually sorts by rather than a dozen rarities it
-        // could not price apart.
-        CardGame.yugioh => const [
-            CardFinish.nonfoil,
-            CardFinish.foil,
-          ],
-        // Lorcana prints exactly two things: the ordinary card and the cold
-        // foil, which every card in a set has. There is no etched or reverse
-        // treatment to tell apart, so the pair is the whole vocabulary.
-        CardGame.lorcana => const [
-            CardFinish.nonfoil,
-            CardFinish.foil,
-          ],
-      };
+    CardGame.mtg => const [
+      CardFinish.nonfoil,
+      CardFinish.foil,
+      CardFinish.etched,
+    ],
+    CardGame.pokemon => const [
+      CardFinish.nonfoil,
+      CardFinish.holofoil,
+      CardFinish.reverseHolofoil,
+      CardFinish.firstEdition,
+      CardFinish.firstEditionHolofoil,
+    ],
+    // Yu-Gi-Oh! prints exactly two things: ordinary cards and foil
+    // treatments. The provider folds every foil treatment - Ultra, Secret,
+    // Ultimate, Ghost, Starlight - into one price, so the app offers the
+    // pair a collector actually sorts by rather than a dozen rarities it
+    // could not price apart.
+    CardGame.yugioh => const [CardFinish.nonfoil, CardFinish.foil],
+    // Lorcana prints exactly two things: the ordinary card and the cold
+    // foil, which every card in a set has. There is no etched or reverse
+    // treatment to tell apart, so the pair is the whole vocabulary.
+    CardGame.lorcana => const [CardFinish.nonfoil, CardFinish.foil],
+  };
 
   /// The condition grades recognised by this game's collectors.
   List<CardCondition> get conditions =>
@@ -169,19 +163,19 @@ enum CardGame {
   /// Magic buckets by mana colour, Pokémon by energy type, Yu-Gi-Oh! by monster
   /// attribute and Lorcana by the ink a card is played from.
   List<ColourBucket> get colourCategories => switch (this) {
-        CardGame.mtg => ManaColor.values,
-        CardGame.pokemon => PokemonType.values,
-        CardGame.yugioh => YgoAttribute.values,
-        CardGame.lorcana => LorcanaInk.values,
-      };
+    CardGame.mtg => ManaColor.values,
+    CardGame.pokemon => PokemonType.values,
+    CardGame.yugioh => YgoAttribute.values,
+    CardGame.lorcana => LorcanaInk.values,
+  };
 
   /// Resolves a stored symbol to this game's category.
   ColourBucket bucketFor(String symbol) => switch (this) {
-        CardGame.mtg => ManaColor.fromSymbol(symbol),
-        CardGame.pokemon => PokemonType.fromSymbol(symbol),
-        CardGame.yugioh => YgoAttribute.fromSymbol(symbol),
-        CardGame.lorcana => LorcanaInk.fromSymbol(symbol),
-      };
+    CardGame.mtg => ManaColor.fromSymbol(symbol),
+    CardGame.pokemon => PokemonType.fromSymbol(symbol),
+    CardGame.yugioh => YgoAttribute.fromSymbol(symbol),
+    CardGame.lorcana => LorcanaInk.fromSymbol(symbol),
+  };
 
   /// Picks the single category a card belongs to.
   ///
@@ -206,10 +200,10 @@ enum CardGame {
   }
 
   LinearGradient get gradient => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [accent, deep],
-      );
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [accent, deep],
+  );
 
   /// Resolves a persisted id, defaulting to Magic.
   static CardGame fromId(String? id) {

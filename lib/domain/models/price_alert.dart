@@ -28,8 +28,10 @@ enum AlertKind {
 
   bool get isPercent => mode == 'percent';
 
-  static AlertKind fromCode(String? c) => AlertKind.values
-      .firstWhere((k) => k.code == c, orElse: () => AlertKind.above);
+  static AlertKind fromCode(String? c) => AlertKind.values.firstWhere(
+    (k) => k.code == c,
+    orElse: () => AlertKind.above,
+  );
 }
 
 /// A standing instruction to watch one printing's price.
@@ -105,8 +107,9 @@ class PriceAlert {
       }
       final span = (threshold - start).abs();
       if (span == 0) return null;
-      final travelled =
-          kind == AlertKind.above ? current - start : start - current;
+      final travelled = kind == AlertKind.above
+          ? current - start
+          : start - current;
       return (travelled / span).clamp(0.0, 1.0);
     }
     final base = baseline;
@@ -135,53 +138,54 @@ class PriceAlert {
     Object? lastValue = _unset,
     String? cardName,
     String? setCode,
-  }) =>
-      PriceAlert(
-        id: id ?? this.id,
-        game: game,
-        cardId: cardId,
-        finish: finish,
-        kind: kind ?? this.kind,
-        threshold: threshold ?? this.threshold,
-        createdAt: createdAt,
-        triggeredAt:
-            triggeredAt == _unset ? this.triggeredAt : triggeredAt as DateTime?,
-        baseline: baseline == _unset ? this.baseline : baseline as double?,
-        lastValue: lastValue == _unset ? this.lastValue : lastValue as double?,
-        cardName: cardName ?? this.cardName,
-        setCode: setCode ?? this.setCode,
-      );
+  }) => PriceAlert(
+    id: id ?? this.id,
+    game: game,
+    cardId: cardId,
+    finish: finish,
+    kind: kind ?? this.kind,
+    threshold: threshold ?? this.threshold,
+    createdAt: createdAt,
+    triggeredAt: triggeredAt == _unset
+        ? this.triggeredAt
+        : triggeredAt as DateTime?,
+    baseline: baseline == _unset ? this.baseline : baseline as double?,
+    lastValue: lastValue == _unset ? this.lastValue : lastValue as double?,
+    cardName: cardName ?? this.cardName,
+    setCode: setCode ?? this.setCode,
+  );
 
   static const _unset = Object();
 
   Map<String, Object?> toRow() => {
-        if (id != null) 'id': id,
-        'game': game.id,
-        'card_id': cardId,
-        'finish': effectiveFinish.code,
-        'kind': kind.code,
-        'threshold': threshold,
-        'created_at': createdAt.millisecondsSinceEpoch,
-        'triggered_at': triggeredAt?.millisecondsSinceEpoch,
-        'baseline': baseline,
-        'last_value': lastValue,
-      };
+    if (id != null) 'id': id,
+    'game': game.id,
+    'card_id': cardId,
+    'finish': effectiveFinish.code,
+    'kind': kind.code,
+    'threshold': threshold,
+    'created_at': createdAt.millisecondsSinceEpoch,
+    'triggered_at': triggeredAt?.millisecondsSinceEpoch,
+    'baseline': baseline,
+    'last_value': lastValue,
+  };
 
   factory PriceAlert.fromRow(Map<String, Object?> r) => PriceAlert(
-        id: r['id'] as int?,
-        game: CardGame.fromId(r['game'] as String?),
-        cardId: r['card_id'] as String,
-        finish: CardFinish.fromCode(r['finish'] as String?),
-        kind: AlertKind.fromCode(r['kind'] as String?),
-        threshold: (r['threshold'] as num?)?.toDouble() ?? 0,
-        createdAt:
-            DateTime.fromMillisecondsSinceEpoch((r['created_at'] as int?) ?? 0),
-        triggeredAt: r['triggered_at'] == null
-            ? null
-            : DateTime.fromMillisecondsSinceEpoch(r['triggered_at'] as int),
-        baseline: (r['baseline'] as num?)?.toDouble(),
-        lastValue: (r['last_value'] as num?)?.toDouble(),
-      );
+    id: r['id'] as int?,
+    game: CardGame.fromId(r['game'] as String?),
+    cardId: r['card_id'] as String,
+    finish: CardFinish.fromCode(r['finish'] as String?),
+    kind: AlertKind.fromCode(r['kind'] as String?),
+    threshold: (r['threshold'] as num?)?.toDouble() ?? 0,
+    createdAt: DateTime.fromMillisecondsSinceEpoch(
+      (r['created_at'] as int?) ?? 0,
+    ),
+    triggeredAt: r['triggered_at'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(r['triggered_at'] as int),
+    baseline: (r['baseline'] as num?)?.toDouble(),
+    lastValue: (r['last_value'] as num?)?.toDouble(),
+  );
 }
 
 /// The outcome of checking one alert against the current market.

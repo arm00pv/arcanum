@@ -62,7 +62,9 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
       _progressTotal = 0;
     });
     try {
-      await ref.read(catalogRepositoryProvider).loadSets(
+      await ref
+          .read(catalogRepositoryProvider)
+          .loadSets(
             game,
             forceRefresh: true,
             onProgress: (done, total) {
@@ -102,7 +104,9 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
         children: [
           Positioned.fill(
             child: DecoratedBox(
-              decoration: BoxDecoration(gradient: AppTheme.backdrop(c, tint: game.accent)),
+              decoration: BoxDecoration(
+                gradient: AppTheme.backdrop(c, tint: game.accent),
+              ),
             ),
           ),
           RefreshIndicator(
@@ -207,7 +211,10 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
                         children: [
                           _TypeChip(
                             label: 'All',
-                            count: typeCounts.values.fold<int>(0, (a, b) => a + b),
+                            count: typeCounts.values.fold<int>(
+                              0,
+                              (a, b) => a + b,
+                            ),
                             selected: _typeFilter == null,
                             onTap: () => setState(() => _typeFilter = null),
                           ),
@@ -216,8 +223,11 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
                               label: Fmt.setType(entry.key),
                               count: entry.value,
                               selected: _typeFilter == entry.key,
-                              onTap: () => setState(() =>
-                                  _typeFilter = _typeFilter == entry.key ? null : entry.key),
+                              onTap: () => setState(
+                                () => _typeFilter = _typeFilter == entry.key
+                                    ? null
+                                    : entry.key,
+                              ),
                             ),
                         ],
                       ),
@@ -230,7 +240,8 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
                     child: PillToggle(
                       options: const ['Newest', 'Oldest', 'A-Z', 'Largest'],
                       selected: _sort.index,
-                      onChanged: (i) => setState(() => _sort = SetSort.values[i]),
+                      onChanged: (i) =>
+                          setState(() => _sort = SetSort.values[i]),
                     ),
                   ),
                 ),
@@ -288,19 +299,30 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
     }
     if (q.isNotEmpty) {
       out = out
-          .where((s) =>
-              s.name.toLowerCase().contains(q) || s.code.toLowerCase().contains(q))
+          .where(
+            (s) =>
+                s.name.toLowerCase().contains(q) ||
+                s.code.toLowerCase().contains(q),
+          )
           .toList();
     }
     switch (_sort) {
       case SetSort.newest:
-        out.sort((a, b) => (b.releasedAt ?? DateTime(1900))
-            .compareTo(a.releasedAt ?? DateTime(1900)));
+        out.sort(
+          (a, b) => (b.releasedAt ?? DateTime(1900)).compareTo(
+            a.releasedAt ?? DateTime(1900),
+          ),
+        );
       case SetSort.oldest:
-        out.sort((a, b) => (a.releasedAt ?? DateTime(2100))
-            .compareTo(b.releasedAt ?? DateTime(2100)));
+        out.sort(
+          (a, b) => (a.releasedAt ?? DateTime(2100)).compareTo(
+            b.releasedAt ?? DateTime(2100),
+          ),
+        );
       case SetSort.name:
-        out.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+        out.sort(
+          (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        );
       case SetSort.size:
         out.sort((a, b) => b.cardCount.compareTo(a.cardCount));
     }
@@ -404,8 +426,10 @@ class _TypeChip extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text('$count',
-                    style: context.t.labelSmall?.copyWith(color: c.textTertiary)),
+                Text(
+                  '$count',
+                  style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                ),
               ],
             ),
           ),
@@ -428,95 +452,112 @@ class _SetTile extends StatelessWidget {
     final c = context.c;
 
     return GlassCard(
-      padding: EdgeInsets.zero,
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => SetDetailScreen(game: set.game, setCode: set.code),
-          ),
-        );
-      },
-      semanticLabel: set.cardCount > 0
-          ? '${set.name}, ${set.cardCount} cards'
-          : set.name,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 38,
-              height: 38,
-              child: Center(child: SetGlyph(set: set, size: 32)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+          padding: EdgeInsets.zero,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    SetDetailScreen(game: set.game, setCode: set.code),
+              ),
+            );
+          },
+          semanticLabel: set.cardCount > 0
+              ? '${set.name}, ${set.cardCount} cards'
+              : set.name,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 38,
+                  height: 38,
+                  child: Center(child: SetGlyph(set: set, size: 32)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          set.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.t.titleMedium,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              set.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context.t.titleMedium,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            set.code.toUpperCase(),
+                            style: context.t.labelSmall?.copyWith(
+                              color: c.textTertiary,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        set.code.toUpperCase(),
-                        style: context.t.labelSmall?.copyWith(color: c.textTertiary),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Text(Fmt.dateShort(set.releasedAt), style: context.t.bodySmall),
-                      // A source that publishes no card count leaves this at
-                      // zero until the set has been opened once; "0 cards" would
-                      // be a lie about the set rather than about the catalogue.
-                      if (set.cardCount > 0) ...[
-                        Text('  ·  ', style: context.t.bodySmall),
-                        Text('${set.cardCount} cards',
-                            style: context.t.bodySmall),
-                      ],
-                      if (set.series != null) ...[
-                        Text('  ·  ', style: context.t.bodySmall),
-                        Flexible(
-                          child: Text(
-                            set.series!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Text(
+                            Fmt.dateShort(set.releasedAt),
                             style: context.t.bodySmall,
                           ),
-                        ),
-                      ],
-                      if (owned > 0) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: c.positive.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(7),
-                          ),
-                          child: Text(
-                            '$owned owned',
-                            style: context.t.labelSmall?.copyWith(color: c.positive),
-                          ),
-                        ),
-                      ],
+                          // A source that publishes no card count leaves this at
+                          // zero until the set has been opened once; "0 cards" would
+                          // be a lie about the set rather than about the catalogue.
+                          if (set.cardCount > 0) ...[
+                            Text('  ·  ', style: context.t.bodySmall),
+                            Text(
+                              '${set.cardCount} cards',
+                              style: context.t.bodySmall,
+                            ),
+                          ],
+                          if (set.series != null) ...[
+                            Text('  ·  ', style: context.t.bodySmall),
+                            Flexible(
+                              child: Text(
+                                set.series!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: context.t.bodySmall,
+                              ),
+                            ),
+                          ],
+                          if (owned > 0) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: c.positive.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(7),
+                              ),
+                              child: Text(
+                                '$owned owned',
+                                style: context.t.labelSmall?.copyWith(
+                                  color: c.positive,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: c.textTertiary,
+                  size: 20,
+                ),
+              ],
             ),
-            Icon(Icons.chevron_right_rounded, color: c.textTertiary, size: 20),
-          ],
-        ),
-      ),
-    )
+          ),
+        )
         .animate()
         .fadeIn(duration: 220.ms, delay: (index.clamp(0, 12) * 22).ms)
         .slideX(begin: 0.04, end: 0, curve: Curves.easeOutCubic);

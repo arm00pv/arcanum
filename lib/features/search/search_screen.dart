@@ -30,8 +30,9 @@ class _SetHitTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final String released =
-        set.releasedAt == null ? '' : ' · ${set.releasedAt!.year}';
+    final String released = set.releasedAt == null
+        ? ''
+        : ' · ${set.releasedAt!.year}';
     return GlassCard(
       padding: EdgeInsets.zero,
       child: InkWell(
@@ -125,35 +126,35 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// nothing, so the suggestions follow the active game.
   static const Map<CardGame, List<String>> _quickFilters =
       <CardGame, List<String>>{
-    CardGame.mtg: <String>[
-      'Lightning Bolt',
-      'Sol Ring',
-      'Counterspell',
-      'Black Lotus',
-      'Ragavan',
-    ],
-    CardGame.pokemon: <String>[
-      'Charizard',
-      'Pikachu',
-      'Blastoise',
-      'Mewtwo',
-      'Umbreon',
-    ],
-    CardGame.yugioh: <String>[
-      'Dark Magician',
-      'Blue-Eyes White Dragon',
-      'Monster Reborn',
-      'Pot of Greed',
-      'Exodia',
-    ],
-    CardGame.lorcana: <String>[
-      'Elsa',
-      'Mickey Mouse',
-      'Stitch',
-      'Maleficent',
-      'Ariel',
-    ],
-  };
+        CardGame.mtg: <String>[
+          'Lightning Bolt',
+          'Sol Ring',
+          'Counterspell',
+          'Black Lotus',
+          'Ragavan',
+        ],
+        CardGame.pokemon: <String>[
+          'Charizard',
+          'Pikachu',
+          'Blastoise',
+          'Mewtwo',
+          'Umbreon',
+        ],
+        CardGame.yugioh: <String>[
+          'Dark Magician',
+          'Blue-Eyes White Dragon',
+          'Monster Reborn',
+          'Pot of Greed',
+          'Exodia',
+        ],
+        CardGame.lorcana: <String>[
+          'Elsa',
+          'Mickey Mouse',
+          'Stitch',
+          'Maleficent',
+          'Ariel',
+        ],
+      };
 
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scroll = ScrollController();
@@ -238,14 +239,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final c = context.c;
     final CardGame game = ref.watch(activeGameProvider);
     final bool discovering = _query.length < _minQueryLength;
-    final AsyncValue<List<TcgCard>> results =
-        ref.watch(searchProvider((game: game, query: _query)));
+    final AsyncValue<List<TcgCard>> results = ref.watch(
+      searchProvider((game: game, query: _query)),
+    );
     // Matching sets, offered above the cards: typing a set name is the shortest
     // way into a binder, and without this a query like "Bloomburrow" reported
     // that no card matched.
     final List<TcgSet> setHits =
         ref.watch(setSearchProvider((game: game, query: _query))).value ??
-            const <TcgSet>[];
+        const <TcgSet>[];
     // Copies owned of each printing in this game, summed across finishes and
     // conditions by the provider itself.
     final Map<String, int> owned =
@@ -328,7 +330,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           CardGame.yugioh => 'Search every Yu-Gi-Oh! set',
           CardGame.lorcana => 'Search every Lorcana set',
         },
-        message: 'Type at least two characters - card names, set names and '
+        message:
+            'Type at least two characters - card names, set names and '
             '$textNoun all work. '
             'Arcanum answers from your cached ${game.shortLabel} catalogue '
             'first and asks ${game.dataSource} for the rest.',
@@ -383,10 +386,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     'Search a set name such as "Bloomburrow" to browse it.',
                   CardGame.pokemon =>
                     'Search a set name such as "Base Set" to browse it.',
-                  CardGame.yugioh =>
-                    'Search a set name such as "Legend of Blue Eyes" to browse it.',
-                  CardGame.lorcana =>
-                    'Search a set name such as "The First Chapter" to browse it.',
+                  CardGame.yugioh => 'Search a set name such as "Legend of Blue Eyes" to browse it.',
+                  CardGame.lorcana => 'Search a set name such as "The First Chapter" to browse it.',
                 },
               ),
               _SearchTip(
@@ -410,7 +411,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               _SearchTip(
                 icon: Icons.sell_outlined,
                 label: 'Prices',
-                detail: 'Every result carries the cheapest price '
+                detail:
+                    'Every result carries the cheapest price '
                     '${game.dataSource} quotes for that printing.',
                 last: true,
               ),
@@ -426,11 +428,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// Each game names this differently and the search tips read badly when the
   /// wrong one is used, so it is resolved per game rather than phrased vaguely.
   static String _textNoun(CardGame game) => switch (game) {
-        CardGame.mtg => 'oracle text',
-        CardGame.pokemon => 'attack and rules text',
-        CardGame.yugioh => 'card text',
-        CardGame.lorcana => 'card text',
-      };
+    CardGame.mtg => 'oracle text',
+    CardGame.pokemon => 'attack and rules text',
+    CardGame.yugioh => 'card text',
+    CardGame.lorcana => 'card text',
+  };
 
   // ----------------------------------------------------------------- results
 
@@ -557,7 +559,7 @@ class _SearchResultTile extends StatelessWidget {
     // cards keep the cost on the front face.
     final String? manaCost = card.game == CardGame.mtg
         ? card.manaCost ??
-            (card.faces.isNotEmpty ? card.faces.first.cost : null)
+              (card.faces.isNotEmpty ? card.faces.first.cost : null)
         : null;
 
     return GlassCard(
@@ -600,8 +602,9 @@ class _SearchResultTile extends StatelessWidget {
                               '#${card.collectorNumber}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: context.t.bodySmall
-                                  ?.copyWith(color: c.textTertiary),
+                              style: context.t.bodySmall?.copyWith(
+                                color: c.textTertiary,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 6),

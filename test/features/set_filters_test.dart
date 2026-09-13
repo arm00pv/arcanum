@@ -13,28 +13,33 @@ TcgCard printing({
   String rarity = 'Ultra Rare',
   double? price,
   CardGame game = CardGame.yugioh,
-}) =>
-    TcgCard(
-      game: game,
-      id: id,
-      setCode: 'lob',
-      setName: 'Legend of Blue Eyes White Dragon',
-      name: name,
-      collectorNumber: number,
-      rarity: rarity,
-      prices: price == null
-          ? TcgPrices.empty
-          : TcgPrices(byFinish: <String, double?>{CardFinish.nonfoil.code: price}),
-    );
+}) => TcgCard(
+  game: game,
+  id: id,
+  setCode: 'lob',
+  setName: 'Legend of Blue Eyes White Dragon',
+  name: name,
+  collectorNumber: number,
+  rarity: rarity,
+  prices: price == null
+      ? TcgPrices.empty
+      : TcgPrices(byFinish: <String, double?>{CardFinish.nonfoil.code: price}),
+);
 
 /// The three versions of Blue-Eyes in Legend of Blue Eyes, and one cheap card.
 List<PrintingSlot> slots() => groupIntoSlots(<TcgCard>[
-      printing(id: 'a', price: 0.14),
-      printing(id: 'b', price: 62.15),
-      printing(id: 'c', price: 681.5),
-      printing(id: 'd', name: 'Skull Servant', number: '002', rarity: 'Common', price: 0.2),
-      printing(id: 'e', name: 'Dark Magician', number: '003', rarity: 'Super Rare'),
-    ]);
+  printing(id: 'a', price: 0.14),
+  printing(id: 'b', price: 62.15),
+  printing(id: 'c', price: 681.5),
+  printing(
+    id: 'd',
+    name: 'Skull Servant',
+    number: '002',
+    rarity: 'Common',
+    price: 0.2,
+  ),
+  printing(id: 'e', name: 'Dark Magician', number: '003', rarity: 'Super Rare'),
+]);
 
 PrintingSlot slotNamed(List<PrintingSlot> all, String name) =>
     all.firstWhere((slot) => slot.name == name);
@@ -83,7 +88,18 @@ void main() {
     });
 
     test('covers every price exactly once', () {
-      const prices = <double>[0.01, 0.99, 1, 4.99, 5, 19.99, 20, 99.99, 100, 681.5];
+      const prices = <double>[
+        0.01,
+        0.99,
+        1,
+        4.99,
+        5,
+        19.99,
+        20,
+        99.99,
+        100,
+        681.5,
+      ];
       for (final price in prices) {
         final hits = PriceBand.values
             .where((band) => band.window.contains(price))
@@ -98,7 +114,9 @@ void main() {
       expect(unpriced.map((slot) => slot.name), <String>['Dark Magician']);
       for (final band in PriceBand.values.where((b) => b.hasNumericWindow)) {
         expect(
-          all.where(band.window.matches).any((slot) => slot.name == 'Dark Magician'),
+          all
+              .where(band.window.matches)
+              .any((slot) => slot.name == 'Dark Magician'),
           isFalse,
           reason: '${band.label} claimed an unpriced card',
         );
@@ -137,15 +155,21 @@ void main() {
         'Skull Servant',
       ]);
 
-      final dears = const SetFilter(price: PriceWindow(min: 100)).apply(slots());
-      expect(dears.map((slot) => slot.name), <String>['Blue-Eyes White Dragon']);
+      final dears = const SetFilter(price: PriceWindow(min: 100))
+          .apply(slots());
+      expect(dears.map((slot) => slot.name), <String>[
+        'Blue-Eyes White Dragon',
+      ]);
     });
 
     test('narrows to rarities without collapsing them onto a tier', () {
       // Yu-Gi-Oh! prints Ultra and Super Rare in the same set, and both resolve
       // to one display tier: the filter has to keep them apart.
-      final ultra = const SetFilter(rarities: <String>{'Ultra Rare'}).apply(slots());
-      expect(ultra.map((slot) => slot.name), <String>['Blue-Eyes White Dragon']);
+      final ultra = const SetFilter(rarities: <String>{'Ultra Rare'})
+          .apply(slots());
+      expect(ultra.map((slot) => slot.name), <String>[
+        'Blue-Eyes White Dragon',
+      ]);
 
       final both = const SetFilter(
         rarities: <String>{'Ultra Rare', 'Super Rare'},
@@ -161,7 +185,9 @@ void main() {
         price: PriceWindow(max: 1),
         rarities: <String>{'Common'},
       );
-      expect(filter.apply(slots()).map((slot) => slot.name), <String>['Skull Servant']);
+      expect(filter.apply(slots()).map((slot) => slot.name), <String>[
+        'Skull Servant',
+      ]);
     });
 
     test('orders by price with unpriced cards always last', () {
@@ -172,11 +198,15 @@ void main() {
       ]);
 
       expect(
-        const SetFilter(sort: SetSort.priceLow).apply(priced).map((s) => s.name),
+        const SetFilter(sort: SetSort.priceLow)
+            .apply(priced)
+            .map((s) => s.name),
         <String>['Blue-Eyes White Dragon', 'Skull Servant', 'Dark Magician'],
       );
       expect(
-        const SetFilter(sort: SetSort.priceHigh).apply(priced).map((s) => s.name),
+        const SetFilter(sort: SetSort.priceHigh)
+            .apply(priced)
+            .map((s) => s.name),
         <String>['Skull Servant', 'Blue-Eyes White Dragon', 'Dark Magician'],
       );
     });
@@ -185,7 +215,10 @@ void main() {
       // Blue-Eyes has a 14-cent version, so unfiltered it is the cheapest thing
       // in the set; under "\$100 and up" that version is hidden and the card is
       // the dearest on screen, which is where it has to sort.
-      const dear = SetFilter(price: PriceWindow(min: 100), sort: SetSort.priceLow);
+      const dear = SetFilter(
+        price: PriceWindow(min: 100),
+        sort: SetSort.priceLow,
+      );
       expect(dear.apply(slots()).map((slot) => slot.name), <String>[
         'Blue-Eyes White Dragon',
       ]);
@@ -193,16 +226,22 @@ void main() {
       final two = groupIntoSlots(<TcgCard>[
         printing(id: 'a', price: 0.14),
         printing(id: 'b', price: 681.5),
-        printing(id: 'c', name: 'Red-Eyes Black Dragon', number: '002', price: 200),
+        printing(
+          id: 'c',
+          name: 'Red-Eyes Black Dragon',
+          number: '002',
+          price: 200,
+        ),
+      ]);
+      expect(dear.apply(two).map((slot) => slot.name), <String>[
+        'Red-Eyes Black Dragon',
+        'Blue-Eyes White Dragon',
       ]);
       expect(
-        dear.apply(two).map((slot) => slot.name),
-        <String>['Red-Eyes Black Dragon', 'Blue-Eyes White Dragon'],
-      );
-      expect(
-        const SetFilter(price: PriceWindow(min: 100), sort: SetSort.priceHigh)
-            .apply(two)
-            .map((slot) => slot.name),
+        const SetFilter(
+          price: PriceWindow(min: 100),
+          sort: SetSort.priceHigh,
+        ).apply(two).map((slot) => slot.name),
         <String>['Blue-Eyes White Dragon', 'Red-Eyes Black Dragon'],
       );
     });
@@ -233,12 +272,17 @@ void main() {
 
     test('falls back to the slot when a window hides every price', () {
       final dark = slotNamed(slots(), 'Dark Magician');
-      expect(const SetFilter(price: PriceWindow(unpriced: true)).summarise(dark).low,
-          isNull);
+      expect(
+        const SetFilter(price: PriceWindow(unpriced: true)).summarise(dark).low,
+        isNull,
+      );
     });
 
     test('copies itself without losing the other controls', () {
-      const filter = SetFilter(rarities: <String>{'Common'}, sort: SetSort.name);
+      const filter = SetFilter(
+        rarities: <String>{'Common'},
+        sort: SetSort.name,
+      );
       final repriced = filter.withPrice(const PriceWindow(max: 1));
       expect(repriced.rarities, <String>{'Common'});
       expect(repriced.sort, SetSort.name);

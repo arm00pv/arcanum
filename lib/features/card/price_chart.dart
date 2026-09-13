@@ -48,9 +48,7 @@ class PriceChart extends StatelessWidget {
     final firstDay = series.first.date;
     double x(DateTime d) => d.difference(firstDay).inHours / 24.0;
 
-    final history = [
-      for (final p in series) FlSpot(x(p.date), p.price),
-    ];
+    final history = [for (final p in series) FlSpot(x(p.date), p.price)];
 
     // Forecast points continue past the last observation.
     final lastDate = series.last.date;
@@ -81,7 +79,8 @@ class PriceChart extends StatelessWidget {
 
     var minY = allValues.reduce((a, b) => a < b ? a : b);
     var maxY = allValues.reduce((a, b) => a > b ? a : b);
-    final pad = (maxY - minY) * 0.12 + (maxY == minY ? maxY.abs() * 0.05 + 0.01 : 0);
+    final pad =
+        (maxY - minY) * 0.12 + (maxY == minY ? maxY.abs() * 0.05 + 0.01 : 0);
     minY = (minY - pad).clamp(0, double.infinity);
     maxY = maxY + pad;
 
@@ -100,15 +99,17 @@ class PriceChart extends StatelessWidget {
             show: true,
             drawVerticalLine: false,
             horizontalInterval: (maxY - minY) / 4,
-            getDrawingHorizontalLine: (_) => FlLine(
-              color: c.hairline,
-              strokeWidth: 1,
-            ),
+            getDrawingHorizontalLine: (_) =>
+                FlLine(color: c.hairline, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -118,7 +119,9 @@ class PriceChart extends StatelessWidget {
                   padding: const EdgeInsets.only(right: 6),
                   child: Text(
                     Fmt.moneyAdaptive(value),
-                    style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                    style: context.t.labelSmall?.copyWith(
+                      color: c.textTertiary,
+                    ),
                     textAlign: TextAlign.right,
                   ),
                 ),
@@ -136,7 +139,9 @@ class PriceChart extends StatelessWidget {
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
                       Fmt.dateShort(d),
-                      style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                      style: context.t.labelSmall?.copyWith(
+                        color: c.textTertiary,
+                      ),
                     ),
                   );
                 },

@@ -3,7 +3,10 @@ import 'package:intl/intl.dart';
 /// Centralised formatting so every number in the app reads consistently.
 abstract final class Fmt {
   static final _money = NumberFormat.currency(symbol: r'$', decimalDigits: 2);
-  static final _moneyCompact = NumberFormat.compactCurrency(symbol: r'$', decimalDigits: 1);
+  static final _moneyCompact = NumberFormat.compactCurrency(
+    symbol: r'$',
+    decimalDigits: 1,
+  );
   static final _int = NumberFormat.decimalPattern();
   static final _compact = NumberFormat.compact();
   static final _date = DateFormat('d MMM yyyy');
@@ -14,13 +17,16 @@ abstract final class Fmt {
   static String money(double? v) => v == null ? '--' : _money.format(v);
 
   /// `$12.3K` for headline figures.
-  static String moneyCompact(double? v) => v == null ? '--' : _moneyCompact.format(v);
+  static String moneyCompact(double? v) =>
+      v == null ? '--' : _moneyCompact.format(v);
 
   /// Money that adapts precision to magnitude: cents matter under $100, not above.
   static String moneyAdaptive(double? v) {
     if (v == null) return '--';
     if (v.abs() >= 1000) return _moneyCompact.format(v);
-    if (v.abs() >= 100) return NumberFormat.currency(symbol: r'$', decimalDigits: 1).format(v);
+    if (v.abs() >= 100) {
+      return NumberFormat.currency(symbol: r'$', decimalDigits: 1).format(v);
+    }
     return _money.format(v);
   }
 
@@ -44,11 +50,15 @@ abstract final class Fmt {
   }
 
   static String percentPlain(double? v, {int digits = 0}) =>
-      v == null || v.isNaN || v.isInfinite ? '--' : '${v.toStringAsFixed(digits)}%';
+      v == null || v.isNaN || v.isInfinite
+      ? '--'
+      : '${v.toStringAsFixed(digits)}%';
 
   static String date(DateTime? d) => d == null ? '--' : _date.format(d);
-  static String dateShort(DateTime? d) => d == null ? '--' : _dateShort.format(d);
-  static String monthYear(DateTime? d) => d == null ? '--' : _monthYear.format(d);
+  static String dateShort(DateTime? d) =>
+      d == null ? '--' : _dateShort.format(d);
+  static String monthYear(DateTime? d) =>
+      d == null ? '--' : _monthYear.format(d);
 
   /// Relative time, e.g. `3 h ago`.
   static String ago(DateTime? d) {
@@ -108,7 +118,9 @@ abstract final class Fmt {
       default:
         return raw
             .split('_')
-            .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+            .map(
+              (w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}',
+            )
             .join(' ');
     }
   }

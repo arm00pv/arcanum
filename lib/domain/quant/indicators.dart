@@ -190,8 +190,11 @@ double? rsiWilder(List<double> values, [int period = 14]) {
 /// Returns null when there are fewer than [period] values. `percentB` falls
 /// back to 0.5 when the band collapses to zero width; `bandwidth` falls back to
 /// 0 when the middle band is zero.
-BollingerBands? bollingerBands(List<double> values,
-    {int period = 20, double mult = 2}) {
+BollingerBands? bollingerBands(
+  List<double> values, {
+  int period = 20,
+  double mult = 2,
+}) {
   if (period <= 1 || values.length < period) return null;
   final window = values.sublist(values.length - period);
   final middle = mean(window);
@@ -218,8 +221,12 @@ BollingerBands? bollingerBands(List<double> values,
 /// Requires `slow + signalPeriod - 1` values; null otherwise. The signal line
 /// is an EMA of the MACD line seeded with the SMA of its first `signalPeriod`
 /// values.
-MacdResult? macd(List<double> values,
-    {int fast = 12, int slow = 26, int signalPeriod = 9}) {
+MacdResult? macd(
+  List<double> values, {
+  int fast = 12,
+  int slow = 26,
+  int signalPeriod = 9,
+}) {
   if (fast <= 0 || slow <= fast || signalPeriod <= 0) return null;
   if (values.length < slow + signalPeriod - 1) return null;
   final fastEma = emaSeries(values, fast);
@@ -311,7 +318,10 @@ double _holtSse(List<double> y, double alpha, double beta) {
 
 /// Runs Holt's recursion once and returns `(level, trend, residuals)`.
 (double, double, List<double>) _holtFit(
-    List<double> y, double alpha, double beta) {
+  List<double> y,
+  double alpha,
+  double beta,
+) {
   var level = y[0];
   var trend = y[1] - y[0];
   final residuals = <double>[];
@@ -338,8 +348,12 @@ double _holtSse(List<double> y, double alpha, double beta) {
 /// uncertainty grows with the horizon. They are a statistical range, not a
 /// prediction. Returns null when there are fewer than 3 observations or when
 /// [horizon] is not positive.
-HoltForecast? holtLinearForecast(List<double> prices,
-    {int horizon = 30, double? alpha, double? beta}) {
+HoltForecast? holtLinearForecast(
+  List<double> prices, {
+  int horizon = 30,
+  double? alpha,
+  double? beta,
+}) {
   final n = prices.length;
   if (n < 3 || horizon < 1) return null;
   final y = <double>[];
@@ -401,7 +415,17 @@ HoltForecast? holtLinearForecast(List<double> prices,
     upper95.add(safeExp(forecast + 1.96 * sigmaH));
   }
   return HoltForecast(
-      a, b, level, trend, point, lower80, upper80, lower95, upper95, sigma);
+    a,
+    b,
+    level,
+    trend,
+    point,
+    lower80,
+    upper80,
+    lower95,
+    upper95,
+    sigma,
+  );
 }
 
 /// Annualised volatility of realised log returns, in percent, or null when
@@ -479,8 +503,10 @@ double? momentumPct(List<PricePoint> observations, int days) {
 /// report every single day as a wild outlier.
 ///
 /// The result is sorted by date.
-List<AnomalyFlag> detectAnomalies(List<PricePoint> observations,
-    {double threshold = 3.5}) {
+List<AnomalyFlag> detectAnomalies(
+  List<PricePoint> observations, {
+  double threshold = 3.5,
+}) {
   final flags = <AnomalyFlag>[];
   if (observations.length < 2) return flags;
 
@@ -490,7 +516,9 @@ List<AnomalyFlag> detectAnomalies(List<PricePoint> observations,
   for (var i = 1; i < observations.length; i++) {
     final previous = observations[i - 1].price;
     final current = observations[i].price;
-    final span = observations[i].date.difference(observations[i - 1].date).inDays;
+    final span = observations[i].date
+        .difference(observations[i - 1].date)
+        .inDays;
     if (previous > 0 && current > 0 && span > 0) {
       final total = math.log(current / previous);
       if (total.isFinite) {
@@ -504,7 +532,9 @@ List<AnomalyFlag> detectAnomalies(List<PricePoint> observations,
   final scores = <int, double>{};
   if (returns.length >= 3) {
     final center = median(returns);
-    final mad = center == null ? null : medianAbsoluteDeviation(returns, center);
+    final mad = center == null
+        ? null
+        : medianAbsoluteDeviation(returns, center);
     if (center != null && mad != null && mad > _minimumMad) {
       for (var k = 0; k < returns.length; k++) {
         final z = 0.6745 * (returns[k] - center) / mad;
@@ -514,17 +544,21 @@ List<AnomalyFlag> detectAnomalies(List<PricePoint> observations,
   }
 
   for (var i = 1; i < observations.length; i++) {
-    final missing = observations[i].date.difference(observations[i - 1].date).inDays - 1;
+    final missing =
+        observations[i].date.difference(observations[i - 1].date).inDays - 1;
     if (missing > kGapAnomalyDays) {
-      flags.add(AnomalyFlag(
-        date: observations[i].date,
-        price: observations[i].price,
-        zScore: scores[i] ?? 0.0,
-        kind: 'gap',
-        description: 'No price for $missing days between '
-            '${_isoDay(observations[i - 1].date)} and '
-            '${_isoDay(observations[i].date)}.',
-      ));
+      flags.add(
+        AnomalyFlag(
+          date: observations[i].date,
+          price: observations[i].price,
+          zScore: scores[i] ?? 0.0,
+          kind: 'gap',
+          description:
+              'No price for $missing days between '
+              '${_isoDay(observations[i - 1].date)} and '
+              '${_isoDay(observations[i].date)}.',
+        ),
+      );
     }
   }
 
@@ -536,14 +570,17 @@ List<AnomalyFlag> detectAnomalies(List<PricePoint> observations,
     final percent = (math.exp(returns[k] * span) - 1) * 100;
     final direction = percent >= 0 ? 'spiked' : 'dropped';
     final period = span == 1 ? 'in one day' : 'over $span days';
-    flags.add(AnomalyFlag(
-      date: observations[index].date,
-      price: observations[index].price,
-      zScore: z,
-      kind: z > 0 ? 'spike' : 'crash',
-      description: 'Price $direction ${percent.abs().toStringAsFixed(1)}% '
-          '$period (robust z-score ${z.toStringAsFixed(1)}).',
-    ));
+    flags.add(
+      AnomalyFlag(
+        date: observations[index].date,
+        price: observations[index].price,
+        zScore: z,
+        kind: z > 0 ? 'spike' : 'crash',
+        description:
+            'Price $direction ${percent.abs().toStringAsFixed(1)}% '
+            '$period (robust z-score ${z.toStringAsFixed(1)}).',
+      ),
+    );
   }
 
   flags.sort((a, b) => a.date.compareTo(b.date));

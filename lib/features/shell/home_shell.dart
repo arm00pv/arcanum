@@ -27,12 +27,29 @@ class HomeShell extends ConsumerStatefulWidget {
 class _HomeShellState extends ConsumerState<HomeShell> {
   int _index = 0;
 
-  static const _destinations = <({IconData icon, IconData selected, String label})>[
-    (icon: Icons.diamond_outlined, selected: Icons.diamond_rounded, label: 'Vault'),
-    (icon: Icons.grid_view_outlined, selected: Icons.grid_view_rounded, label: 'Sets'),
-    (icon: Icons.layers_outlined, selected: Icons.layers_rounded, label: 'Collection'),
-    (icon: Icons.search_outlined, selected: Icons.search_rounded, label: 'Search'),
-  ];
+  static const _destinations =
+      <({IconData icon, IconData selected, String label})>[
+        (
+          icon: Icons.diamond_outlined,
+          selected: Icons.diamond_rounded,
+          label: 'Vault',
+        ),
+        (
+          icon: Icons.grid_view_outlined,
+          selected: Icons.grid_view_rounded,
+          label: 'Sets',
+        ),
+        (
+          icon: Icons.layers_outlined,
+          selected: Icons.layers_rounded,
+          label: 'Collection',
+        ),
+        (
+          icon: Icons.search_outlined,
+          selected: Icons.search_rounded,
+          label: 'Search',
+        ),
+      ];
 
   @override
   Widget build(BuildContext context) {

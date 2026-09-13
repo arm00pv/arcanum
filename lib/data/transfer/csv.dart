@@ -88,7 +88,8 @@ abstract final class Csv {
 
   /// Quotes [value] only when the grammar actually requires it.
   static String escapeField(String value) {
-    final needsQuotes = value.contains(',') ||
+    final needsQuotes =
+        value.contains(',') ||
         value.contains('"') ||
         value.contains('\n') ||
         value.contains('\r');

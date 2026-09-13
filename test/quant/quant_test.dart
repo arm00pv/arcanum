@@ -15,8 +15,9 @@ DateTime day(int offset) =>
     DateTime.utc(2024, 1, 1).add(Duration(days: offset));
 
 /// Builds a daily, gap-free series from [prices].
-List<PricePoint> daily(List<double> prices) =>
-    [for (var i = 0; i < prices.length; i++) PricePoint(day(i), prices[i])];
+List<PricePoint> daily(List<double> prices) => [
+  for (var i = 0; i < prices.length; i++) PricePoint(day(i), prices[i]),
+];
 
 /// A pure exponential ramp: `price(i) = 100 * exp(slope * i)`.
 List<PricePoint> rampSeries(int n, double slope) =>
@@ -28,10 +29,39 @@ List<PricePoint> wavySeries(int n) =>
 
 /// Wilder's classic worked example (33 daily prices).
 const List<double> wilderPrices = <double>[
-  44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84, 46.08,
-  45.89, 46.03, 45.61, 46.28, 46.28, 46.00, 46.03, 46.41, 46.22, 45.64,
-  46.21, 46.25, 45.71, 46.45, 45.78, 45.35, 44.03, 44.18, 44.22, 44.57,
-  43.42, 42.66, 43.13,
+  44.34,
+  44.09,
+  44.15,
+  43.61,
+  44.33,
+  44.83,
+  45.10,
+  45.42,
+  45.84,
+  46.08,
+  45.89,
+  46.03,
+  45.61,
+  46.28,
+  46.28,
+  46.00,
+  46.03,
+  46.41,
+  46.22,
+  45.64,
+  46.21,
+  46.25,
+  45.71,
+  46.45,
+  45.78,
+  45.35,
+  44.03,
+  44.18,
+  44.22,
+  44.57,
+  43.42,
+  42.66,
+  43.13,
 ];
 
 void main() {
@@ -255,8 +285,10 @@ void main() {
   });
 
   group('constant series', () {
-    final a = analyzeSeries(daily([for (var i = 0; i < 60; i++) 5.0]),
-        windowDays: 60);
+    final a = analyzeSeries(
+      daily([for (var i = 0; i < 60; i++) 5.0]),
+      windowDays: 60,
+    );
 
     test('zero volatility, zero drawdown, no anomalies', () {
       expect(a.volatilityAnnualized, 0);
@@ -355,10 +387,7 @@ void main() {
       expect(a.series, hasLength(54));
       expect(a.kalman, isNotNull);
       expect(a.kalman!.smoothed, hasLength(60));
-      expect(
-        a.series.map((p) => p.date).toSet(),
-        isNot(contains(day(22))),
-      );
+      expect(a.series.map((p) => p.date).toSet(), isNot(contains(day(22))));
     });
 
     test('the smoother interpolates monotonically across the hole', () {
@@ -387,8 +416,11 @@ void main() {
 
   group('forecast', () {
     test('horizon is respected and bands nest', () {
-      final a = analyzeSeries(rampSeries(120, 0.002),
-          windowDays: 120, forecastHorizon: 7);
+      final a = analyzeSeries(
+        rampSeries(120, 0.002),
+        windowDays: 120,
+        forecastHorizon: 7,
+      );
       final f = a.forecast!;
       expect(f.point, hasLength(7));
       expect(f.lower80, hasLength(7));
@@ -425,14 +457,17 @@ void main() {
     final cases = <String, CardAnalytics>{
       'ramp': analyzeSeries(rampSeries(120, 0.002), windowDays: 120),
       'down': analyzeSeries(
-          daily([for (var i = 0; i < 120; i++) 100 * math.exp(-0.002 * i)]),
-          windowDays: 120),
-      'flat': analyzeSeries(daily([for (var i = 0; i < 60; i++) 5.0]),
-          windowDays: 60),
+        daily([for (var i = 0; i < 120; i++) 100 * math.exp(-0.002 * i)]),
+        windowDays: 120,
+      ),
+      'flat': analyzeSeries(
+        daily([for (var i = 0; i < 60; i++) 5.0]),
+        windowDays: 60,
+      ),
       'wavy': analyzeSeries(wavySeries(120), windowDays: 120),
-      'short': analyzeSeries(wilderPrices.isEmpty
-          ? const <PricePoint>[]
-          : daily(wilderPrices)),
+      'short': analyzeSeries(
+        wilderPrices.isEmpty ? const <PricePoint>[] : daily(wilderPrices),
+      ),
     };
 
     test('scores stay in range and agree with the direction buckets', () {
@@ -444,12 +479,12 @@ void main() {
         final expected = score >= 65
             ? TrendDirection.rising
             : score >= 55
-                ? TrendDirection.slightlyRising
-                : score >= 45
-                    ? TrendDirection.flat
-                    : score >= 35
-                        ? TrendDirection.slightlyFalling
-                        : TrendDirection.falling;
+            ? TrendDirection.slightlyRising
+            : score >= 45
+            ? TrendDirection.flat
+            : score >= 35
+            ? TrendDirection.slightlyFalling
+            : TrendDirection.falling;
         expect(a.direction, expected, reason: entry.key);
       }
     });
@@ -482,9 +517,9 @@ void main() {
     });
 
     test('the summary is honest about data coverage', () {
-      final thin = analyzeSeries(wilderPrices.isEmpty
-          ? const <PricePoint>[]
-          : daily(wilderPrices));
+      final thin = analyzeSeries(
+        wilderPrices.isEmpty ? const <PricePoint>[] : daily(wilderPrices),
+      );
       expect(thin.thinData, isTrue);
       expect(thin.summary, contains('low trust'));
       expect(thin.summary, contains('not a prediction'));

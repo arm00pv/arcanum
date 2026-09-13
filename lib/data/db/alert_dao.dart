@@ -59,7 +59,9 @@ class AlertDao {
   /// Total number of alerts for a game.
   Future<int> count(CardGame game) async {
     final r = await _db.rawQuery(
-        'SELECT COUNT(*) AS n FROM alerts WHERE game = ?', [game.id]);
+      'SELECT COUNT(*) AS n FROM alerts WHERE game = ?',
+      [game.id],
+    );
     return (r.first['n'] as num?)?.toInt() ?? 0;
   }
 
@@ -87,11 +89,7 @@ class AlertDao {
   Future<void> rearm(int id, {double? baseline}) async {
     await _db.update(
       'alerts',
-      {
-        'triggered_at': null,
-        'baseline': baseline,
-        'last_value': baseline,
-      },
+      {'triggered_at': null, 'baseline': baseline, 'last_value': baseline},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -99,8 +97,12 @@ class AlertDao {
 
   Future<void> update(PriceAlert alert) async {
     if (alert.id == null) return;
-    await _db.update('alerts', alert.toRow()..remove('id'),
-        where: 'id = ?', whereArgs: [alert.id]);
+    await _db.update(
+      'alerts',
+      alert.toRow()..remove('id'),
+      where: 'id = ?',
+      whereArgs: [alert.id],
+    );
   }
 
   Future<void> delete(int id) async {

@@ -112,7 +112,9 @@ void main() {
     });
 
     test('falls back to the tag when the release has no title', () {
-      final info = ReleaseInfo.fromJson(<String, Object?>{'tag_name': 'v1.0.0'});
+      final info = ReleaseInfo.fromJson(<String, Object?>{
+        'tag_name': 'v1.0.0',
+      });
       expect(info.title, 'v1.0.0');
       expect(info.url, '');
       expect(info.notes, '');
@@ -188,7 +190,10 @@ void main() {
 
       await service.check();
 
-      expect(fake.requests.single.path, '/repos/someone/arcanum/releases/latest');
+      expect(
+        fake.requests.single.path,
+        '/repos/someone/arcanum/releases/latest',
+      );
     });
 
     test('refuses to check before a repository is named', () async {

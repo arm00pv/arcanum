@@ -92,7 +92,8 @@ class IndicatorReading {
   });
 
   @override
-  String toString() => 'IndicatorReading($label: $value'
+  String toString() =>
+      'IndicatorReading($label: $value'
       '${interpretation == null ? '' : ' ($interpretation)'})';
 }
 
@@ -148,10 +149,16 @@ class BollingerBands {
 
   /// Creates a Bollinger reading.
   const BollingerBands(
-      this.middle, this.upper, this.lower, this.percentB, this.bandwidth);
+    this.middle,
+    this.upper,
+    this.lower,
+    this.percentB,
+    this.bandwidth,
+  );
 
   @override
-  String toString() => 'BollingerBands(mid=$middle, up=$upper, lo=$lower, '
+  String toString() =>
+      'BollingerBands(mid=$middle, up=$upper, lo=$lower, '
       '%B=$percentB, bw=$bandwidth)';
 }
 
@@ -193,7 +200,12 @@ class RegressionResult {
 
   /// Creates a regression result.
   const RegressionResult(
-      this.slope, this.intercept, this.rSquared, this.tStat, this.n);
+    this.slope,
+    this.intercept,
+    this.rSquared,
+    this.tStat,
+    this.n,
+  );
 
   @override
   String toString() =>
@@ -406,6 +418,7 @@ class CardAnalytics {
   });
 
   @override
-  String toString() => 'CardAnalytics($headline, score=${trendScore.round()}, '
+  String toString() =>
+      'CardAnalytics($headline, score=${trendScore.round()}, '
       'confidence=$confidence, n=$effectiveSamples/$windowDays)';
 }

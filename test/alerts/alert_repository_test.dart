@@ -12,18 +12,17 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// A Magic printing priced at $10 non-foil, with a foil at $25.
 TcgCard pricedCard({double nonfoil = 10.0, double foil = 25.0}) => TcgCard(
-      game: CardGame.mtg,
-      id: 'card-1',
-      setCode: 'tst',
-      setName: 'Test Set',
-      name: 'Test Card',
-      collectorNumber: '1',
-      rarity: 'rare',
-      prices: TcgPrices(byFinish: {
-        CardFinish.nonfoil.code: nonfoil,
-        CardFinish.foil.code: foil,
-      }),
-    );
+  game: CardGame.mtg,
+  id: 'card-1',
+  setCode: 'tst',
+  setName: 'Test Set',
+  name: 'Test Card',
+  collectorNumber: '1',
+  rarity: 'rare',
+  prices: TcgPrices(
+    byFinish: {CardFinish.nonfoil.code: nonfoil, CardFinish.foil.code: foil},
+  ),
+);
 
 void main() {
   setUpAll(() {
@@ -46,28 +45,31 @@ void main() {
 
   tearDown(() async => db.close());
 
-  test('an absolute "above" alert fires only once the price passes it', () async {
-    // Armed above $20 while the card sits at $10: armed, not firing.
-    await repo.create(
-      card: pricedCard(),
-      kind: AlertKind.above,
-      threshold: 20,
-    );
-    expect(await repo.triggeredCount(CardGame.mtg), 0);
-    expect(await repo.evaluate(), isEmpty);
+  test(
+    'an absolute "above" alert fires only once the price passes it',
+    () async {
+      // Armed above $20 while the card sits at $10: armed, not firing.
+      await repo.create(
+        card: pricedCard(),
+        kind: AlertKind.above,
+        threshold: 20,
+      );
+      expect(await repo.triggeredCount(CardGame.mtg), 0);
+      expect(await repo.evaluate(), isEmpty);
 
-    // Price moves to $30; the same alert should now fire.
-    await catalog.upsertCards(CardGame.mtg, [pricedCard(nonfoil: 30)]);
-    final fired = await repo.evaluate();
-    expect(fired, hasLength(1));
-    expect(fired.first.triggered, isTrue);
-    expect(fired.first.current, 30.0);
-    expect(fired.first.message, contains('above your'));
-    expect(await repo.triggeredCount(CardGame.mtg), 1);
+      // Price moves to $30; the same alert should now fire.
+      await catalog.upsertCards(CardGame.mtg, [pricedCard(nonfoil: 30)]);
+      final fired = await repo.evaluate();
+      expect(fired, hasLength(1));
+      expect(fired.first.triggered, isTrue);
+      expect(fired.first.current, 30.0);
+      expect(fired.first.message, contains('above your'));
+      expect(await repo.triggeredCount(CardGame.mtg), 1);
 
-    // It must not fire twice.
-    expect(await repo.evaluate(), isEmpty);
-  });
+      // It must not fire twice.
+      expect(await repo.evaluate(), isEmpty);
+    },
+  );
 
   test('a "below" alert fires on a drop', () async {
     await repo.create(card: pricedCard(), kind: AlertKind.below, threshold: 8);
@@ -79,25 +81,34 @@ void main() {
     expect(fired.first.message, contains('below your'));
   });
 
-  test('a percentage alert measures against the price when it was armed',
-      () async {
-    // Armed at $10 with a +20% rule.
-    await repo.create(card: pricedCard(), kind: AlertKind.percentUp, threshold: 20);
+  test(
+    'a percentage alert measures against the price when it was armed',
+    () async {
+      // Armed at $10 with a +20% rule.
+      await repo.create(
+        card: pricedCard(),
+        kind: AlertKind.percentUp,
+        threshold: 20,
+      );
 
-    // +15% is not enough.
-    await catalog.upsertCards(CardGame.mtg, [pricedCard(nonfoil: 11.5)]);
-    expect(await repo.evaluate(), isEmpty);
+      // +15% is not enough.
+      await catalog.upsertCards(CardGame.mtg, [pricedCard(nonfoil: 11.5)]);
+      expect(await repo.evaluate(), isEmpty);
 
-    // +25% is.
-    await catalog.upsertCards(CardGame.mtg, [pricedCard(nonfoil: 12.5)]);
-    final fired = await repo.evaluate();
-    expect(fired, hasLength(1));
-    expect(fired.first.message, contains('Up 25%'));
-  });
+      // +25% is.
+      await catalog.upsertCards(CardGame.mtg, [pricedCard(nonfoil: 12.5)]);
+      final fired = await repo.evaluate();
+      expect(fired, hasLength(1));
+      expect(fired.first.message, contains('Up 25%'));
+    },
+  );
 
   test('re-arming rebases the alert on the current price', () async {
     await repo.create(
-        card: pricedCard(), kind: AlertKind.percentUp, threshold: 20);
+      card: pricedCard(),
+      kind: AlertKind.percentUp,
+      threshold: 20,
+    );
     await catalog.upsertCards(CardGame.mtg, [pricedCard(nonfoil: 12.5)]);
     expect(await repo.evaluate(), hasLength(1));
 
@@ -110,8 +121,11 @@ void main() {
     final rearmed = (await repo.all(CardGame.mtg)).single;
     expect(rearmed.isArmed, isTrue);
     expect(rearmed.baseline, 12.5);
-    expect(await repo.evaluate(), isEmpty,
-        reason: 'a freshly re-armed alert must not fire immediately');
+    expect(
+      await repo.evaluate(),
+      isEmpty,
+      reason: 'a freshly re-armed alert must not fire immediately',
+    );
   });
 
   test('alerts are scoped per game and never cross over', () async {

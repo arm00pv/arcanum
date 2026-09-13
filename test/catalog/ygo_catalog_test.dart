@@ -192,21 +192,23 @@ final String lobBody = cardData(<String>[blueEyesJson, monsterRebornJson]);
 
 void main() {
   group('set list', () {
-    test('reads sets with their published codes, names and release dates',
-        () async {
-      final sets = await catalogWith().fetchAllSets();
+    test(
+      'reads sets with their published codes, names and release dates',
+      () async {
+        final sets = await catalogWith().fetchAllSets();
 
-      expect(sets, hasLength(4));
-      expect(sets.map((s) => s.game).toSet(), <CardGame>{CardGame.yugioh});
-      expect(sets[0].name, 'Legend of Blue Eyes White Dragon');
-      expect(sets[0].releasedAt, DateTime(2002, 3, 8));
-      expect(sets[0].cardCount, 355);
-      expect(sets[0].setType, 'set');
-      expect(
-        sets[0].logoUri,
-        'https://images.ygoprodeck.com/images/sets/LOB.jpg',
-      );
-    });
+        expect(sets, hasLength(4));
+        expect(sets.map((s) => s.game).toSet(), <CardGame>{CardGame.yugioh});
+        expect(sets[0].name, 'Legend of Blue Eyes White Dragon');
+        expect(sets[0].releasedAt, DateTime(2002, 3, 8));
+        expect(sets[0].cardCount, 355);
+        expect(sets[0].setType, 'set');
+        expect(
+          sets[0].logoUri,
+          'https://images.ygoprodeck.com/images/sets/LOB.jpg',
+        );
+      },
+    );
 
     test('keeps every set when Konami reuses a set code', () async {
       final sets = await catalogWith().fetchAllSets();
@@ -226,47 +228,52 @@ void main() {
   });
 
   group('cards in a set', () {
-    test('queries by set name and derives collector numbers from the codes',
-        () async {
-      final requests = <Uri>[];
-      final catalog = catalogWith(
-        bySetName: <String, String>{
-          'Legend of Blue Eyes White Dragon': lobBody,
-        },
-        requests: requests,
-      );
+    test(
+      'queries by set name and derives collector numbers from the codes',
+      () async {
+        final requests = <Uri>[];
+        final catalog = catalogWith(
+          bySetName: <String, String>{
+            'Legend of Blue Eyes White Dragon': lobBody,
+          },
+          requests: requests,
+        );
 
-      final cards = await catalog.fetchCardsInSet('lob');
+        final cards = await catalog.fetchCardsInSet('lob');
 
-      // The provider rejects a set code and accepts only the set's name. The
-      // log also holds the set-list read that made that lookup possible.
-      final asked = requests
-          .where((Uri uri) => uri.queryParameters.containsKey('cardset'))
-          .toList();
-      expect(
-        asked.single.queryParameters['cardset'],
-        'Legend of Blue Eyes White Dragon',
-      );
+        // The provider rejects a set code and accepts only the set's name. The
+        // log also holds the set-list read that made that lookup possible.
+        final asked = requests
+            .where((Uri uri) => uri.queryParameters.containsKey('cardset'))
+            .toList();
+        expect(
+          asked.single.queryParameters['cardset'],
+          'Legend of Blue Eyes White Dragon',
+        );
 
-      final blueEyes =
-          cards.where((c) => c.name == 'Blue-Eyes White Dragon').toList();
-      expect(blueEyes, hasLength(2));
-      // "LOB-EN001" and "LOB-001" are both number 001: the letters in the
-      // middle name a region, not a position.
-      expect(blueEyes.map((c) => c.collectorNumber).toSet(), <String>{'001'});
-      expect(blueEyes.every((c) => c.setCode == 'lob'), isTrue);
-      expect(
-        blueEyes.every((c) => c.setName == 'Legend of Blue Eyes White Dragon'),
-        isTrue,
-      );
-      // Two printings of one card must never share a catalogue id.
-      expect(blueEyes.map((c) => c.id).toSet(), hasLength(2));
+        final blueEyes = cards
+            .where((c) => c.name == 'Blue-Eyes White Dragon')
+            .toList();
+        expect(blueEyes, hasLength(2));
+        // "LOB-EN001" and "LOB-001" are both number 001: the letters in the
+        // middle name a region, not a position.
+        expect(blueEyes.map((c) => c.collectorNumber).toSet(), <String>{'001'});
+        expect(blueEyes.every((c) => c.setCode == 'lob'), isTrue);
+        expect(
+          blueEyes.every(
+            (c) => c.setName == 'Legend of Blue Eyes White Dragon',
+          ),
+          isTrue,
+        );
+        // Two printings of one card must never share a catalogue id.
+        expect(blueEyes.map((c) => c.id).toSet(), hasLength(2));
 
-      final reborn = cards.firstWhere((c) => c.name == 'Monster Reborn');
-      expect(reborn.collectorNumber, '053');
-      expect(reborn.rarity, 'Ultra Rare');
-      expect(reborn.game, CardGame.yugioh);
-    });
+        final reborn = cards.firstWhere((c) => c.name == 'Monster Reborn');
+        expect(reborn.collectorNumber, '053');
+        expect(reborn.rarity, 'Ultra Rare');
+        expect(reborn.game, CardGame.yugioh);
+      },
+    );
 
     test('keeps one card printed twice in a set at two rarities', () async {
       final catalog = catalogWith(
@@ -279,10 +286,10 @@ void main() {
 
       expect(cards, hasLength(2));
       expect(cards.map((c) => c.collectorNumber).toSet(), <String>{'079'});
-      expect(
-        cards.map((c) => c.rarity).toSet(),
-        <String>{'Platinum Secret Rare', 'Quarter Century Secret Rare'},
-      );
+      expect(cards.map((c) => c.rarity).toSet(), <String>{
+        'Platinum Secret Rare',
+        'Quarter Century Secret Rare',
+      });
       expect(cards.map((c) => c.id).toSet(), hasLength(2));
     });
 
@@ -312,25 +319,28 @@ void main() {
       expect(cards.single.rarity, 'Quarter Century Secret Rare');
     });
 
-    test('carries the artwork, stats and text the provider publishes', () async {
-      final catalog = catalogWith(
-        bySetName: <String, String>{
-          'Legend of Blue Eyes White Dragon': lobBody,
-        },
-      );
+    test(
+      'carries the artwork, stats and text the provider publishes',
+      () async {
+        final catalog = catalogWith(
+          bySetName: <String, String>{
+            'Legend of Blue Eyes White Dragon': lobBody,
+          },
+        );
 
-      final card = (await catalog.fetchCardsInSet('lob'))
-          .firstWhere((c) => c.name == 'Blue-Eyes White Dragon');
+        final card = (await catalog.fetchCardsInSet('lob'))
+            .firstWhere((c) => c.name == 'Blue-Eyes White Dragon');
 
-      expect(card.imageUris['small'], contains('cards_small'));
-      expect(card.imageUris['art_crop'], contains('cards_cropped'));
-      expect(card.extras['passcode'], 89631139);
-      expect(card.extras['atk'], 3000);
-      expect(card.extras['def'], 2500);
-      expect(card.extras['level'], 8);
-      expect(card.extras['frameType'], 'normal');
-      expect(card.oracleText, contains('legendary dragon'));
-    });
+        expect(card.imageUris['small'], contains('cards_small'));
+        expect(card.imageUris['art_crop'], contains('cards_cropped'));
+        expect(card.extras['passcode'], 89631139);
+        expect(card.extras['atk'], 3000);
+        expect(card.extras['def'], 2500);
+        expect(card.extras['level'], 8);
+        expect(card.extras['frameType'], 'normal');
+        expect(card.oracleText, contains('legendary dragon'));
+      },
+    );
   });
 
   group('prices', () {
@@ -425,20 +435,22 @@ void main() {
       expect(reborn.prices.priceFor(CardFinish.nonfoil), 1.50);
     });
 
-    test('falls back to another USD vendor only when TCGplayer is empty',
-        () async {
-      final catalog = catalogWith(
-        bySetName: <String, String>{
-          'Legend of Blue Eyes White Dragon': lobBody,
-        },
-      );
+    test(
+      'falls back to another USD vendor only when TCGplayer is empty',
+      () async {
+        final catalog = catalogWith(
+          bySetName: <String, String>{
+            'Legend of Blue Eyes White Dragon': lobBody,
+          },
+        );
 
-      final spell = (await catalog.fetchCardsInSet('lob'))
-          .firstWhere((c) => c.name == 'Monster Reborn');
+        final spell = (await catalog.fetchCardsInSet('lob'))
+            .firstWhere((c) => c.name == 'Monster Reborn');
 
-      expect(spell.prices.priceFor(CardFinish.nonfoil), 1.50);
-      expect(spell.prices.eur, 0.05);
-    });
+        expect(spell.prices.priceFor(CardFinish.nonfoil), 1.50);
+        expect(spell.prices.eur, 0.05);
+      },
+    );
 
     test('reads "0.00" as no market data rather than as a free card', () async {
       final catalog = catalogWith(
@@ -613,19 +625,20 @@ void main() {
         byFname: cardData(<String>[blueEyesJson, decoyJson]),
       );
 
-      final printings =
-          await catalog.fetchPrintingsOf('Blue-Eyes White Dragon');
+      final printings = await catalog.fetchPrintingsOf(
+        'Blue-Eyes White Dragon',
+      );
 
       expect(printings, hasLength(4));
-      expect(
-        printings.map((c) => c.oracleId).toSet(),
-        <String>{TcgCard.normaliseName('Blue-Eyes White Dragon')},
-      );
+      expect(printings.map((c) => c.oracleId).toSet(), <String>{
+        TcgCard.normaliseName('Blue-Eyes White Dragon'),
+      });
       // The same card is in three sets, two of which share the code "LOB".
-      expect(
-        printings.map((c) => c.setCode).toSet(),
-        <String>{'lob', 'lob2', 'sdk'},
-      );
+      expect(printings.map((c) => c.setCode).toSet(), <String>{
+        'lob',
+        'lob2',
+        'sdk',
+      });
       expect(printings.map((c) => c.id).toSet(), hasLength(printings.length));
       // "Blue-Eyes Ultimate Dragon" is a different card and must not be folded
       // into its reprints.
@@ -642,8 +655,9 @@ void main() {
         },
       );
 
-      final printings = await catalog
-          .fetchPrintingsOf('83764718:lob:lob-en053:ultra-rare');
+      final printings = await catalog.fetchPrintingsOf(
+        '83764718:lob:lob-en053:ultra-rare',
+      );
 
       expect(printings, hasLength(1));
       expect(printings.single.name, 'Monster Reborn');
@@ -654,11 +668,14 @@ void main() {
   group('single cards and price refreshes', () {
     test('resolves the printing a catalogue id names', () async {
       final catalog = catalogWith(
-        byId: <String, String>{'89631139': cardData(<String>[blueEyesJson])},
+        byId: <String, String>{
+          '89631139': cardData(<String>[blueEyesJson]),
+        },
       );
 
-      final card =
-          await catalog.fetchCardById('89631139:sdk:sdk-001:ultra-rare');
+      final card = await catalog.fetchCardById(
+        '89631139:sdk:sdk-001:ultra-rare',
+      );
 
       expect(card, isNotNull);
       expect(card!.name, 'Blue-Eyes White Dragon');
@@ -686,7 +703,9 @@ void main() {
 ''';
       final requests = <Uri>[];
       final catalog = catalogWith(
-        byId: <String, String>{'89631139': cardData(<String>[repriced])},
+        byId: <String, String>{
+          '89631139': cardData(<String>[repriced]),
+        },
         requests: requests,
       );
 
@@ -715,20 +734,17 @@ void main() {
 
   group('game vocabulary', () {
     test('Yu-Gi-Oh! offers the finishes and grades its collectors use', () {
-      expect(
-        CardGame.yugioh.finishes,
-        <CardFinish>[CardFinish.nonfoil, CardFinish.foil],
-      );
-      expect(
-        CardGame.yugioh.conditions,
-        <CardCondition>[
-          CardCondition.nearMint,
-          CardCondition.lightPlayed,
-          CardCondition.moderatelyPlayed,
-          CardCondition.heavilyPlayed,
-          CardCondition.damaged,
-        ],
-      );
+      expect(CardGame.yugioh.finishes, <CardFinish>[
+        CardFinish.nonfoil,
+        CardFinish.foil,
+      ]);
+      expect(CardGame.yugioh.conditions, <CardCondition>[
+        CardCondition.nearMint,
+        CardCondition.lightPlayed,
+        CardCondition.moderatelyPlayed,
+        CardCondition.heavilyPlayed,
+        CardCondition.damaged,
+      ]);
       // The Magic-only grades have no meaning to a Yu-Gi-Oh! collector.
       for (final magicOnly in <CardCondition>[
         CardCondition.mint,

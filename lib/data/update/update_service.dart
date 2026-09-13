@@ -34,7 +34,9 @@ class ReleaseInfo {
   factory ReleaseInfo.fromJson(Map<String, Object?> json) {
     final tag = (json['tag_name'] as String?)?.trim() ?? '';
     final title = (json['name'] as String?)?.trim() ?? '';
-    final published = DateTime.tryParse((json['published_at'] as String?) ?? '');
+    final published = DateTime.tryParse(
+      (json['published_at'] as String?) ?? '',
+    );
     return ReleaseInfo(
       version: stripVersionPrefix(tag),
       title: title.isNotEmpty ? title : tag,
@@ -89,7 +91,9 @@ String stripVersionPrefix(String tag) {
     final rest = s.substring(1);
     // Only strip when a digit follows, so a version genuinely called "vortex"
     // is left alone.
-    if (rest.isNotEmpty && rest.codeUnitAt(0) >= 0x30 && rest.codeUnitAt(0) <= 0x39) {
+    if (rest.isNotEmpty &&
+        rest.codeUnitAt(0) >= 0x30 &&
+        rest.codeUnitAt(0) <= 0x39) {
       return rest;
     }
   }
@@ -105,12 +109,13 @@ String stripVersionPrefix(String tag) {
 /// "1.2" and "1.2.0" are equal. Anything after a "-" is a pre-release and sorts
 /// before the release it leads to.
 int compareVersions(String a, String b) {
-  List<int> core(String v) => stripVersionPrefix(v)
-      .split('-')
-      .first
-      .split('.')
-      .map((p) => int.tryParse(p.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0)
-      .toList();
+  List<int> core(String v) =>
+      stripVersionPrefix(v)
+          .split('-')
+          .first
+          .split('.')
+          .map((p) => int.tryParse(p.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0)
+          .toList();
 
   String pre(String v) {
     final parts = stripVersionPrefix(v).split('-');
@@ -200,7 +205,8 @@ class UpdateService {
         return UpdateResult(
           status: UpdateStatus.unreachable,
           currentVersion: currentVersion,
-          message: 'GitHub answered with status '
+          message:
+              'GitHub answered with status '
               '${res.statusCode?.toString() ?? 'unknown'}.',
         );
       }

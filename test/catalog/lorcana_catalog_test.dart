@@ -54,7 +54,8 @@ const String setsJson = '''
 /// classifications, both prices as decimal strings, and the tcgplayer_id that
 /// unlocks the JPEG art. Her subtitle is the only thing telling her apart from
 /// the other Elsa in this file.
-final String elsaJson = '''
+final String elsaJson =
+    '''
 {"id":"$elsaId","name":"Elsa","version":"Concerned Sister","layout":"normal",
  "released_at":"2026-02-13",
  "image_uris":{"digital":{
@@ -157,7 +158,8 @@ final String winterspellJson =
 /// tcgplayer_id, no prices at all, and art that exists only as AVIF. Its
 /// \`version\` is an empty string rather than null, which is the other way a card
 /// arrives without a subtitle.
-final String challengePromoJson = '''
+final String challengePromoJson =
+    '''
 [
  {"id":"$promoId","name":"A Whole New World","version":"","layout":"normal",
   "released_at":"2024-05-17",
@@ -290,8 +292,11 @@ class _FakeLorcastApi implements HttpClientAdapter {
     };
     final body = _respond(uri);
     if (body == null) {
-      return ResponseBody.fromString('{"error":"Not found"}', 404,
-          headers: headers);
+      return ResponseBody.fromString(
+        '{"error":"Not found"}',
+        404,
+        headers: headers,
+      );
     }
     return ResponseBody.fromString(body, 200, headers: headers);
   }
@@ -313,7 +318,8 @@ LorcanaCatalog catalogWith({
   List<Uri>? requests,
 }) {
   final body = searchFails ? null : (searchBody ?? searchJson);
-  final sets = bySet ??
+  final sets =
+      bySet ??
       <String, String>{
         '11': winterspellJson,
         'cp': challengePromoJson,
@@ -405,14 +411,8 @@ void main() {
       final requests = <Uri>[];
       final cards = await catalogWith(requests: requests).fetchCardsInSet('p1');
 
-      expect(
-        requests.any((u) => u.path.endsWith('/sets/P1/cards')),
-        isTrue,
-      );
-      expect(
-        requests.any((u) => u.path.endsWith('/sets/p1/cards')),
-        isFalse,
-      );
+      expect(requests.any((u) => u.path.endsWith('/sets/P1/cards')), isTrue);
+      expect(requests.any((u) => u.path.endsWith('/sets/p1/cards')), isFalse);
       expect(cards, isNotEmpty);
     });
 
@@ -436,16 +436,18 @@ void main() {
       expect(elsa.game, CardGame.lorcana);
     });
 
-    test('combines the name with the subtitle that tells printings apart',
-        () async {
-      final cards = await catalogWith().fetchCardsInSet('11');
-      final elsa = cards.firstWhere((c) => c.id == elsaId);
+    test(
+      'combines the name with the subtitle that tells printings apart',
+      () async {
+        final cards = await catalogWith().fetchCardsInSet('11');
+        final elsa = cards.firstWhere((c) => c.id == elsaId);
 
-      // "Elsa" alone is ambiguous between a dozen unrelated cards, so the
-      // subtitle is part of the name and part of the oracle id.
-      expect(elsa.name, 'Elsa – Concerned Sister');
-      expect(elsa.oracleId, TcgCard.normaliseName('Elsa – Concerned Sister'));
-    });
+        // "Elsa" alone is ambiguous between a dozen unrelated cards, so the
+        // subtitle is part of the name and part of the oracle id.
+        expect(elsa.name, 'Elsa – Concerned Sister');
+        expect(elsa.oracleId, TcgCard.normaliseName('Elsa – Concerned Sister'));
+      },
+    );
 
     test('drops a subtitle the provider quoted whole', () async {
       // The Format Coconut printings carry '"Spectacular Singer"' - the whole
@@ -455,17 +457,16 @@ void main() {
       final cards = await catalogWith().fetchCardsInSet('coconut');
 
       expect(cards.single.name, 'Ariel – Spectacular Singer');
-      expect(cards.single.oracleId,
-          TcgCard.normaliseName('Ariel – Spectacular Singer'));
+      expect(
+        cards.single.oracleId,
+        TcgCard.normaliseName('Ariel – Spectacular Singer'),
+      );
     });
 
     test('keeps a subtitle that quotes inside itself', () async {
       final cards = await catalogWith().fetchCardsInSet('4');
 
-      expect(
-        cards.map((c) => c.name),
-        contains('Flotsam – Ursula\'s "Baby"'),
-      );
+      expect(cards.map((c) => c.name), contains('Flotsam – Ursula\'s "Baby"'));
     });
 
     test('leaves the name alone when the card has no subtitle', () async {
@@ -487,19 +488,21 @@ void main() {
       expect(song.colors, <String>['Emerald', 'Sapphire']);
     });
 
-    test('reads the collector number, rarity, cost, set and release date',
-        () async {
-      final cards = await catalogWith().fetchCardsInSet('11');
-      final elsa = cards.firstWhere((c) => c.id == elsaId);
+    test(
+      'reads the collector number, rarity, cost, set and release date',
+      () async {
+        final cards = await catalogWith().fetchCardsInSet('11');
+        final elsa = cards.firstWhere((c) => c.id == elsaId);
 
-      expect(elsa.collectorNumber, '125');
-      expect(elsa.rarity, 'Uncommon');
-      expect(elsa.cmc, 3);
-      expect(elsa.setCode, '11');
-      expect(elsa.setName, 'Winterspell');
-      // The card carries its own date, so it has one without the set list.
-      expect(elsa.releasedAt, DateTime(2026, 2, 13));
-    });
+        expect(elsa.collectorNumber, '125');
+        expect(elsa.rarity, 'Uncommon');
+        expect(elsa.cmc, 3);
+        expect(elsa.setCode, '11');
+        expect(elsa.setName, 'Winterspell');
+        // The card carries its own date, so it has one without the set list.
+        expect(elsa.releasedAt, DateTime(2026, 2, 13));
+      },
+    );
 
     test('takes the art from the TCGplayer JPEG, never the AVIF', () async {
       // Lorcast serves AVIF only and Flutter cannot be relied on to decode it,
@@ -523,8 +526,7 @@ void main() {
       expect(elsa.imageUrl(size: 'normal'), isNot(contains('.avif')));
     });
 
-    test('falls back to the provider URL for a promo with no TCGplayer id',
-        () async {
+    test('falls back to the provider URL for a promo with no TCGplayer id', () async {
       // Promos have no TCGplayer product, so the AVIF Lorcast serves is the
       // only art that exists for them. This is the one case where it is used.
       final cards = await catalogWith().fetchCardsInSet('cp');
@@ -538,16 +540,18 @@ void main() {
       expect(promo.name, 'A Whole New World');
     });
 
-    test('composes the type line from the type and the classifications',
-        () async {
-      final cards = await catalogWith().fetchCardsInSet('11');
-      final elsa = cards.firstWhere((c) => c.id == elsaId);
-      final song = cards.firstWhere((c) => c.id == 'crd_anw');
+    test(
+      'composes the type line from the type and the classifications',
+      () async {
+        final cards = await catalogWith().fetchCardsInSet('11');
+        final elsa = cards.firstWhere((c) => c.id == elsaId);
+        final song = cards.firstWhere((c) => c.id == 'crd_anw');
 
-      expect(elsa.typeLine, 'Character - Storyborn, Hero, Queen, Sorcerer');
-      // A Song has no classifications, and so no dash.
-      expect(song.typeLine, 'Action, Song');
-    });
+        expect(elsa.typeLine, 'Character - Storyborn, Hero, Queen, Sorcerer');
+        // A Song has no classifications, and so no dash.
+        expect(song.typeLine, 'Action, Song');
+      },
+    );
 
     test('appends keywords to the rules text', () async {
       // "Evasive" is printed on the card but is not spelled out in the text,
@@ -559,35 +563,43 @@ void main() {
       expect(anna.oracleText, contains('Evasive'));
     });
 
-    test('keeps the stats a character has and the move cost a location has',
-        () async {
-      final cards = await catalogWith().fetchCardsInSet('11');
-      final elsa = cards.firstWhere((c) => c.id == elsaId);
-      final palace = cards.firstWhere((c) => c.id == 'crd_palace');
+    test(
+      'keeps the stats a character has and the move cost a location has',
+      () async {
+        final cards = await catalogWith().fetchCardsInSet('11');
+        final elsa = cards.firstWhere((c) => c.id == elsaId);
+        final palace = cards.firstWhere((c) => c.id == 'crd_palace');
 
-      expect(elsa.extras['inkwell'], isTrue);
-      expect(elsa.extras['strength'], 2);
-      expect(elsa.extras['willpower'], 2);
-      expect(elsa.extras['lore'], 2);
-      expect(elsa.extras['classifications'],
-          <String>['Storyborn', 'Hero', 'Queen', 'Sorcerer']);
-      expect(elsa.extras['legalities'], <String, Object?>{'core': 'legal'});
+        expect(elsa.extras['inkwell'], isTrue);
+        expect(elsa.extras['strength'], 2);
+        expect(elsa.extras['willpower'], 2);
+        expect(elsa.extras['lore'], 2);
+        expect(elsa.extras['classifications'], <String>[
+          'Storyborn',
+          'Hero',
+          'Queen',
+          'Sorcerer',
+        ]);
+        expect(elsa.extras['legalities'], <String, Object?>{'core': 'legal'});
 
-      // A Location has a move cost and no strength at all, so the stat keys
-      // are absent rather than zero.
-      expect(palace.extras['moveCost'], 2);
-      expect(palace.extras.containsKey('strength'), isFalse);
-      expect(palace.artist, 'Jenna Gray');
-    });
+        // A Location has a move cost and no strength at all, so the stat keys
+        // are absent rather than zero.
+        expect(palace.extras['moveCost'], 2);
+        expect(palace.extras.containsKey('strength'), isFalse);
+        expect(palace.artist, 'Jenna Gray');
+      },
+    );
 
-    test('leaves a finish unpriced when the provider quotes only the other',
-        () async {
-      final cards = await catalogWith().fetchCardsInSet('11');
-      final anna = cards.firstWhere((c) => c.id == 'crd_anna1');
+    test(
+      'leaves a finish unpriced when the provider quotes only the other',
+      () async {
+        final cards = await catalogWith().fetchCardsInSet('11');
+        final anna = cards.firstWhere((c) => c.id == 'crd_anna1');
 
-      expect(anna.prices.priceFor(CardFinish.nonfoil), 1.5);
-      expect(anna.prices.priceFor(CardFinish.foil), isNull);
-    });
+        expect(anna.prices.priceFor(CardFinish.nonfoil), 1.5);
+        expect(anna.prices.priceFor(CardFinish.foil), isNull);
+      },
+    );
 
     test('turns an unparseable price into null rather than zero', () async {
       // A card the provider has no market for is unpriced: showing it as $0.00
@@ -625,10 +637,13 @@ void main() {
     test('orders a set by collector number', () async {
       final cards = await catalogWith().fetchCardsInSet('11');
 
-      expect(
-        cards.map((c) => c.collectorNumber),
-        <String>['1', '42', '125', '130', '204'],
-      );
+      expect(cards.map((c) => c.collectorNumber), <String>[
+        '1',
+        '42',
+        '125',
+        '130',
+        '204',
+      ]);
     });
 
     test('downloads the whole set in one request, not one per card', () async {
@@ -641,8 +656,10 @@ void main() {
       );
       // Nothing is fetched per card: the set response already holds every
       // field a row shows, prices included.
-      expect(requests.where((u) => RegExp(r'/cards/[^/]+$').hasMatch(u.path)),
-          isEmpty);
+      expect(
+        requests.where((u) => RegExp(r'/cards/[^/]+$').hasMatch(u.path)),
+        isEmpty,
+      );
       // The second call is the one-off set-list read that teaches the adapter
       // the provider's own casing for set codes. It happens at most once per
       // process, never per set and never per card.
@@ -661,21 +678,25 @@ void main() {
       expect(requests.where((u) => u.path.endsWith('/sets')), hasLength(1));
     });
 
-    test('still resolves a numbered set with no help from the set list',
-        () async {
-      // The fallback matters when the list cannot be read at all: a numbered
-      // code is the same string in either casing, so it must not become
-      // undownloadable just because the lookup failed.
-      final requests = <Uri>[];
-      final cards = await catalogWith(setsBody: null, requests: requests)
-          .fetchCardsInSet('11');
+    test(
+      'still resolves a numbered set with no help from the set list',
+      () async {
+        // The fallback matters when the list cannot be read at all: a numbered
+        // code is the same string in either casing, so it must not become
+        // undownloadable just because the lookup failed.
+        final requests = <Uri>[];
+        final cards = await catalogWith(
+          setsBody: null,
+          requests: requests,
+        ).fetchCardsInSet('11');
 
-      expect(cards, isNotEmpty);
-      expect(
-        requests.any((u) => RegExp(r'/sets/11/cards$').hasMatch(u.path)),
-        isTrue,
-      );
-    });
+        expect(cards, isNotEmpty);
+        expect(
+          requests.any((u) => RegExp(r'/sets/11/cards$').hasMatch(u.path)),
+          isTrue,
+        );
+      },
+    );
 
     test('answers empty for a set the provider does not hold', () async {
       expect(await catalogWith().fetchCardsInSet('nope'), isEmpty);
@@ -696,12 +717,14 @@ void main() {
       expect(card.typeLine, 'Character - Storyborn, Hero, Queen, Sorcerer');
     });
 
-    test('dates a card fetched by id, because the card carries its own date',
-        () async {
-      final card = await catalogWith().fetchCardById(elsaId);
+    test(
+      'dates a card fetched by id, because the card carries its own date',
+      () async {
+        final card = await catalogWith().fetchCardById(elsaId);
 
-      expect(card!.releasedAt, DateTime(2026, 2, 13));
-    });
+        expect(card!.releasedAt, DateTime(2026, 2, 13));
+      },
+    );
 
     test('answers null for a card the provider does not hold', () async {
       expect(await catalogWith().fetchCardById('crd_missing'), isNull);
@@ -714,14 +737,18 @@ void main() {
       final results = await catalogWith(requests: requests).search('elsa');
 
       // Results arrive as full cards, so a hit is showable as it lands.
-      expect(results.map((c) => c.name),
-          <String>['Elsa – Concerned Sister', 'Elsa – Snow Queen']);
+      expect(results.map((c) => c.name), <String>[
+        'Elsa – Concerned Sister',
+        'Elsa – Snow Queen',
+      ]);
       expect(results.first.rarity, 'Uncommon');
       expect(results.first.prices.priceFor(CardFinish.nonfoil), 0.12);
       // The search call itself is the only request: no hit is re-fetched by id.
-      final perCard = requests.where((u) =>
-          RegExp(r'/cards/[^/]+$').hasMatch(u.path) &&
-          !u.path.endsWith('/cards/search'));
+      final perCard = requests.where(
+        (u) =>
+            RegExp(r'/cards/[^/]+$').hasMatch(u.path) &&
+            !u.path.endsWith('/cards/search'),
+      );
       expect(perCard, isEmpty);
       expect(requests, hasLength(1));
     });
@@ -733,16 +760,16 @@ void main() {
 
       expect(results, hasLength(2));
       expect(results.first.oracleId, isNot(results.last.oracleId));
-      expect(results.last.oracleId,
-          TcgCard.normaliseName('Elsa – Snow Queen'));
+      expect(results.last.oracleId, TcgCard.normaliseName('Elsa – Snow Queen'));
     });
 
     test('asks the provider for the term it searches', () async {
       final requests = <Uri>[];
       await catalogWith(requests: requests).search('elsa');
 
-      final search =
-          requests.firstWhere((u) => u.path.endsWith('/cards/search'));
+      final search = requests.firstWhere(
+        (u) => u.path.endsWith('/cards/search'),
+      );
       expect(search.queryParameters['q'], 'elsa');
     });
 
@@ -763,8 +790,10 @@ void main() {
     test('reports none, because Lorcast reprints across sets', () async {
       // The repository falls back to the local cache, which keys reprints by
       // the oracle id this catalogue writes onto each card.
-      expect(await catalogWith().fetchPrintingsOf('elsa concerned sister'),
-          isEmpty);
+      expect(
+        await catalogWith().fetchPrintingsOf('elsa concerned sister'),
+        isEmpty,
+      );
     });
   });
 
@@ -792,10 +821,10 @@ void main() {
 
   group('game vocabulary', () {
     test('offers the two finishes a Lorcana collector sorts by', () {
-      expect(
-        CardGame.lorcana.finishes,
-        <CardFinish>[CardFinish.nonfoil, CardFinish.foil],
-      );
+      expect(CardGame.lorcana.finishes, <CardFinish>[
+        CardFinish.nonfoil,
+        CardFinish.foil,
+      ]);
     });
 
     test('buckets an ink the provider does not name as uninked', () async {

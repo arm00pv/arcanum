@@ -9,15 +9,15 @@ import 'package:arcanum/widgets/mana_pips.dart';
 
 /// A Yu-Gi-Oh! printing, which is the only provider that publishes a shorthand.
 TcgCard ygoCard({String? rarityCode, String rarity = 'Ultra Rare'}) => TcgCard(
-      game: CardGame.yugioh,
-      id: '89631139:lob:001:ultra-rare',
-      setCode: 'lob',
-      setName: 'Legend of Blue Eyes White Dragon',
-      name: 'Blue-Eyes White Dragon',
-      collectorNumber: '001',
-      rarity: rarity,
-      extras: <String, Object?>{'rarityCode': ?rarityCode},
-    );
+  game: CardGame.yugioh,
+  id: '89631139:lob:001:ultra-rare',
+  setCode: 'lob',
+  setName: 'Legend of Blue Eyes White Dragon',
+  name: 'Blue-Eyes White Dragon',
+  collectorNumber: '001',
+  rarity: rarity,
+  extras: <String, Object?>{'rarityCode': ?rarityCode},
+);
 
 Future<void> pumpBadge(WidgetTester tester, RarityBadge badge) async {
   await tester.pumpWidget(
@@ -57,7 +57,9 @@ void main() {
   });
 
   group('RarityBadge', () {
-    testWidgets('shows the provider shorthand when there is one', (tester) async {
+    testWidgets('shows the provider shorthand when there is one', (
+      tester,
+    ) async {
       await pumpBadge(
         tester,
         RarityBadge(
@@ -74,8 +76,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('falls back to the tier letter without a shorthand',
-        (tester) async {
+    testWidgets('falls back to the tier letter without a shorthand', (
+      tester,
+    ) async {
       await pumpBadge(
         tester,
         const RarityBadge(rarity: CardRarity.mythic, compact: true),
@@ -85,8 +88,9 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('spells the rarity out in the wide form, code or not',
-        (tester) async {
+    testWidgets('spells the rarity out in the wide form, code or not', (
+      tester,
+    ) async {
       await pumpBadge(
         tester,
         const RarityBadge(rarity: CardRarity.rare, code: 'UR'),
@@ -106,10 +110,7 @@ void main() {
         CardRarity.bonus: 'B',
         CardRarity.unknown: '?',
       }.entries) {
-        await pumpBadge(
-          tester,
-          RarityBadge(rarity: entry.key, compact: true),
-        );
+        await pumpBadge(tester, RarityBadge(rarity: entry.key, compact: true));
         expect(find.text(entry.value), findsOneWidget);
       }
     });

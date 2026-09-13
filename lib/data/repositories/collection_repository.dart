@@ -83,22 +83,22 @@ class CollectionOverview {
 
   /// An empty overview for a game that has nothing in it yet.
   factory CollectionOverview.empty(CardGame game) => CollectionOverview(
-        game: game,
-        entries: const [],
-        totalValue: 0,
-        totalCost: 0,
-        totalCards: 0,
-        uniqueCards: 0,
-        valueBySet: const {},
-        valueByCategory: const {},
-        valueByRarity: const {},
-        valueByFinish: const {},
-        topHoldings: const [],
-        movers: const [],
-        pricedCards: 0,
-        unpricedCards: 0,
-        concentration: 0,
-      );
+    game: game,
+    entries: const [],
+    totalValue: 0,
+    totalCost: 0,
+    totalCards: 0,
+    uniqueCards: 0,
+    valueBySet: const {},
+    valueByCategory: const {},
+    valueByRarity: const {},
+    valueByFinish: const {},
+    topHoldings: const [],
+    movers: const [],
+    pricedCards: 0,
+    unpricedCards: 0,
+    concentration: 0,
+  );
 }
 
 /// Owns one game's collection: what the user has, what it is worth, and how it
@@ -115,12 +115,12 @@ class CollectionRepository {
     required PriceHistoryService history,
     required CatalogRepository catalogs,
     required AppSettings settings,
-  })  : _catalogs = catalogs,
-        _col = collectionDao,
-        _cat = catalogDao,
-        _hist = historyDao,
-        _history = history,
-        _settings = settings;
+  }) : _catalogs = catalogs,
+       _col = collectionDao,
+       _cat = catalogDao,
+       _hist = historyDao,
+       _history = history,
+       _settings = settings;
 
   /// The game this repository is scoped to.
   final CardGame game;
@@ -144,19 +144,18 @@ class CollectionRepository {
     DateTime? purchaseDate,
     String binder = '',
     String? notes,
-  }) =>
-      _col.addOrMerge(
-        game: game,
-        cardId: cardId,
-        finish: finish ?? game.finishes.first,
-        condition: condition ?? CardCondition.nearMint,
-        language: language,
-        quantity: quantity,
-        purchasePrice: purchasePrice,
-        purchaseDate: purchaseDate,
-        binder: binder,
-        notes: notes,
-      );
+  }) => _col.addOrMerge(
+    game: game,
+    cardId: cardId,
+    finish: finish ?? game.finishes.first,
+    condition: condition ?? CardCondition.nearMint,
+    language: language,
+    quantity: quantity,
+    purchasePrice: purchasePrice,
+    purchaseDate: purchaseDate,
+    binder: binder,
+    notes: notes,
+  );
 
   Future<void> setQuantity(int entryId, int quantity) =>
       _col.setQuantity(entryId, quantity);
@@ -168,8 +167,9 @@ class CollectionRepository {
   Future<List<CollectionEntry>> entriesForCard(String cardId) =>
       _col.forCard(game, cardId);
 
-  Future<Map<String, List<CollectionEntry>>> entriesForCards(List<String> ids) =>
-      _col.forCards(game, ids);
+  Future<Map<String, List<CollectionEntry>>> entriesForCards(
+    List<String> ids,
+  ) => _col.forCards(game, ids);
 
   Future<List<String>> binders() => _col.binders(game);
 
@@ -216,7 +216,10 @@ class CollectionRepository {
     final entries = await _col.all(game);
     if (entries.isEmpty) return CollectionOverview.empty(game);
 
-    final cards = await _cat.cardsByIds(game, entries.map((e) => e.cardId).toSet().toList());
+    final cards = await _cat.cardsByIds(
+      game,
+      entries.map((e) => e.cardId).toSet().toList(),
+    );
 
     double totalValue = 0;
     double totalCost = 0;
@@ -244,16 +247,22 @@ class CollectionRepository {
         priced += e.quantity;
         final value = unit * e.quantity;
         totalValue += value;
-        final setName = card!.setName.isEmpty ? card.setCode.toUpperCase() : card.setName;
+        final setName = card!.setName.isEmpty
+            ? card.setCode.toUpperCase()
+            : card.setName;
         bySet.update(setName, (x) => x + value, ifAbsent: () => value);
         // Magic buckets by colour identity, Pokémon by energy type and
         // Yu-Gi-Oh! by monster attribute; the latter two both carry their
         // category in `colors`, so only Magic needs the other list.
         final bucket = game.dominantBucket(
-            game == CardGame.mtg ? card.colorIdentity : card.colors);
+          game == CardGame.mtg ? card.colorIdentity : card.colors,
+        );
         byCategory.update(bucket, (x) => x + value, ifAbsent: () => value);
-        byRarity.update(CardRarity.fromCode(card.rarity), (x) => x + value,
-            ifAbsent: () => value);
+        byRarity.update(
+          CardRarity.fromCode(card.rarity),
+          (x) => x + value,
+          ifAbsent: () => value,
+        );
         byFinish.update(e.finish, (x) => x + value, ifAbsent: () => value);
       }
       final cost = e.totalCost;
@@ -312,19 +321,25 @@ class CollectionRepository {
       final first = series[series.length - 8].price;
       if (first <= 0) continue;
       final pct = (series.last.price / first - 1) * 100.0;
-      out.add(ValuedEntry(
-        entry: v.entry,
-        unitValue: v.unitValue,
-        dayChangePercent: pct,
-      ));
+      out.add(
+        ValuedEntry(
+          entry: v.entry,
+          unitValue: v.unitValue,
+          dayChangePercent: pct,
+        ),
+      );
     }
-    out.sort((a, b) =>
-        (b.dayChangePercent ?? 0).abs().compareTo((a.dayChangePercent ?? 0).abs()));
+    out.sort(
+      (a, b) => (b.dayChangePercent ?? 0).abs().compareTo(
+        (a.dayChangePercent ?? 0).abs(),
+      ),
+    );
     return out.take(10).toList();
   }
 
   static Map<String, double> _sortedByValue(Map<String, double> m) {
-    final entries = m.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final entries = m.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     return {for (final e in entries) e.key: e.value};
   }
 
@@ -350,7 +365,10 @@ class CollectionRepository {
       // over when the catalogue captured one.
       externalId: card?.extras['tcgplayerId']?.toString(),
     );
-    return analyzeSeries(series, windowDays: _effectiveWindow(series, windowDays));
+    return analyzeSeries(
+      series,
+      windowDays: _effectiveWindow(series, windowDays),
+    );
   }
 
   /// Sizes the analysis window to the data actually available.
@@ -376,11 +394,18 @@ class CollectionRepository {
     int windowDays = 400,
   }) async {
     final wanted = finish ?? game.finishes.first;
-    final seriesMap =
-        await _hist.seriesForCards(game, cardIds, finish: wanted, days: windowDays);
+    final seriesMap = await _hist.seriesForCards(
+      game,
+      cardIds,
+      finish: wanted,
+      days: windowDays,
+    );
     return {
       for (final e in seriesMap.entries)
-        e.key: analyzeSeries(e.value, windowDays: _effectiveWindow(e.value, windowDays)),
+        e.key: analyzeSeries(
+          e.value,
+          windowDays: _effectiveWindow(e.value, windowDays),
+        ),
     };
   }
 
@@ -394,7 +419,9 @@ class CollectionRepository {
     if (!force && last != null) {
       final now = DateTime.now();
       final sameDay =
-          last.year == now.year && last.month == now.month && last.day == now.day;
+          last.year == now.year &&
+          last.month == now.month &&
+          last.day == now.day;
       if (sameDay) return 0;
     }
 
@@ -415,7 +442,10 @@ class CollectionRepository {
       // skipping the day and leaving a hole in the series.
     }
 
-    final cards = await _cat.cardsByIds(game, entries.map((e) => e.cardId).toSet().toList());
+    final cards = await _cat.cardsByIds(
+      game,
+      entries.map((e) => e.cardId).toSet().toList(),
+    );
 
     var written = 0;
     final byFinish = <CardFinish, Map<String, double?>>{};
@@ -479,8 +509,10 @@ class CollectionRepository {
     final values = o.entries.map((e) => e.totalValue ?? 0).toList();
     final mean = values.reduce((a, b) => a + b) / values.length;
     final variance =
-        values.map((v) => math.pow(v - mean, 2).toDouble()).reduce((a, b) => a + b) /
-            values.length;
+        values
+            .map((v) => math.pow(v - mean, 2).toDouble())
+            .reduce((a, b) => a + b) /
+        values.length;
     return math.sqrt(variance);
   }
 }

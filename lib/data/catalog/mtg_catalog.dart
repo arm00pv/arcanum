@@ -24,7 +24,11 @@ class MtgCatalog implements CardCatalog {
       final sets = await _client.fetchAllSets();
       return sets.toTcgSets();
     } on ScryfallException catch (e) {
-      throw CatalogException(e.message, statusCode: e.statusCode, source: sourceName);
+      throw CatalogException(
+        e.message,
+        statusCode: e.statusCode,
+        source: sourceName,
+      );
     }
   }
 
@@ -34,10 +38,17 @@ class MtgCatalog implements CardCatalog {
     void Function(int done, int total)? onProgress,
   }) async {
     try {
-      final cards = await _client.fetchCardsInSet(setCode, onProgress: onProgress);
+      final cards = await _client.fetchCardsInSet(
+        setCode,
+        onProgress: onProgress,
+      );
       return cards.toTcgCards();
     } on ScryfallException catch (e) {
-      throw CatalogException(e.message, statusCode: e.statusCode, source: sourceName);
+      throw CatalogException(
+        e.message,
+        statusCode: e.statusCode,
+        source: sourceName,
+      );
     }
   }
 
@@ -48,7 +59,11 @@ class MtgCatalog implements CardCatalog {
       return card?.toTcgCard();
     } on ScryfallException catch (e) {
       if (e.isNotFound) return null;
-      throw CatalogException(e.message, statusCode: e.statusCode, source: sourceName);
+      throw CatalogException(
+        e.message,
+        statusCode: e.statusCode,
+        source: sourceName,
+      );
     }
   }
 
@@ -61,7 +76,11 @@ class MtgCatalog implements CardCatalog {
       return result.cards.take(limit).toList().toTcgCards();
     } on ScryfallException catch (e) {
       if (e.isNotFound) return const [];
-      throw CatalogException(e.message, statusCode: e.statusCode, source: sourceName);
+      throw CatalogException(
+        e.message,
+        statusCode: e.statusCode,
+        source: sourceName,
+      );
     }
   }
 
@@ -72,7 +91,11 @@ class MtgCatalog implements CardCatalog {
       return cards.toTcgCards();
     } on ScryfallException catch (e) {
       if (e.isNotFound) return const [];
-      throw CatalogException(e.message, statusCode: e.statusCode, source: sourceName);
+      throw CatalogException(
+        e.message,
+        statusCode: e.statusCode,
+        source: sourceName,
+      );
     }
   }
 
@@ -82,7 +105,10 @@ class MtgCatalog implements CardCatalog {
     final out = <TcgCard>[];
     // Scryfall's bulk collection endpoint caps at 75 identifiers per call.
     for (var i = 0; i < cards.length; i += 75) {
-      final chunk = cards.sublist(i, i + 75 > cards.length ? cards.length : i + 75);
+      final chunk = cards.sublist(
+        i,
+        i + 75 > cards.length ? cards.length : i + 75,
+      );
       final identifiers = [
         for (final c in chunk)
           (setCode: c.setCode, collectorNumber: c.collectorNumber),

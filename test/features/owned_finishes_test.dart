@@ -10,16 +10,15 @@ CollectionEntry entry({
   CardCondition condition = CardCondition.nearMint,
   String binder = '',
   int quantity = 1,
-}) =>
-    CollectionEntry(
-      cardId: 'printing-1',
-      finish: finish,
-      condition: condition,
-      binder: binder,
-      quantity: quantity,
-      createdAt: DateTime(2026, 1, 1),
-      updatedAt: DateTime(2026, 1, 1),
-    );
+}) => CollectionEntry(
+  cardId: 'printing-1',
+  finish: finish,
+  condition: condition,
+  binder: binder,
+  quantity: quantity,
+  createdAt: DateTime(2026, 1, 1),
+  updatedAt: DateTime(2026, 1, 1),
+);
 
 void main() {
   group('missingFinishes', () {
@@ -37,20 +36,19 @@ void main() {
         entry(finish: CardFinish.nonfoil),
         entry(finish: CardFinish.foil),
       ];
-      expect(
-        missingFinishes(entries, CardGame.mtg),
-        <CardFinish>[CardFinish.etched],
-      );
+      expect(missingFinishes(entries, CardGame.mtg), <CardFinish>[
+        CardFinish.etched,
+      ]);
     });
 
     test('puts non-foil first even when only foil is owned', () {
       // Non-foil is the default finish everywhere else in the app, so it leads
       // the suggestions rather than the order the entries happen to arrive in.
       final entries = <CollectionEntry>[entry(finish: CardFinish.foil)];
-      expect(
-        missingFinishes(entries, CardGame.mtg),
-        <CardFinish>[CardFinish.nonfoil, CardFinish.etched],
-      );
+      expect(missingFinishes(entries, CardGame.mtg), <CardFinish>[
+        CardFinish.nonfoil,
+        CardFinish.etched,
+      ]);
     });
 
     test('never repeats a finish owned across several stacks', () {
@@ -61,10 +59,10 @@ void main() {
         entry(finish: CardFinish.nonfoil, binder: 'Binder B'),
         entry(finish: CardFinish.nonfoil, condition: CardCondition.played),
       ];
-      expect(
-        missingFinishes(entries, CardGame.mtg),
-        <CardFinish>[CardFinish.foil, CardFinish.etched],
-      );
+      expect(missingFinishes(entries, CardGame.mtg), <CardFinish>[
+        CardFinish.foil,
+        CardFinish.etched,
+      ]);
     });
 
     test('is empty once the game has nothing left to offer', () {
@@ -82,10 +80,9 @@ void main() {
         <CardFinish>[CardFinish.nonfoil, CardFinish.foil],
       );
       expect(
-        missingFinishes(
-          <CollectionEntry>[entry(finish: CardFinish.nonfoil)],
-          CardGame.yugioh,
-        ),
+        missingFinishes(<CollectionEntry>[
+          entry(finish: CardFinish.nonfoil),
+        ], CardGame.yugioh),
         <CardFinish>[CardFinish.foil],
       );
     });
@@ -96,13 +93,10 @@ void main() {
         CardGame.pokemon.finishes,
       );
       expect(
-        missingFinishes(
-          <CollectionEntry>[
-            entry(finish: CardFinish.holofoil),
-            entry(finish: CardFinish.firstEdition),
-          ],
-          CardGame.pokemon,
-        ),
+        missingFinishes(<CollectionEntry>[
+          entry(finish: CardFinish.holofoil),
+          entry(finish: CardFinish.firstEdition),
+        ], CardGame.pokemon),
         <CardFinish>[
           CardFinish.nonfoil,
           CardFinish.reverseHolofoil,
@@ -115,16 +109,18 @@ void main() {
       // A Magic entry imported from a file written for another game can carry a
       // finish Magic has no concept of. It must not consume a real suggestion.
       final entries = <CollectionEntry>[entry(finish: CardFinish.holofoil)];
-      expect(
-        missingFinishes(entries, CardGame.mtg),
-        <CardFinish>[CardFinish.nonfoil, CardFinish.foil, CardFinish.etched],
-      );
+      expect(missingFinishes(entries, CardGame.mtg), <CardFinish>[
+        CardFinish.nonfoil,
+        CardFinish.foil,
+        CardFinish.etched,
+      ]);
     });
 
     test('accepts any iterable, not just a list', () {
       expect(
         missingFinishes(
-          <CollectionEntry>[entry(finish: CardFinish.nonfoil)].where((_) => true),
+          <CollectionEntry>[entry(finish: CardFinish.nonfoil)]
+              .where((_) => true),
           CardGame.mtg,
         ),
         <CardFinish>[CardFinish.foil, CardFinish.etched],

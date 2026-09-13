@@ -52,8 +52,10 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 /// download is a background cost the user never waits on twice.
 class YgoCatalog implements CardCatalog {
   YgoCatalog({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: _base,
               connectTimeout: const Duration(seconds: 12),
               // A large set is a megabyte of JSON in one response.
@@ -62,7 +64,8 @@ class YgoCatalog implements CardCatalog {
                 'Accept': 'application/json',
                 'User-Agent': 'Arcanum/1.0 (+https://github.com/arcanum)',
               },
-            ));
+            ),
+          );
 
   static const _base = 'https://db.ygoprodeck.com/api/v7';
 
@@ -204,21 +207,21 @@ class YgoCatalog implements CardCatalog {
   }
 
   TcgSet _tcgSetOf(_YgoSet set) => TcgSet(
-        game: CardGame.yugioh,
-        // The set's own code is its identity here: YGOPRODeck publishes no
-        // numeric set id, and every other layer already keys sets by code.
-        id: set.code,
-        code: set.code,
-        name: set.name,
-        setType: _setType,
-        releasedAt: set.releasedAt,
-        cardCount: set.cardCount,
-        // YGOPRODeck serves a raster JPG set image or nothing at all; there is
-        // no SVG symbol in the payload, so the UI draws its own glyph.
-        iconSvgUri: null,
-        logoUri: set.imageUrl,
-        collectorNumberStart: 1,
-      );
+    game: CardGame.yugioh,
+    // The set's own code is its identity here: YGOPRODeck publishes no
+    // numeric set id, and every other layer already keys sets by code.
+    id: set.code,
+    code: set.code,
+    name: set.name,
+    setType: _setType,
+    releasedAt: set.releasedAt,
+    cardCount: set.cardCount,
+    // YGOPRODeck serves a raster JPG set image or nothing at all; there is
+    // no SVG symbol in the payload, so the UI draws its own glyph.
+    iconSvgUri: null,
+    logoUri: set.imageUrl,
+    collectorNumberStart: 1,
+  );
 
   /// Resolves a set code - or a set name - to its indexed record.
   ///
@@ -307,7 +310,9 @@ class YgoCatalog implements CardCatalog {
     // code the id asked for rather than as a miss.
     final candidates = _printingsOf(card, index: index);
     if (candidates.isEmpty) return null;
-    return setCode.isEmpty ? candidates.first : candidates.first.copyWith(setCode: setCode);
+    return setCode.isEmpty
+        ? candidates.first
+        : candidates.first.copyWith(setCode: setCode);
   }
 
   @override
@@ -328,10 +333,7 @@ class YgoCatalog implements CardCatalog {
     final seen = <String>{};
     // Name matches lead: a user typing a card's name wants that card, not the
     // hundred cards whose effect mentions it.
-    for (final card in <YgoCard>[
-      ...?namePage?.cards,
-      ...?textPage?.cards,
-    ]) {
+    for (final card in <YgoCard>[...?namePage?.cards, ...?textPage?.cards]) {
       for (final printing in _printingsOf(card, index: index)) {
         if (!seen.add(printing.id)) continue;
         out.add(printing);
@@ -475,12 +477,12 @@ class YgoCatalog implements CardCatalog {
         _cardFor(
           card,
           row,
-          setCode: (within ?? index[row.name.toLowerCase()])?.code ??
+          setCode:
+              (within ?? index[row.name.toLowerCase()])?.code ??
               _codeOf(row.code),
-          setName: row.name.isNotEmpty
-              ? row.name
-              : (within?.name ?? ''),
-          releasedAt: within?.releasedAt ?? index[row.name.toLowerCase()]?.releasedAt,
+          setName: row.name.isNotEmpty ? row.name : (within?.name ?? ''),
+          releasedAt:
+              within?.releasedAt ?? index[row.name.toLowerCase()]?.releasedAt,
         ),
     ];
   }
@@ -710,7 +712,10 @@ class YgoCatalog implements CardCatalog {
   /// default valuation uses. The foil finish is left unpriced rather than filled
   /// in with the same number: the provider does not know what a foil copy sells
   /// for, and a duplicated figure would claim it does.
-  static TcgPrices _pricesOf(YgoCardPrices? prices, {String printingPrice = ''}) {
+  static TcgPrices _pricesOf(
+    YgoCardPrices? prices, {
+    String printingPrice = '',
+  }) {
     final perPrinting = _money(printingPrice);
     final usd = perPrinting ?? prices?.bestUsd;
     final vendors = prices;
@@ -718,9 +723,7 @@ class YgoCatalog implements CardCatalog {
     return TcgPrices(
       // A card the provider holds no data for has no key at all, so an unpriced
       // card is empty rather than priced at zero.
-      byFinish: {
-        CardFinish.nonfoil.code: ?usd,
-      },
+      byFinish: {CardFinish.nonfoil.code: ?usd},
       secondary: _vendorsOf(vendors),
     );
   }
@@ -842,7 +845,9 @@ class YgoCatalog implements CardCatalog {
   }
 
   /// Retries transient failures with backoff.
-  Future<Response<dynamic>> _retry(Future<Response<dynamic>> Function() call) async {
+  Future<Response<dynamic>> _retry(
+    Future<Response<dynamic>> Function() call,
+  ) async {
     var attempt = 0;
     while (true) {
       try {
@@ -932,13 +937,13 @@ class _YgoSet {
   final String? imageUrl;
 
   _YgoSet withCode(String value) => _YgoSet(
-        code: value,
-        providerCode: providerCode,
-        name: name,
-        cardCount: cardCount,
-        releasedAt: releasedAt,
-        imageUrl: imageUrl,
-      );
+    code: value,
+    providerCode: providerCode,
+    name: name,
+    cardCount: cardCount,
+    releasedAt: releasedAt,
+    imageUrl: imageUrl,
+  );
 
   static String _text(Object? value) {
     if (value is String) return value;

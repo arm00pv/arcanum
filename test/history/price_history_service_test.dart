@@ -52,23 +52,24 @@ void main() {
       await db.close();
     });
 
-    test('the companion is preferred over the game-specific fallbacks',
-        () async {
-      // Order is not cosmetic: the first source that answers with a usable
-      // series is the one the chart is drawn from, and it is the one whose
-      // points are stored alongside a source label.
-      final (service, db) = await serviceWith(<String, Object>{});
+    test(
+      'the companion is preferred over the game-specific fallbacks',
+      () async {
+        // Order is not cosmetic: the first source that answers with a usable
+        // series is the one the chart is drawn from, and it is the one whose
+        // points are stored alongside a source label.
+        final (service, db) = await serviceWith(<String, Object>{});
 
-      expect(service.providersFor(CardGame.mtg).first.id, 'backfill');
-      // One sampler source serves every other game.
-      expect(service.providersFor(CardGame.pokemon).first.id, 'companion');
-      expect(service.providersFor(CardGame.lorcana).first.id, 'companion');
-      expect(service.providersFor(CardGame.yugioh).first.id, 'companion');
-      await db.close();
-    });
+        expect(service.providersFor(CardGame.mtg).first.id, 'backfill');
+        // One sampler source serves every other game.
+        expect(service.providersFor(CardGame.pokemon).first.id, 'companion');
+        expect(service.providersFor(CardGame.lorcana).first.id, 'companion');
+        expect(service.providersFor(CardGame.yugioh).first.id, 'companion');
+        await db.close();
+      },
+    );
 
-    test('Magic asks its own endpoint and the rest ask the shared one',
-        () async {
+    test('Magic asks its own endpoint and the rest ask the shared one', () async {
       // Magic's database is rebuilt from MTGJSON and is a different thing from
       // the daily samplers, so the two are configured separately and neither
       // may be sent the other's address.
@@ -77,7 +78,8 @@ void main() {
         'pokemon_history_endpoint': 'https://samplers.example/arcanum',
       });
 
-      final magic = service.providersFor(CardGame.mtg).first as BackfillPackSource;
+      final magic =
+          service.providersFor(CardGame.mtg).first as BackfillPackSource;
       final lorcana =
           service.providersFor(CardGame.lorcana).first as BackfillPackSource;
       final yugioh =
@@ -135,7 +137,10 @@ void main() {
         'justtcg_key': 'test-key',
       });
 
-      final ids = service.providersFor(CardGame.lorcana).map((p) => p.id).toList();
+      final ids = service
+          .providersFor(CardGame.lorcana)
+          .map((p) => p.id)
+          .toList();
       expect(ids.first, 'companion');
       expect(ids, contains('justtcg'));
       await db.close();

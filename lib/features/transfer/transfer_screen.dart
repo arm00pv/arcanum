@@ -130,8 +130,8 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
               data.isEmpty
                   ? 'There is nothing to export yet.'
                   : 'This writes ${Fmt.count(data.entries.length)} stacks, '
-                      '${Fmt.count(data.totalCards)} cards, worth '
-                      '${Fmt.moneyAdaptive(data.totalValue)}.',
+                        '${Fmt.count(data.totalCards)} cards, worth '
+                        '${Fmt.moneyAdaptive(data.totalValue)}.',
               style: context.t.bodySmall?.copyWith(color: c.textSecondary),
             ),
             loading: () => const LoadingShimmer(width: 220, height: 14),
@@ -225,7 +225,10 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
           ),
           if (_error != null) ...<Widget>[
             const SizedBox(height: 12),
-            Text(_error!, style: context.t.bodySmall?.copyWith(color: c.negative)),
+            Text(
+              _error!,
+              style: context.t.bodySmall?.copyWith(color: c.negative),
+            ),
           ],
           if (plan != null) ...<Widget>[
             const SizedBox(height: 16),
@@ -238,7 +241,9 @@ class _TransferScreenState extends ConsumerState<TransferScreen> {
             ],
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: _busy || plan.ready.isEmpty ? null : () => _apply(game),
+              onPressed: _busy || plan.ready.isEmpty
+                  ? null
+                  : () => _apply(game),
               icon: const Icon(Icons.download_done_rounded, size: 18),
               label: Text(
                 plan.ready.isEmpty

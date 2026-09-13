@@ -51,7 +51,8 @@ class CollectionEntry {
   bool get isFoil => finish != CardFinish.nonfoil;
 
   /// Cost basis for this whole stack, or null when no purchase price is known.
-  double? get totalCost => purchasePrice == null ? null : purchasePrice! * quantity;
+  double? get totalCost =>
+      purchasePrice == null ? null : purchasePrice! * quantity;
 
   CollectionEntry copyWith({
     int? id,
@@ -74,9 +75,12 @@ class CollectionEntry {
       condition: condition ?? this.condition,
       language: language ?? this.language,
       quantity: quantity ?? this.quantity,
-      purchasePrice:
-          purchasePrice == _unset ? this.purchasePrice : purchasePrice as double?,
-      purchaseDate: purchaseDate == _unset ? this.purchaseDate : purchaseDate as DateTime?,
+      purchasePrice: purchasePrice == _unset
+          ? this.purchasePrice
+          : purchasePrice as double?,
+      purchaseDate: purchaseDate == _unset
+          ? this.purchaseDate
+          : purchaseDate as DateTime?,
       binder: binder ?? this.binder,
       notes: notes == _unset ? this.notes : notes as String?,
       createdAt: createdAt ?? this.createdAt,
@@ -87,36 +91,40 @@ class CollectionEntry {
   static const _unset = Object();
 
   Map<String, Object?> toRow() => {
-        if (id != null) 'id': id,
-        'card_id': cardId,
-        'finish': finish.code,
-        'condition': condition.code,
-        'language': language,
-        'quantity': quantity,
-        'purchase_price': purchasePrice,
-        'purchase_date': purchaseDate?.millisecondsSinceEpoch,
-        'binder': binder,
-        'notes': notes,
-        'created_at': createdAt.millisecondsSinceEpoch,
-        'updated_at': updatedAt.millisecondsSinceEpoch,
-      };
+    if (id != null) 'id': id,
+    'card_id': cardId,
+    'finish': finish.code,
+    'condition': condition.code,
+    'language': language,
+    'quantity': quantity,
+    'purchase_price': purchasePrice,
+    'purchase_date': purchaseDate?.millisecondsSinceEpoch,
+    'binder': binder,
+    'notes': notes,
+    'created_at': createdAt.millisecondsSinceEpoch,
+    'updated_at': updatedAt.millisecondsSinceEpoch,
+  };
 
   factory CollectionEntry.fromRow(Map<String, Object?> r) => CollectionEntry(
-        id: r['id'] as int?,
-        cardId: r['card_id'] as String,
-        finish: CardFinish.fromCode(r['finish'] as String?),
-        condition: CardCondition.fromCode(r['condition'] as String?),
-        language: (r['language'] as String?) ?? 'en',
-        quantity: (r['quantity'] as int?) ?? 1,
-        purchasePrice: (r['purchase_price'] as num?)?.toDouble(),
-        purchaseDate: r['purchase_date'] == null
-            ? null
-            : DateTime.fromMillisecondsSinceEpoch(r['purchase_date'] as int),
-        binder: (r['binder'] as String?) ?? '',
-        notes: r['notes'] as String?,
-        createdAt: DateTime.fromMillisecondsSinceEpoch((r['created_at'] as int?) ?? 0),
-        updatedAt: DateTime.fromMillisecondsSinceEpoch((r['updated_at'] as int?) ?? 0),
-      );
+    id: r['id'] as int?,
+    cardId: r['card_id'] as String,
+    finish: CardFinish.fromCode(r['finish'] as String?),
+    condition: CardCondition.fromCode(r['condition'] as String?),
+    language: (r['language'] as String?) ?? 'en',
+    quantity: (r['quantity'] as int?) ?? 1,
+    purchasePrice: (r['purchase_price'] as num?)?.toDouble(),
+    purchaseDate: r['purchase_date'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(r['purchase_date'] as int),
+    binder: (r['binder'] as String?) ?? '',
+    notes: r['notes'] as String?,
+    createdAt: DateTime.fromMillisecondsSinceEpoch(
+      (r['created_at'] as int?) ?? 0,
+    ),
+    updatedAt: DateTime.fromMillisecondsSinceEpoch(
+      (r['updated_at'] as int?) ?? 0,
+    ),
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -129,7 +137,8 @@ class CollectionEntry {
       other.binder == binder;
 
   @override
-  int get hashCode => Object.hash(id, cardId, finish, condition, language, binder);
+  int get hashCode =>
+      Object.hash(id, cardId, finish, condition, language, binder);
 }
 
 /// A collection entry joined with the live market value of one copy.
@@ -153,7 +162,8 @@ class ValuedEntry {
   final double? trendScore;
 
   /// Total value of the stack.
-  double? get totalValue => unitValue == null ? null : unitValue! * entry.quantity;
+  double? get totalValue =>
+      unitValue == null ? null : unitValue! * entry.quantity;
 
   /// Unrealised profit/loss for the stack, or null without a cost basis.
   double? get profit {

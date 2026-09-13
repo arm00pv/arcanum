@@ -11,7 +11,8 @@ import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/price_alert.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/domain/quant/quant.dart';
-import 'package:arcanum/features/alerts/alerts_screen.dart' show showSetAlertSheet;
+import 'package:arcanum/features/alerts/alerts_screen.dart'
+    show showSetAlertSheet;
 import 'package:arcanum/features/card/add_to_collection_sheet.dart';
 import 'package:arcanum/features/card/owned_finishes.dart';
 import 'package:arcanum/features/card/price_chart.dart';
@@ -78,8 +79,9 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
         children: [
           Positioned.fill(
             child: DecoratedBox(
-              decoration:
-                  BoxDecoration(gradient: AppTheme.backdrop(c, tint: game.accent)),
+              decoration: BoxDecoration(
+                gradient: AppTheme.backdrop(c, tint: game.accent),
+              ),
             ),
           ),
           AsyncValueView<TcgCard?>(
@@ -159,7 +161,8 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                           analytics: analyticsAsync,
                           history: historyAsync,
                           game: game,
-                          onRetry: () => ref.invalidate(cardAnalyticsProvider(_key)),
+                          onRetry: () =>
+                              ref.invalidate(cardAnalyticsProvider(_key)),
                         ),
                         const SizedBox(height: 18),
                         _CardTextSection(card: card),
@@ -222,7 +225,9 @@ class _Hero extends StatelessWidget {
                               child: SizedBox(
                                 width: 22,
                                 height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                             ),
                           ),
@@ -262,7 +267,9 @@ class _Header extends StatelessWidget {
               ManaCostRow(cost: card.manaCost, size: 17)
             else
               ManaPips(
-                symbols: [for (final t in card.colors) game.bucketFor(t).symbol],
+                symbols: [
+                  for (final t in card.colors) game.bucketFor(t).symbol,
+                ],
                 size: 17,
                 showColorless: card.colors.isEmpty,
               ),
@@ -280,12 +287,18 @@ class _Header extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _Meta(label: card.setCode.toUpperCase(), icon: Icons.style_outlined),
+            _Meta(
+              label: card.setCode.toUpperCase(),
+              icon: Icons.style_outlined,
+            ),
             _Meta(label: '#${card.collectorNumber}', icon: Icons.tag_rounded),
             if (card.artist != null)
               _Meta(label: card.artist!, icon: Icons.brush_outlined),
             if (card.releasedAt != null)
-              _Meta(label: Fmt.date(card.releasedAt), icon: Icons.event_outlined),
+              _Meta(
+                label: Fmt.date(card.releasedAt),
+                icon: Icons.event_outlined,
+              ),
             if (card.reserved)
               const _Meta(label: 'Reserved List', icon: Icons.lock_outline),
             if (card.extras['pokedex'] != null)
@@ -320,7 +333,10 @@ class _Meta extends StatelessWidget {
         children: [
           Icon(icon, size: 13, color: c.textTertiary),
           const SizedBox(width: 5),
-          Text(label, style: context.t.labelSmall?.copyWith(color: c.textSecondary)),
+          Text(
+            label,
+            style: context.t.labelSmall?.copyWith(color: c.textSecondary),
+          ),
         ],
       ),
     );
@@ -329,7 +345,11 @@ class _Meta extends StatelessWidget {
 
 /// The user's own copies, with inline quantity control.
 class _OwnedSection extends ConsumerWidget {
-  const _OwnedSection({required this.entries, required this.card, required this.finish});
+  const _OwnedSection({
+    required this.entries,
+    required this.card,
+    required this.finish,
+  });
 
   final List<CollectionEntry> entries;
   final TcgCard card;
@@ -354,8 +374,12 @@ class _OwnedSection extends ConsumerWidget {
               ),
             ),
             TextButton(
-              onPressed: () =>
-                  showAddToCollectionSheet(context, ref, card, initialFinish: finish),
+              onPressed: () => showAddToCollectionSheet(
+                context,
+                ref,
+                card,
+                initialFinish: finish,
+              ),
               child: const Text('Add'),
             ),
           ],
@@ -376,7 +400,10 @@ class _OwnedSection extends ConsumerWidget {
         showAddToCollectionSheet(context, ref, card, initialFinish: finish);
 
     Future<void> setQuantity(int id, int qty) async {
-      await ref.read(bootstrapProvider).collectionFor(game).setQuantity(id, qty);
+      await ref
+          .read(bootstrapProvider)
+          .collectionFor(game)
+          .setQuantity(id, qty);
       ref.invalidate(collectionOverviewProvider(game));
       ref.invalidate(ownedQuantityProvider(game));
       ref.invalidate(gameSummariesProvider);
@@ -388,7 +415,8 @@ class _OwnedSection extends ConsumerWidget {
       children: [
         SectionHeader(
           title: 'In your collection',
-          subtitle: '$total ${total == 1 ? 'copy' : 'copies'} across ${entries.length} '
+          subtitle:
+              '$total ${total == 1 ? 'copy' : 'copies'} across ${entries.length} '
               '${entries.length == 1 ? 'entry' : 'entries'}',
           padding: EdgeInsets.zero,
           trailing: TextButton.icon(
@@ -421,14 +449,18 @@ class _OwnedSection extends ConsumerWidget {
                             const SizedBox(width: 6),
                             Text(
                               e.condition.label,
-                              style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                              style: context.t.labelSmall?.copyWith(
+                                color: c.textTertiary,
+                              ),
                             ),
                           ],
                         ),
                         if (e.binder.isNotEmpty)
                           Text(
                             e.binder,
-                            style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                            style: context.t.labelSmall?.copyWith(
+                              color: c.textTertiary,
+                            ),
                           ),
                       ],
                     ),
@@ -436,13 +468,19 @@ class _OwnedSection extends ConsumerWidget {
                   IconButton(
                     visualDensity: VisualDensity.compact,
                     onPressed: () => setQuantity(e.id!, e.quantity - 1),
-                    icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+                    icon: const Icon(
+                      Icons.remove_circle_outline_rounded,
+                      size: 20,
+                    ),
                   ),
                   Text('${e.quantity}', style: context.t.titleMedium),
                   IconButton(
                     visualDensity: VisualDensity.compact,
                     onPressed: () => setQuantity(e.id!, e.quantity + 1),
-                    icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+                    icon: const Icon(
+                      Icons.add_circle_outline_rounded,
+                      size: 20,
+                    ),
                   ),
                 ],
               ),
@@ -557,8 +595,7 @@ class _MarketSection extends StatelessWidget {
     final selectedPrice = card.prices.priceFor(selected) ?? card.prices.from;
 
     final rows = <(String, double?)>[
-      for (final f in choices)
-        (f.label, card.prices.priceFor(f)),
+      for (final f in choices) (f.label, card.prices.priceFor(f)),
       ('Cardmarket (EUR)', card.prices.eur),
     ];
 
@@ -606,7 +643,9 @@ class _MarketSection extends StatelessWidget {
                       Expanded(
                         child: Text(
                           r.$1,
-                          style: context.t.bodySmall?.copyWith(color: c.textSecondary),
+                          style: context.t.bodySmall?.copyWith(
+                            color: c.textSecondary,
+                          ),
                         ),
                       ),
                       Text(
@@ -702,7 +741,7 @@ class _AnalyticsSection extends StatelessWidget {
           subtitle: analytics.value == null
               ? 'Computed on this device'
               : '${analytics.value!.effectiveSamples} observations over '
-                  '${analytics.value!.windowDays} days',
+                    '${analytics.value!.windowDays} days',
           padding: EdgeInsets.zero,
           trailing: IconButton(
             icon: const Icon(Icons.refresh_rounded, size: 18),
@@ -719,9 +758,16 @@ class _AnalyticsSection extends StatelessWidget {
                 padding: const EdgeInsets.all(18),
                 child: Column(
                   children: [
-                    Icon(Icons.hourglass_empty_rounded, color: c.textTertiary, size: 28),
+                    Icon(
+                      Icons.hourglass_empty_rounded,
+                      color: c.textTertiary,
+                      size: 28,
+                    ),
                     const SizedBox(height: 10),
-                    Text('Building price history', style: context.t.titleMedium),
+                    Text(
+                      'Building price history',
+                      style: context.t.titleMedium,
+                    ),
                     const SizedBox(height: 6),
                     Text(
                       // Each game has a different answer to "where is my
@@ -823,12 +869,17 @@ class _AnalyticsSection extends StatelessWidget {
                             if (a.forecast != null)
                               Row(
                                 children: [
-                                  Container(width: 14, height: 2, color: c.accent),
+                                  Container(
+                                    width: 14,
+                                    height: 2,
+                                    color: c.accent,
+                                  ),
                                   const SizedBox(width: 5),
                                   Text(
                                     '${a.forecast!.point.length}-day range',
-                                    style: context.t.labelSmall
-                                        ?.copyWith(color: c.textTertiary),
+                                    style: context.t.labelSmall?.copyWith(
+                                      color: c.textTertiary,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -845,7 +896,9 @@ class _AnalyticsSection extends StatelessWidget {
                         ),
                         error: (e, _) => SizedBox(
                           height: 220,
-                          child: Center(child: Text('$e', style: context.t.bodySmall)),
+                          child: Center(
+                            child: Text('$e', style: context.t.bodySmall),
+                          ),
                         ),
                       ),
                       if (a.forecast != null && a.forecast!.point.isNotEmpty)
@@ -856,8 +909,10 @@ class _AnalyticsSection extends StatelessWidget {
                             '(${Fmt.money(a.forecast!.lower80.last)} – '
                             '${Fmt.money(a.forecast!.upper80.last)}). '
                             'A range, not a prediction.',
-                            style: context.t.labelSmall
-                                ?.copyWith(color: c.textTertiary, height: 1.4),
+                            style: context.t.labelSmall?.copyWith(
+                              color: c.textTertiary,
+                              height: 1.4,
+                            ),
                           ),
                         ),
                     ],
@@ -872,7 +927,11 @@ class _AnalyticsSection extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.bolt_rounded, size: 16, color: c.warning),
+                            Icon(
+                              Icons.bolt_rounded,
+                              size: 16,
+                              color: c.warning,
+                            ),
                             const SizedBox(width: 6),
                             Text('Unusual moves', style: context.t.titleSmall),
                           ],
@@ -887,20 +946,25 @@ class _AnalyticsSection extends StatelessWidget {
                                   an.kind == 'crash'
                                       ? Icons.trending_down_rounded
                                       : an.kind == 'spike'
-                                          ? Icons.trending_up_rounded
-                                          : Icons.timeline_rounded,
+                                      ? Icons.trending_up_rounded
+                                      : Icons.timeline_rounded,
                                   size: 14,
-                                  color: an.kind == 'crash' ? c.negative : c.warning,
+                                  color: an.kind == 'crash'
+                                      ? c.negative
+                                      : c.warning,
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: Text(an.description,
-                                      style: context.t.bodySmall),
+                                  child: Text(
+                                    an.description,
+                                    style: context.t.bodySmall,
+                                  ),
                                 ),
                                 Text(
                                   Fmt.dateShort(an.date),
-                                  style: context.t.labelSmall
-                                      ?.copyWith(color: c.textTertiary),
+                                  style: context.t.labelSmall?.copyWith(
+                                    color: c.textTertiary,
+                                  ),
                                 ),
                               ],
                             ),
@@ -942,7 +1006,10 @@ class _Metric extends StatelessWidget {
     final c = context.c;
     return Column(
       children: [
-        Text(label, style: context.t.labelSmall?.copyWith(color: c.textTertiary)),
+        Text(
+          label,
+          style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+        ),
         const SizedBox(height: 3),
         Text(
           value,
@@ -966,10 +1033,10 @@ class _ReadingRow extends StatelessWidget {
     final color = signal == null
         ? c.textTertiary
         : signal > 0.15
-            ? c.positive
-            : signal < -0.15
-                ? c.negative
-                : c.textTertiary;
+        ? c.positive
+        : signal < -0.15
+        ? c.negative
+        : c.textTertiary;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
@@ -1016,9 +1083,8 @@ class _AlertSummary extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.c;
-    final alerts = ref
-            .watch(cardAlertsProvider((game: card.game, id: card.id)))
-            .value ??
+    final alerts =
+        ref.watch(cardAlertsProvider((game: card.game, id: card.id))).value ??
         const <PriceAlert>[];
     if (alerts.isEmpty) return const SizedBox.shrink();
 
@@ -1093,7 +1159,9 @@ class _CardTextSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionHeader(
-          title: card.game == CardGame.mtg ? 'Card text' : 'Attacks & abilities',
+          title: card.game == CardGame.mtg
+              ? 'Card text'
+              : 'Attacks & abilities',
           padding: EdgeInsets.zero,
         ),
         GlassCard(
@@ -1108,11 +1176,16 @@ class _CardTextSection extends StatelessWidget {
                     Divider(color: c.hairline, height: 1),
                     const SizedBox(height: 12),
                   ],
-                  Text(card.faces[i].name ?? card.name, style: context.t.titleSmall),
+                  Text(
+                    card.faces[i].name ?? card.name,
+                    style: context.t.titleSmall,
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     card.faces[i].typeLine ?? '',
-                    style: context.t.bodySmall?.copyWith(color: c.textSecondary),
+                    style: context.t.bodySmall?.copyWith(
+                      color: c.textSecondary,
+                    ),
                   ),
                   if (card.faces[i].text != null) ...[
                     const SizedBox(height: 8),

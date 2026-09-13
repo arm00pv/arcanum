@@ -99,9 +99,13 @@ class Bootstrap {
     final collectionDao = CollectionDao(database.db);
     final historyDao = HistoryDao(database.db);
     final alertDao = AlertDao(database.db);
-    final historyService = PriceHistoryService(dao: historyDao, settings: settings);
+    final historyService = PriceHistoryService(
+      dao: historyDao,
+      settings: settings,
+    );
 
-    final resolvedCatalogs = catalogs ??
+    final resolvedCatalogs =
+        catalogs ??
         <CardGame, CardCatalog>{
           CardGame.mtg: MtgCatalog(),
           CardGame.pokemon: PokemonCatalog(),
@@ -109,8 +113,10 @@ class Bootstrap {
           CardGame.lorcana: LorcanaCatalog(),
         };
 
-    final catalogRepository =
-        CatalogRepository(catalogs: resolvedCatalogs, dao: catalogDao);
+    final catalogRepository = CatalogRepository(
+      catalogs: resolvedCatalogs,
+      dao: catalogDao,
+    );
 
     final collections = <CardGame, CollectionRepository>{
       for (final game in CardGame.values)
@@ -146,17 +152,21 @@ final bootstrapProvider = Provider<Bootstrap>(
   (ref) => throw UnimplementedError('bootstrapProvider must be overridden'),
 );
 
-final settingsProvider =
-    Provider<AppSettings>((ref) => ref.watch(bootstrapProvider).settings);
+final settingsProvider = Provider<AppSettings>(
+  (ref) => ref.watch(bootstrapProvider).settings,
+);
 
-final catalogRepositoryProvider =
-    Provider<CatalogRepository>((ref) => ref.watch(bootstrapProvider).catalog);
+final catalogRepositoryProvider = Provider<CatalogRepository>(
+  (ref) => ref.watch(bootstrapProvider).catalog,
+);
 
-final historyServiceProvider =
-    Provider<PriceHistoryService>((ref) => ref.watch(bootstrapProvider).historyService);
+final historyServiceProvider = Provider<PriceHistoryService>(
+  (ref) => ref.watch(bootstrapProvider).historyService,
+);
 
-final alertRepositoryProvider =
-    Provider<AlertRepository>((ref) => ref.watch(bootstrapProvider).alerts);
+final alertRepositoryProvider = Provider<AlertRepository>(
+  (ref) => ref.watch(bootstrapProvider).alerts,
+);
 
 /// Keeps a copy of the collector's own data on their own server.
 ///
@@ -174,8 +184,10 @@ final backupServiceProvider = Provider<BackupService>((ref) {
 // --------------------------------------------------------------------- alerts
 
 /// Every alert for a game, armed ones first.
-final alertsProvider =
-    FutureProvider.family<List<PriceAlert>, CardGame>((ref, game) async {
+final alertsProvider = FutureProvider.family<List<PriceAlert>, CardGame>((
+  ref,
+  game,
+) async {
   ref.watch(alertRevisionProvider);
   return ref.watch(alertRepositoryProvider).all(game);
 });
@@ -190,18 +202,24 @@ class AlertRevision extends Notifier<int> {
   void bump() => state = state + 1;
 }
 
-final alertRevisionProvider = NotifierProvider<AlertRevision, int>(AlertRevision.new);
+final alertRevisionProvider = NotifierProvider<AlertRevision, int>(
+  AlertRevision.new,
+);
 
 /// Alerts for one printing.
-final cardAlertsProvider =
-    FutureProvider.family<List<PriceAlert>, CardRef>((ref, ref0) async {
+final cardAlertsProvider = FutureProvider.family<List<PriceAlert>, CardRef>((
+  ref,
+  ref0,
+) async {
   ref.watch(alertRevisionProvider);
   return ref.watch(alertRepositoryProvider).forCard(ref0.game, ref0.id);
 });
 
 /// How many alerts have fired and not been acknowledged, per game.
-final triggeredAlertCountProvider =
-    FutureProvider.family<int, CardGame>((ref, game) async {
+final triggeredAlertCountProvider = FutureProvider.family<int, CardGame>((
+  ref,
+  game,
+) async {
   ref.watch(alertRevisionProvider);
   return ref.watch(alertRepositoryProvider).triggeredCount(game);
 });
@@ -209,17 +227,19 @@ final triggeredAlertCountProvider =
 /// Card data for every printing that has an alert in a game.
 final alertCardsProvider =
     FutureProvider.family<Map<String, TcgCard>, CardGame>((ref, game) async {
-  final alerts = await ref.watch(alertsProvider(game).future);
-  final ids = alerts.map((a) => a.cardId).toSet().toList();
-  if (ids.isEmpty) return const {};
-  return ref.watch(catalogRepositoryProvider).cardsByIds(game, ids);
-});
+      final alerts = await ref.watch(alertsProvider(game).future);
+      final ids = alerts.map((a) => a.cardId).toSet().toList();
+      if (ids.isEmpty) return const {};
+      return ref.watch(catalogRepositoryProvider).cardsByIds(game, ids);
+    });
 
 /// Evaluates every armed alert across all games.
 ///
 /// Runs against stored prices, which are already refreshed daily. Invalidate
 /// this to re-check after a price refresh.
-final alertEvaluationProvider = FutureProvider<List<AlertEvaluation>>((ref) async {
+final alertEvaluationProvider = FutureProvider<List<AlertEvaluation>>((
+  ref,
+) async {
   ref.watch(alertRevisionProvider);
   return ref.watch(alertRepositoryProvider).evaluate();
 });
@@ -243,34 +263,42 @@ class ActiveGameNotifier extends Notifier<CardGame> {
   }
 }
 
-final activeGameProvider =
-    NotifierProvider<ActiveGameNotifier, CardGame>(ActiveGameNotifier.new);
+final activeGameProvider = NotifierProvider<ActiveGameNotifier, CardGame>(
+  ActiveGameNotifier.new,
+);
 
 /// Convenience: the game-scoped collection repository for the active game.
 final activeCollectionProvider = Provider<CollectionRepository>(
-  (ref) => ref.watch(bootstrapProvider).collectionFor(ref.watch(activeGameProvider)),
+  (ref) =>
+      ref.watch(bootstrapProvider).collectionFor(ref.watch(activeGameProvider)),
 );
 
 // ------------------------------------------------------------------ catalogue
 
 /// A game's full set catalogue, newest first.
-final setsProvider =
-    FutureProvider.family<List<TcgSet>, CardGame>((ref, game) async {
+final setsProvider = FutureProvider.family<List<TcgSet>, CardGame>((
+  ref,
+  game,
+) async {
   return ref.watch(catalogRepositoryProvider).loadSets(game);
 });
 
 /// How many sets a game has cached.
-final setCountProvider = FutureProvider.family<int, CardGame>((ref, game) async {
+final setCountProvider = FutureProvider.family<int, CardGame>((
+  ref,
+  game,
+) async {
   await ref.watch(setsProvider(game).future);
   return ref.watch(catalogRepositoryProvider).setCount(game);
 });
 
 /// How many sets exist per set type, for the filter row.
-final setTypeCountsProvider =
-    FutureProvider.family<Map<String, int>, CardGame>((ref, game) async {
-  await ref.watch(setsProvider(game).future);
-  return ref.watch(catalogRepositoryProvider).setTypeCounts(game);
-});
+final setTypeCountsProvider = FutureProvider.family<Map<String, int>, CardGame>(
+  (ref, game) async {
+    await ref.watch(setsProvider(game).future);
+    return ref.watch(catalogRepositoryProvider).setTypeCounts(game);
+  },
+);
 
 /// Identifies a set within a game.
 typedef SetRef = ({CardGame game, String code});
@@ -282,8 +310,10 @@ final setProvider = FutureProvider.family<TcgSet?, SetRef>((ref, ref0) async {
 });
 
 /// Every printing of a set, ordered by collector number.
-final setCardsProvider =
-    FutureProvider.family<List<TcgCard>, SetRef>((ref, ref0) async {
+final setCardsProvider = FutureProvider.family<List<TcgCard>, SetRef>((
+  ref,
+  ref0,
+) async {
   return ref.watch(catalogRepositoryProvider).cardsInSet(ref0.game, ref0.code);
 });
 
@@ -291,13 +321,18 @@ final setCardsProvider =
 typedef CardRef = ({CardGame game, String id});
 
 /// A single printing, resolved from cache or the network.
-final cardProvider = FutureProvider.family<TcgCard?, CardRef>((ref, ref0) async {
+final cardProvider = FutureProvider.family<TcgCard?, CardRef>((
+  ref,
+  ref0,
+) async {
   return ref.watch(catalogRepositoryProvider).resolveCard(ref0.game, ref0.id);
 });
 
 /// All reprints of a card, identified by its group id.
-final printingsProvider =
-    FutureProvider.family<List<TcgCard>, CardRef>((ref, ref0) async {
+final printingsProvider = FutureProvider.family<List<TcgCard>, CardRef>((
+  ref,
+  ref0,
+) async {
   return ref.watch(catalogRepositoryProvider).printingsOf(ref0.game, ref0.id);
 });
 
@@ -305,8 +340,10 @@ final printingsProvider =
 typedef SearchRef = ({CardGame game, String query});
 
 /// Free-text search across a game's catalogue.
-final searchProvider =
-    FutureProvider.family<List<TcgCard>, SearchRef>((ref, ref0) async {
+final searchProvider = FutureProvider.family<List<TcgCard>, SearchRef>((
+  ref,
+  ref0,
+) async {
   if (ref0.query.trim().length < 2) return const [];
   return ref.watch(catalogRepositoryProvider).search(ref0.game, ref0.query);
 });
@@ -315,8 +352,10 @@ final searchProvider =
 ///
 /// The set catalogue is fetched before matching so that a first search still
 /// finds a set the user has never opened; after that it is a cache read.
-final setSearchProvider =
-    FutureProvider.family<List<TcgSet>, SearchRef>((ref, ref0) async {
+final setSearchProvider = FutureProvider.family<List<TcgSet>, SearchRef>((
+  ref,
+  ref0,
+) async {
   if (ref0.query.trim().length < 2) return const [];
   await ref.watch(setsProvider(ref0.game).future);
   return ref.watch(catalogRepositoryProvider).searchSets(ref0.game, ref0.query);
@@ -327,41 +366,51 @@ final setSearchProvider =
 /// The full portfolio picture for a game.
 final collectionOverviewProvider =
     FutureProvider.family<CollectionOverview, CardGame>((ref, game) async {
-  return ref.watch(bootstrapProvider).collectionFor(game).overview(withMovers: true);
-});
+      return ref
+          .watch(bootstrapProvider)
+          .collectionFor(game)
+          .overview(withMovers: true);
+    });
 
 /// Full card data for every printing the user owns in a game.
 final ownedCardsProvider =
     FutureProvider.family<Map<String, TcgCard>, CardGame>((ref, game) async {
-  await ref.watch(collectionOverviewProvider(game).future);
-  final ids = await ref.watch(bootstrapProvider).collectionDao.ownedCardIds(game);
-  return ref.watch(catalogRepositoryProvider).cardsByIds(game, ids);
-});
+      await ref.watch(collectionOverviewProvider(game).future);
+      final ids = await ref
+          .watch(bootstrapProvider)
+          .collectionDao
+          .ownedCardIds(game);
+      return ref.watch(catalogRepositoryProvider).cardsByIds(game, ids);
+    });
 
 /// How many copies the user owns of each printing in a game.
-final ownedQuantityProvider =
-    FutureProvider.family<Map<String, int>, CardGame>((ref, game) async {
-  await ref.watch(collectionOverviewProvider(game).future);
-  final rows = await ref.watch(bootstrapProvider).database.db.rawQuery(
-        'SELECT card_id, SUM(quantity) AS n FROM collection_entries '
-        'WHERE game = ? GROUP BY card_id',
-        [game.id],
-      );
-  return {
-    for (final r in rows) (r['card_id'] as String): (r['n'] as num?)?.toInt() ?? 0,
-  };
-});
+final ownedQuantityProvider = FutureProvider.family<Map<String, int>, CardGame>(
+  (ref, game) async {
+    await ref.watch(collectionOverviewProvider(game).future);
+    final rows = await ref.watch(bootstrapProvider).database.db.rawQuery(
+      'SELECT card_id, SUM(quantity) AS n FROM collection_entries '
+      'WHERE game = ? GROUP BY card_id',
+      [game.id],
+    );
+    return {
+      for (final r in rows)
+        (r['card_id'] as String): (r['n'] as num?)?.toInt() ?? 0,
+    };
+  },
+);
 
 /// How many physical cards the user owns from each set, keyed by set code.
-final ownedBySetProvider =
-    FutureProvider.family<Map<String, int>, CardGame>((ref, game) async {
+final ownedBySetProvider = FutureProvider.family<Map<String, int>, CardGame>((
+  ref,
+  game,
+) async {
   await ref.watch(collectionOverviewProvider(game).future);
   final rows = await ref.watch(bootstrapProvider).database.db.rawQuery(
-        'SELECT c.set_code AS code, SUM(e.quantity) AS n '
-        'FROM collection_entries e JOIN cards c ON c.id = e.card_id '
-        'WHERE e.game = ? GROUP BY c.set_code',
-        [game.id],
-      );
+    'SELECT c.set_code AS code, SUM(e.quantity) AS n '
+    'FROM collection_entries e JOIN cards c ON c.id = e.card_id '
+    'WHERE e.game = ? GROUP BY c.set_code',
+    [game.id],
+  );
   return {
     for (final r in rows) (r['code'] as String): (r['n'] as num?)?.toInt() ?? 0,
   };
@@ -370,19 +419,24 @@ final ownedBySetProvider =
 /// The user's own stacks of one printing.
 final cardEntriesProvider =
     FutureProvider.family<List<CollectionEntry>, CardRef>((ref, ref0) async {
-  await ref.watch(collectionOverviewProvider(ref0.game).future);
-  return ref.watch(bootstrapProvider).collectionFor(ref0.game).entriesForCard(ref0.id);
-});
+      await ref.watch(collectionOverviewProvider(ref0.game).future);
+      return ref
+          .watch(bootstrapProvider)
+          .collectionFor(ref0.game)
+          .entriesForCard(ref0.id);
+    });
 
 /// The portfolio value series for a game, for the dashboard chart.
 final portfolioSeriesProvider =
     FutureProvider.family<List<PricePoint>, CardGame>((ref, game) async {
-  await ref.watch(collectionOverviewProvider(game).future);
-  return ref.watch(bootstrapProvider).collectionFor(game).portfolioSeries();
-});
+      await ref.watch(collectionOverviewProvider(game).future);
+      return ref.watch(bootstrapProvider).collectionFor(game).portfolioSeries();
+    });
 
 /// Headline figures for every game, used by the switcher.
-final gameSummariesProvider = FutureProvider<Map<CardGame, GameSummary>>((ref) async {
+final gameSummariesProvider = FutureProvider<Map<CardGame, GameSummary>>((
+  ref,
+) async {
   final bootstrap = ref.watch(bootstrapProvider);
   final out = <CardGame, GameSummary>{};
   for (final game in CardGame.values) {
@@ -412,23 +466,23 @@ typedef AnalyticsKey = ({CardGame game, String cardId, CardFinish finish});
 /// Full on-device analytics for one printing.
 final cardAnalyticsProvider =
     FutureProvider.family<CardAnalytics, AnalyticsKey>((ref, key) async {
-  return ref
-      .watch(bootstrapProvider)
-      .collectionFor(key.game)
-      .analyticsFor(key.cardId, finish: key.finish);
-});
+      return ref
+          .watch(bootstrapProvider)
+          .collectionFor(key.game)
+          .analyticsFor(key.cardId, finish: key.finish);
+    });
 
 /// Price history for one printing, used by the detail chart.
 final priceHistoryProvider =
     FutureProvider.family<List<PricePoint>, AnalyticsKey>((ref, key) async {
-  final bootstrap = ref.watch(bootstrapProvider);
-  final card = await bootstrap.catalog.cardById(key.game, key.cardId);
-  return bootstrap.historyService.historyFor(
-    key.game,
-    key.cardId,
-    finish: key.finish,
-    days: 400,
-    cardName: card?.name,
-    externalId: card?.extras['tcgplayerId']?.toString(),
-  );
-});
+      final bootstrap = ref.watch(bootstrapProvider);
+      final card = await bootstrap.catalog.cardById(key.game, key.cardId);
+      return bootstrap.historyService.historyFor(
+        key.game,
+        key.cardId,
+        finish: key.finish,
+        days: 400,
+        cardName: card?.name,
+        externalId: card?.extras['tcgplayerId']?.toString(),
+      );
+    });

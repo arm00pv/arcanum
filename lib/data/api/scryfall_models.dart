@@ -137,10 +137,8 @@ Map<String, dynamic> _map(Object? value) {
   }
   if (value is Map) {
     return value.map<String, dynamic>(
-      (Object? key, Object? item) => MapEntry<String, dynamic>(
-        key.toString(),
-        item,
-      ),
+      (Object? key, Object? item) =>
+          MapEntry<String, dynamic>(key.toString(), item),
     );
   }
   return const <String, dynamic>{};
@@ -252,25 +250,25 @@ class ScryfallSet {
   });
 
   factory ScryfallSet.fromJson(Map<String, dynamic> json) => ScryfallSet(
-        id: _stringOr(json['id'], ''),
-        code: _stringOr(json['code'], ''),
-        name: _stringOr(json['name'], ''),
-        setType: _stringOr(json['set_type'], ''),
-        releasedAt: _dateTime(json['released_at']),
-        cardCount: _int(json['card_count']),
-        iconSvgUri: _string(json['icon_svg_uri']),
-        digital: _bool(json['digital']),
-        foilOnly: _bool(json['foil_only']),
-        nonfoilOnly: _bool(json['nonfoil_only']),
-        parentSetCode: _string(json['parent_set_code']),
-        blockCode: _string(json['block_code']),
-        block: _string(json['block']),
-        printedSize: _intOrNull(json['printed_size']),
-        collectorNumberStart: _intOrNull(json['collector_number_start']),
-        setUri: _string(json['uri']),
-        searchUri: _string(json['search_uri']),
-        scryfallUri: _string(json['scryfall_uri']),
-      );
+    id: _stringOr(json['id'], ''),
+    code: _stringOr(json['code'], ''),
+    name: _stringOr(json['name'], ''),
+    setType: _stringOr(json['set_type'], ''),
+    releasedAt: _dateTime(json['released_at']),
+    cardCount: _int(json['card_count']),
+    iconSvgUri: _string(json['icon_svg_uri']),
+    digital: _bool(json['digital']),
+    foilOnly: _bool(json['foil_only']),
+    nonfoilOnly: _bool(json['nonfoil_only']),
+    parentSetCode: _string(json['parent_set_code']),
+    blockCode: _string(json['block_code']),
+    block: _string(json['block']),
+    printedSize: _intOrNull(json['printed_size']),
+    collectorNumberStart: _intOrNull(json['collector_number_start']),
+    setUri: _string(json['uri']),
+    searchUri: _string(json['search_uri']),
+    scryfallUri: _string(json['scryfall_uri']),
+  );
 
   /// Scryfall UUID for this set.
   final String id;
@@ -334,26 +332,26 @@ class ScryfallSet {
   String get displayCode => code.toUpperCase();
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'object': 'set',
-        'id': id,
-        'code': code,
-        'name': name,
-        'set_type': setType,
-        'released_at': _dateToJson(releasedAt),
-        'card_count': cardCount,
-        'icon_svg_uri': iconSvgUri,
-        'digital': digital,
-        'foil_only': foilOnly,
-        'nonfoil_only': nonfoilOnly,
-        'parent_set_code': parentSetCode,
-        'block_code': blockCode,
-        'block': block,
-        'printed_size': printedSize,
-        'collector_number_start': collectorNumberStart,
-        'uri': setUri,
-        'search_uri': searchUri,
-        'scryfall_uri': scryfallUri,
-      };
+    'object': 'set',
+    'id': id,
+    'code': code,
+    'name': name,
+    'set_type': setType,
+    'released_at': _dateToJson(releasedAt),
+    'card_count': cardCount,
+    'icon_svg_uri': iconSvgUri,
+    'digital': digital,
+    'foil_only': foilOnly,
+    'nonfoil_only': nonfoilOnly,
+    'parent_set_code': parentSetCode,
+    'block_code': blockCode,
+    'block': block,
+    'printed_size': printedSize,
+    'collector_number_start': collectorNumberStart,
+    'uri': setUri,
+    'search_uri': searchUri,
+    'scryfall_uri': scryfallUri,
+  };
 
   @override
   String toString() => 'ScryfallSet($code, "$name", $cardCount cards)';
@@ -406,16 +404,16 @@ class ScryfallCardFace {
   String? imageUrl({String size = 'normal'}) => _pickImageUrl(imageUris, size);
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'object': 'card_face',
-        'name': name,
-        'mana_cost': manaCost,
-        'type_line': typeLine,
-        'oracle_text': oracleText,
-        'flavor_text': flavorText,
-        'artist': artist,
-        'image_uris': imageUris.isEmpty ? null : imageUris,
-        'colors': colors,
-      };
+    'object': 'card_face',
+    'name': name,
+    'mana_cost': manaCost,
+    'type_line': typeLine,
+    'oracle_text': oracleText,
+    'flavor_text': flavorText,
+    'artist': artist,
+    'image_uris': imageUris.isEmpty ? null : imageUris,
+    'colors': colors,
+  };
 
   @override
   String toString() => 'ScryfallCardFace($name)';
@@ -439,14 +437,14 @@ class ScryfallPrices {
   });
 
   factory ScryfallPrices.fromJson(Map<String, dynamic> json) => ScryfallPrices(
-        usd: _doubleOrNull(json['usd']),
-        usdFoil: _doubleOrNull(json['usd_foil']),
-        usdEtched: _doubleOrNull(json['usd_etched']),
-        eur: _doubleOrNull(json['eur']),
-        eurFoil: _doubleOrNull(json['eur_foil']),
-        eurEtched: _doubleOrNull(json['eur_etched']),
-        tix: _doubleOrNull(json['tix']),
-      );
+    usd: _doubleOrNull(json['usd']),
+    usdFoil: _doubleOrNull(json['usd_foil']),
+    usdEtched: _doubleOrNull(json['usd_etched']),
+    eur: _doubleOrNull(json['eur']),
+    eurFoil: _doubleOrNull(json['eur_foil']),
+    eurEtched: _doubleOrNull(json['eur_etched']),
+    tix: _doubleOrNull(json['tix']),
+  );
 
   /// A price set where nothing is known.
   static const ScryfallPrices empty = ScryfallPrices();
@@ -486,17 +484,18 @@ class ScryfallPrices {
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'usd': usd,
-        'usd_foil': usdFoil,
-        'usd_etched': usdEtched,
-        'eur': eur,
-        'eur_foil': eurFoil,
-        'eur_etched': eurEtched,
-        'tix': tix,
-      };
+    'usd': usd,
+    'usd_foil': usdFoil,
+    'usd_etched': usdEtched,
+    'eur': eur,
+    'eur_foil': eurFoil,
+    'eur_etched': eurEtched,
+    'tix': tix,
+  };
 
   @override
-  String toString() => 'ScryfallPrices(usd: $usd, usdFoil: $usdFoil, tix: $tix)';
+  String toString() =>
+      'ScryfallPrices(usd: $usd, usdFoil: $usdFoil, tix: $tix)';
 }
 
 // ---------------------------------------------------------------------------
@@ -591,8 +590,8 @@ class ScryfallCard {
       imageUris: _stringMap(json['image_uris']),
       faces: List<ScryfallCardFace>.unmodifiable(faces),
       scryfallUri: _string(json['scryfall_uri']),
-      gathererUri: _string(json['gatherer_uri']) ??
-          _relatedUri(json, 'gatherer'),
+      gathererUri:
+          _string(json['gatherer_uri']) ?? _relatedUri(json, 'gatherer'),
       setUri: _string(json['set_uri']),
       rulingUri: _string(json['rulings_uri']),
       edhrecRank: _intOrNull(json['edhrec_rank']),
@@ -675,8 +674,9 @@ class ScryfallCard {
   ///
   /// Returns null only when Scryfall published no image at all.
   String? imageUrl({String size = 'normal', int face = 0}) {
-    final bool facesCarryImages =
-        faces.any((ScryfallCardFace f) => f.imageUris.isNotEmpty);
+    final bool facesCarryImages = faces.any(
+      (ScryfallCardFace f) => f.imageUris.isNotEmpty,
+    );
 
     if (facesCarryImages) {
       final int index = face < 0 ? 0 : face;
@@ -718,45 +718,45 @@ class ScryfallCard {
       collectorNumberSortKey.toString().padLeft(10, '0') + collectorNumber;
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'object': 'card',
-        'id': id,
-        'oracle_id': oracleId,
-        'name': name,
-        'set': setCode,
-        'set_name': setName,
-        'collector_number': collectorNumber,
-        'rarity': rarity,
-        'layout': layout,
-        'type_line': typeLine,
-        'oracle_text': oracleText,
-        'mana_cost': manaCost,
-        'artist': artist,
-        'flavor_text': flavorText,
-        'cmc': cmc,
-        'colors': colors.isEmpty ? null : colors,
-        'color_identity': colorIdentity,
-        'digital': digital,
-        'foil': foil,
-        'nonfoil': nonfoil,
-        'promo': promo,
-        'reprint': reprint,
-        'reserved': reserved,
-        'full_art': fullArt,
-        'booster': booster,
-        'released_at': _dateToJson(releasedAt),
-        'prices': prices.toJson(),
-        'image_uris': imageUris.isEmpty ? null : imageUris,
-        'card_faces': faces.isEmpty
-            ? null
-            : <Map<String, dynamic>>[
-                for (final ScryfallCardFace face in faces) face.toJson(),
-              ],
-        'scryfall_uri': scryfallUri,
-        'gatherer_uri': gathererUri,
-        'set_uri': setUri,
-        'rulings_uri': rulingUri,
-        'edhrec_rank': edhrecRank,
-      };
+    'object': 'card',
+    'id': id,
+    'oracle_id': oracleId,
+    'name': name,
+    'set': setCode,
+    'set_name': setName,
+    'collector_number': collectorNumber,
+    'rarity': rarity,
+    'layout': layout,
+    'type_line': typeLine,
+    'oracle_text': oracleText,
+    'mana_cost': manaCost,
+    'artist': artist,
+    'flavor_text': flavorText,
+    'cmc': cmc,
+    'colors': colors.isEmpty ? null : colors,
+    'color_identity': colorIdentity,
+    'digital': digital,
+    'foil': foil,
+    'nonfoil': nonfoil,
+    'promo': promo,
+    'reprint': reprint,
+    'reserved': reserved,
+    'full_art': fullArt,
+    'booster': booster,
+    'released_at': _dateToJson(releasedAt),
+    'prices': prices.toJson(),
+    'image_uris': imageUris.isEmpty ? null : imageUris,
+    'card_faces': faces.isEmpty
+        ? null
+        : <Map<String, dynamic>>[
+            for (final ScryfallCardFace face in faces) face.toJson(),
+          ],
+    'scryfall_uri': scryfallUri,
+    'gatherer_uri': gathererUri,
+    'set_uri': setUri,
+    'rulings_uri': rulingUri,
+    'edhrec_rank': edhrecRank,
+  };
 
   @override
   String toString() =>

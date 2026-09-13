@@ -19,37 +19,39 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// A printing as a set download delivers it: everything known.
 TcgCard full({String name = 'Charizard'}) => TcgCard(
-      game: CardGame.pokemon,
-      id: 'base1-4',
-      setCode: 'base1',
-      setName: 'Base Set',
-      name: name,
-      collectorNumber: '4',
-      rarity: 'Rare',
-      typeLine: 'Pokémon - Stage 2',
-      oracleText: 'Fire Spin: Discard 2 Energy cards attached to Charizard.',
-      artist: 'Mitsuhiro Arita',
-      colors: const <String>['Fire'],
-      cmc: 120,
-      imageUris: const <String, String>{
-        'small': 'https://assets.tcgdex.net/en/base/base1/4/low.webp',
-        'normal': 'https://assets.tcgdex.net/en/base/base1/4/high.webp',
-      },
-      prices: const TcgPrices(byFinish: <String, double?>{'holofoil': 869.02}),
-      releasedAt: DateTime(1999, 1, 9),
-      extras: const <String, Object?>{'variants': <String>['holofoil']},
-    );
+  game: CardGame.pokemon,
+  id: 'base1-4',
+  setCode: 'base1',
+  setName: 'Base Set',
+  name: name,
+  collectorNumber: '4',
+  rarity: 'Rare',
+  typeLine: 'Pokémon - Stage 2',
+  oracleText: 'Fire Spin: Discard 2 Energy cards attached to Charizard.',
+  artist: 'Mitsuhiro Arita',
+  colors: const <String>['Fire'],
+  cmc: 120,
+  imageUris: const <String, String>{
+    'small': 'https://assets.tcgdex.net/en/base/base1/4/low.webp',
+    'normal': 'https://assets.tcgdex.net/en/base/base1/4/high.webp',
+  },
+  prices: const TcgPrices(byFinish: <String, double?>{'holofoil': 869.02}),
+  releasedAt: DateTime(1999, 1, 9),
+  extras: const <String, Object?>{
+    'variants': <String>['holofoil'],
+  },
+);
 
 /// The same printing as a search hit or a stub arrives: name and number only.
 TcgCard thin() => const TcgCard(
-      game: CardGame.pokemon,
-      id: 'base1-4',
-      setCode: 'base1',
-      setName: 'Base Set',
-      name: 'Charizard',
-      collectorNumber: '4',
-      rarity: 'unknown',
-    );
+  game: CardGame.pokemon,
+  id: 'base1-4',
+  setCode: 'base1',
+  setName: 'Base Set',
+  name: 'Charizard',
+  collectorNumber: '4',
+  rarity: 'unknown',
+);
 
 void main() {
   setUpAll(() {
@@ -107,8 +109,12 @@ void main() {
     test('still writes everything the newcomer does know', () async {
       // The rule is about gaps, not about freezing a row: a fuller answer wins.
       await dao.upsertCards(CardGame.pokemon, <TcgCard>[thin()]);
-      await dao.upsertCards(CardGame.pokemon, <TcgCard>[full(name: 'Charizard ')]);
-      await dao.upsertCards(CardGame.pokemon, <TcgCard>[full(name: 'Charizard')]);
+      await dao.upsertCards(CardGame.pokemon, <TcgCard>[
+        full(name: 'Charizard '),
+      ]);
+      await dao.upsertCards(CardGame.pokemon, <TcgCard>[
+        full(name: 'Charizard'),
+      ]);
 
       final stored = await dao.cardById(CardGame.pokemon, 'base1-4');
 
@@ -154,10 +160,7 @@ void main() {
         ),
       ]);
 
-      expect(
-        (await dao.cardById(CardGame.pokemon, 'base1-4'))!.rarity,
-        'Rare',
-      );
+      expect((await dao.cardById(CardGame.pokemon, 'base1-4'))!.rarity, 'Rare');
       expect(
         (await dao.cardById(CardGame.pokemon, 'base1-58'))!.name,
         'Pikachu',
@@ -167,36 +170,39 @@ void main() {
 
   group('sets whose provider publishes no card count', () {
     TcgSet set({int cardCount = 0}) => TcgSet(
-          game: CardGame.lorcana,
-          id: 'set_1',
-          code: '1',
-          name: 'The First Chapter',
-          setType: 'expansion',
-          cardCount: cardCount,
-          releasedAt: DateTime(2023, 8, 18),
-        );
+      game: CardGame.lorcana,
+      id: 'set_1',
+      code: '1',
+      name: 'The First Chapter',
+      setType: 'expansion',
+      cardCount: cardCount,
+      releasedAt: DateTime(2023, 8, 18),
+    );
 
-    test('counts a set as catalogued once anything from it is stored', () async {
-      // Lorcast publishes no count anywhere in its set list, so a set would
-      // otherwise be considered incomplete forever and re-downloaded on every
-      // visit.
-      await dao.upsertSets(CardGame.lorcana, <TcgSet>[set()]);
-      expect(await dao.isCatalogued(CardGame.lorcana, '1'), isFalse);
+    test(
+      'counts a set as catalogued once anything from it is stored',
+      () async {
+        // Lorcast publishes no count anywhere in its set list, so a set would
+        // otherwise be considered incomplete forever and re-downloaded on every
+        // visit.
+        await dao.upsertSets(CardGame.lorcana, <TcgSet>[set()]);
+        expect(await dao.isCatalogued(CardGame.lorcana, '1'), isFalse);
 
-      await dao.upsertCards(CardGame.lorcana, <TcgCard>[
-        const TcgCard(
-          game: CardGame.lorcana,
-          id: 'crd_1',
-          setCode: '1',
-          setName: 'The First Chapter',
-          name: 'Elsa – Snow Queen',
-          collectorNumber: '41',
-          rarity: 'Super Rare',
-        ),
-      ]);
+        await dao.upsertCards(CardGame.lorcana, <TcgCard>[
+          const TcgCard(
+            game: CardGame.lorcana,
+            id: 'crd_1',
+            setCode: '1',
+            setName: 'The First Chapter',
+            name: 'Elsa – Snow Queen',
+            collectorNumber: '41',
+            rarity: 'Super Rare',
+          ),
+        ]);
 
-      expect(await dao.isCatalogued(CardGame.lorcana, '1'), isTrue);
-    });
+        expect(await dao.isCatalogued(CardGame.lorcana, '1'), isTrue);
+      },
+    );
 
     test('records the size the card list turned out to have', () async {
       await dao.upsertSets(CardGame.lorcana, <TcgSet>[set()]);
@@ -210,19 +216,16 @@ void main() {
     test('never lowers a count a provider did publish', () async {
       // Magic and Pokémon do publish counts; a short card list must not shrink
       // the set's published size.
-      await dao.upsertSets(
-        CardGame.pokemon,
-        <TcgSet>[
-          TcgSet(
-            game: CardGame.pokemon,
-            id: 'base1',
-            code: 'base1',
-            name: 'Base Set',
-            setType: 'expansion',
-            cardCount: 102,
-          ),
-        ],
-      );
+      await dao.upsertSets(CardGame.pokemon, <TcgSet>[
+        TcgSet(
+          game: CardGame.pokemon,
+          id: 'base1',
+          code: 'base1',
+          name: 'Base Set',
+          setType: 'expansion',
+          cardCount: 102,
+        ),
+      ]);
       await dao.setCardCount(CardGame.pokemon, 'base1', 3);
 
       expect((await dao.set(CardGame.pokemon, 'base1'))!.cardCount, 102);
@@ -240,32 +243,26 @@ void main() {
 
     test('takes a published count over a learned one', () async {
       // Pokémon does publish counts, and a corrected one must win.
-      await dao.upsertSets(
-        CardGame.pokemon,
-        <TcgSet>[
-          TcgSet(
-            game: CardGame.pokemon,
-            id: 'swsh1',
-            code: 'swsh1',
-            name: 'Sword & Shield',
-            setType: 'expansion',
-            cardCount: 202,
-          ),
-        ],
-      );
-      await dao.upsertSets(
-        CardGame.pokemon,
-        <TcgSet>[
-          TcgSet(
-            game: CardGame.pokemon,
-            id: 'swsh1',
-            code: 'swsh1',
-            name: 'Sword & Shield',
-            setType: 'expansion',
-            cardCount: 216,
-          ),
-        ],
-      );
+      await dao.upsertSets(CardGame.pokemon, <TcgSet>[
+        TcgSet(
+          game: CardGame.pokemon,
+          id: 'swsh1',
+          code: 'swsh1',
+          name: 'Sword & Shield',
+          setType: 'expansion',
+          cardCount: 202,
+        ),
+      ]);
+      await dao.upsertSets(CardGame.pokemon, <TcgSet>[
+        TcgSet(
+          game: CardGame.pokemon,
+          id: 'swsh1',
+          code: 'swsh1',
+          name: 'Sword & Shield',
+          setType: 'expansion',
+          cardCount: 216,
+        ),
+      ]);
 
       expect((await dao.set(CardGame.pokemon, 'swsh1'))!.cardCount, 216);
     });
@@ -316,8 +313,10 @@ void main() {
       // not a card name still has to reach the cards that mention it.
       final hits = await dao.searchCached(CardGame.pokemon, 'discard');
 
-      expect(hits.map((c) => c.name),
-          containsAll(<String>['Dragonair', 'Energy Removal']));
+      expect(
+        hits.map((c) => c.name),
+        containsAll(<String>['Dragonair', 'Energy Removal']),
+      );
     });
 
     test('puts name matches above text matches', () async {
@@ -328,8 +327,10 @@ void main() {
     });
 
     test('is case-insensitive in both halves', () async {
-      expect(await dao.searchCached(CardGame.pokemon, 'DRAGONAIR'),
-          hasLength(1));
+      expect(
+        await dao.searchCached(CardGame.pokemon, 'DRAGONAIR'),
+        hasLength(1),
+      );
       // All three mention discarding something, Charizard included.
       expect(await dao.searchCached(CardGame.pokemon, 'DISCARD'), hasLength(3));
     });

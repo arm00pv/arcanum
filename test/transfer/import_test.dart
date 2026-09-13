@@ -33,15 +33,13 @@ class _FakeCatalog implements CardCatalog {
   @override
   Future<List<TcgSet>> fetchAllSets({
     void Function(int done, int total)? onProgress,
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<List<TcgCard>> fetchCardsInSet(
     String setCode, {
     void Function(int done, int total)? onProgress,
-  }) async =>
-      cards.where((c) => c.setCode == setCode.toLowerCase()).toList();
+  }) async => cards.where((c) => c.setCode == setCode.toLowerCase()).toList();
 
   @override
   Future<TcgCard?> fetchCardById(String id) async {
@@ -54,7 +52,10 @@ class _FakeCatalog implements CardCatalog {
   @override
   Future<List<TcgCard>> search(String query, {int limit = 100}) async {
     final q = query.toLowerCase();
-    return cards.where((c) => c.name.toLowerCase().contains(q)).take(limit).toList();
+    return cards
+        .where((c) => c.name.toLowerCase().contains(q))
+        .take(limit)
+        .toList();
   }
 
   @override
@@ -73,18 +74,17 @@ TcgCard _mtg(
   int year = 1993,
   int month = 8,
   int day = 5,
-}) =>
-    TcgCard(
-      game: CardGame.mtg,
-      id: id,
-      setCode: setCode,
-      setName: setCode.toUpperCase(),
-      name: name,
-      collectorNumber: number,
-      rarity: 'rare',
-      releasedAt: DateTime.utc(year, month, day),
-      prices: TcgPrices(byFinish: {CardFinish.nonfoil.code: 100.0}),
-    );
+}) => TcgCard(
+  game: CardGame.mtg,
+  id: id,
+  setCode: setCode,
+  setName: setCode.toUpperCase(),
+  name: name,
+  collectorNumber: number,
+  rarity: 'rare',
+  releasedAt: DateTime.utc(year, month, day),
+  prices: TcgPrices(byFinish: {CardFinish.nonfoil.code: 100.0}),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -101,8 +101,24 @@ void main() {
     _mtg('lea-232', 'Black Lotus', 'lea', '232'),
   ];
   final m19 = <TcgCard>[
-    _mtg('m19-150', 'Lightning Bolt', 'm19', '150', year: 2018, month: 7, day: 13),
-    _mtg('m19-217', 'Nicol Bolas, the Ravager', 'm19', '217', year: 2018, month: 7, day: 13),
+    _mtg(
+      'm19-150',
+      'Lightning Bolt',
+      'm19',
+      '150',
+      year: 2018,
+      month: 7,
+      day: 13,
+    ),
+    _mtg(
+      'm19-217',
+      'Nicol Bolas, the Ravager',
+      'm19',
+      '217',
+      year: 2018,
+      month: 7,
+      day: 13,
+    ),
   ];
 
   setUp(() async {
@@ -177,14 +193,17 @@ void main() {
       expect(plan.ready.single.match.needsReview, isFalse);
     });
 
-    test('picks the newest printing of an ambiguous name and flags it', () async {
-      final plan = await planFor('Quantity,Name\n1,Lightning Bolt\n');
-      final row = plan.ready.single;
-      expect(row.match, ImportMatch.byNameNewest);
-      expect(row.match.needsReview, isTrue);
-      expect(row.card.id, 'm19-150');
-      expect(plan.needingReview, 1);
-    });
+    test(
+      'picks the newest printing of an ambiguous name and flags it',
+      () async {
+        final plan = await planFor('Quantity,Name\n1,Lightning Bolt\n');
+        final row = plan.ready.single;
+        expect(row.match, ImportMatch.byNameNewest);
+        expect(row.match.needsReview, isTrue);
+        expect(row.card.id, 'm19-150');
+        expect(plan.needingReview, 1);
+      },
+    );
 
     test('falls back to the name when the set code is stale', () async {
       final plan = await planFor(
@@ -233,10 +252,7 @@ void main() {
       );
       final row = plan.ready.single;
       expect(row.row.finish, CardFinish.nonfoil);
-      expect(
-        plan.problems.single.message,
-        contains('does not exist in Magic'),
-      );
+      expect(plan.problems.single.message, contains('does not exist in Magic'));
     });
 
     test('replaces a condition the game does not grade, and says so', () async {
@@ -247,10 +263,7 @@ void main() {
       final row = plan.ready.single;
       // Damaged is a Pokémon grade; Magic uses Played instead.
       expect(row.row.condition, CardCondition.nearMint);
-      expect(
-        plan.problems.single.message,
-        contains('is not used in Magic'),
-      );
+      expect(plan.problems.single.message, contains('is not used in Magic'));
     });
   });
 
@@ -277,7 +290,9 @@ void main() {
     test('recognises a stack that is already owned', () async {
       await collection.addCard(cardId: 'lea-232', quantity: 2);
 
-      final plan = await planFor('Quantity,Name,Set Code,Collector Number\n3,Black Lotus,lea,232\n');
+      final plan = await planFor(
+        'Quantity,Name,Set Code,Collector Number\n3,Black Lotus,lea,232\n',
+      );
       final row = plan.ready.single;
       expect(row.mergesExisting, isTrue);
       expect(row.existingQuantity, 2);
@@ -315,7 +330,11 @@ void main() {
     });
 
     test('a different binder is a new stack, not a merge', () async {
-      await collection.addCard(cardId: 'lea-232', quantity: 2, binder: 'Binder A');
+      await collection.addCard(
+        cardId: 'lea-232',
+        quantity: 2,
+        binder: 'Binder A',
+      );
 
       final plan = await planFor(
         'Quantity,Name,Set Code,Collector Number,Binder\n3,Black Lotus,lea,232,Binder B\n',
@@ -378,14 +397,17 @@ void main() {
       expect(stack.binder, 'Trade');
     });
 
-    test('importing the same file twice accumulates, which is the honest result',
-        () async {
-      final csvText = 'Quantity,Name,Set Code,Collector Number\n2,Black Lotus,lea,232\n';
-      await importer.apply(await planFor(csvText));
-      await importer.apply(await planFor(csvText));
+    test(
+      'importing the same file twice accumulates, which is the honest result',
+      () async {
+        final csvText =
+            'Quantity,Name,Set Code,Collector Number\n2,Black Lotus,lea,232\n';
+        await importer.apply(await planFor(csvText));
+        await importer.apply(await planFor(csvText));
 
-      expect(await collection.totalCardCount(), 4);
-    });
+        expect(await collection.totalCardCount(), 4);
+      },
+    );
 
     test('reports progress as it writes', () async {
       final plan = await planFor(
@@ -394,10 +416,13 @@ void main() {
         '1,Lightning Bolt,lea,161\n',
       );
       final seen = <int>[];
-      await importer.apply(plan, onProgress: (done, total) {
-        expect(total, 2);
-        seen.add(done);
-      });
+      await importer.apply(
+        plan,
+        onProgress: (done, total) {
+          expect(total, 2);
+          seen.add(done);
+        },
+      );
       expect(seen, [1, 2]);
     });
   });

@@ -36,10 +36,8 @@ Future<bool> showAddToCollectionSheet(
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
-    builder: (_) => _AddToCollectionSheet(
-      card: card,
-      initialFinish: initialFinish,
-    ),
+    builder: (_) =>
+        _AddToCollectionSheet(card: card, initialFinish: initialFinish),
   );
   if (result == true) {
     ref.invalidate(collectionOverviewProvider(game));
@@ -52,10 +50,7 @@ Future<bool> showAddToCollectionSheet(
 }
 
 class _AddToCollectionSheet extends ConsumerStatefulWidget {
-  const _AddToCollectionSheet({
-    required this.card,
-    this.initialFinish,
-  });
+  const _AddToCollectionSheet({required this.card, this.initialFinish});
 
   final TcgCard card;
 
@@ -64,7 +59,8 @@ class _AddToCollectionSheet extends ConsumerStatefulWidget {
   final CardFinish? initialFinish;
 
   @override
-  ConsumerState<_AddToCollectionSheet> createState() => _AddToCollectionSheetState();
+  ConsumerState<_AddToCollectionSheet> createState() =>
+      _AddToCollectionSheetState();
 }
 
 class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
@@ -120,8 +116,7 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final repo =
-          ref.read(bootstrapProvider).collectionFor(widget.card.game);
+      final repo = ref.read(bootstrapProvider).collectionFor(widget.card.game);
       final purchase = double.tryParse(_priceController.text.trim());
       await repo.addCard(
         cardId: widget.card.id,
@@ -251,10 +246,13 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
                         const SizedBox(height: 8),
                         TextField(
                           controller: _priceController,
-                          keyboardType:
-                              const TextInputType.numberWithOptions(decimal: true),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
                           inputFormatters: [
-                            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9.]'),
+                            ),
                           ],
                           decoration: const InputDecoration(
                             hintText: 'optional',
@@ -347,9 +345,9 @@ class _Label extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text.toUpperCase(),
-        style: context.t.labelSmall?.copyWith(color: context.c.textTertiary),
-      );
+    text.toUpperCase(),
+    style: context.t.labelSmall?.copyWith(color: context.c.textTertiary),
+  );
 }
 
 class _Choice extends StatelessWidget {

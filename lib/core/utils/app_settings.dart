@@ -25,6 +25,7 @@ class AppSettings extends ChangeNotifier {
   static const _kActiveGame = 'active_game';
   static const _kOnboarded = 'onboarded';
   static const _kLastSnapshotPrefix = 'last_snapshot_';
+
   /// One stored preference by its raw key, for the backup service.
   ///
   /// A backup carries a short named list of preferences - endpoints and display

@@ -16,8 +16,8 @@ class CatalogRepository {
   CatalogRepository({
     required Map<CardGame, CardCatalog> catalogs,
     required CatalogDao dao,
-  })  : _catalogs = catalogs,
-        _dao = dao;
+  }) : _catalogs = catalogs,
+       _dao = dao;
 
   final Map<CardGame, CardCatalog> _catalogs;
   final CatalogDao _dao;
@@ -48,7 +48,8 @@ class CatalogRepository {
 
     if (forceRefresh || cachedCount == 0 || stale) {
       try {
-        final sets = await catalogFor(game).fetchAllSets(onProgress: onProgress);
+        final sets = await catalogFor(game)
+            .fetchAllSets(onProgress: onProgress);
         if (sets.isNotEmpty) await _dao.upsertSets(game, sets);
       } catch (_) {
         if (cachedCount == 0) rethrow;
@@ -65,13 +66,18 @@ class CatalogRepository {
     Set<String>? types,
     bool includeDigital = false,
     SetSort sort = SetSort.newest,
-  }) =>
-      _dao.sets(game,
-          search: search, types: types, includeDigital: includeDigital, sort: sort);
+  }) => _dao.sets(
+    game,
+    search: search,
+    types: types,
+    includeDigital: includeDigital,
+    sort: sort,
+  );
 
-  Future<Map<String, int>> setTypeCounts(CardGame game,
-          {bool includeDigital = false}) =>
-      _dao.setTypeCounts(game, includeDigital: includeDigital);
+  Future<Map<String, int>> setTypeCounts(
+    CardGame game, {
+    bool includeDigital = false,
+  }) => _dao.setTypeCounts(game, includeDigital: includeDigital);
 
   Future<int> setCount(CardGame game) => _dao.setCount(game);
 
@@ -92,8 +98,8 @@ class CatalogRepository {
       return _dao.cardsInSet(game, code);
     }
     try {
-      final cards =
-          await catalogFor(game).fetchCardsInSet(code, onProgress: onProgress);
+      final cards = await catalogFor(game)
+          .fetchCardsInSet(code, onProgress: onProgress);
       if (cards.isNotEmpty) {
         await _dao.upsertCards(game, cards);
         // A provider that publishes no card count in its set list - Lorcast
@@ -119,7 +125,8 @@ class CatalogRepository {
   Future<bool> isCatalogued(CardGame game, String setCode) =>
       _dao.isCatalogued(game, setCode.toLowerCase());
 
-  Future<TcgCard?> cardById(CardGame game, String id) => _dao.cardById(game, id);
+  Future<TcgCard?> cardById(CardGame game, String id) =>
+      _dao.cardById(game, id);
 
   Future<Map<String, TcgCard>> cardsByIds(CardGame game, List<String> ids) =>
       _dao.cardsByIds(game, ids);
@@ -144,7 +151,11 @@ class CatalogRepository {
 
   /// Free-text search over the cached catalogue, extended by the API when the
   /// local cache has nothing useful to offer.
-  Future<List<TcgCard>> search(CardGame game, String query, {int limit = 80}) async {
+  Future<List<TcgCard>> search(
+    CardGame game,
+    String query, {
+    int limit = 80,
+  }) async {
     final q = query.trim();
     if (q.isEmpty) return const [];
     final local = await _dao.searchCached(game, q, limit: limit);

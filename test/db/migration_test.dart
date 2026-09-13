@@ -102,15 +102,28 @@ Future<void> applyV2Migration(Database d) async {
     SELECT 'mtg', date, total_value, unique_cards, total_cards FROM portfolio_snapshots
   ''');
   batch.execute('DROP TABLE portfolio_snapshots');
-  batch.execute('ALTER TABLE portfolio_snapshots_v2 RENAME TO portfolio_snapshots');
+  batch.execute(
+    'ALTER TABLE portfolio_snapshots_v2 RENAME TO portfolio_snapshots',
+  );
 
-  for (final table in ['cards', 'collection_entries', 'price_history', 'alerts']) {
-    batch.execute("ALTER TABLE $table ADD COLUMN game TEXT NOT NULL DEFAULT 'mtg'");
+  for (final table in [
+    'cards',
+    'collection_entries',
+    'price_history',
+    'alerts',
+  ]) {
+    batch.execute(
+      "ALTER TABLE $table ADD COLUMN game TEXT NOT NULL DEFAULT 'mtg'",
+    );
   }
   batch.execute('ALTER TABLE cards ADD COLUMN flavor_text TEXT');
-  batch.execute('ALTER TABLE cards ADD COLUMN booster INTEGER NOT NULL DEFAULT 0');
+  batch.execute(
+    'ALTER TABLE cards ADD COLUMN booster INTEGER NOT NULL DEFAULT 0',
+  );
   batch.execute('ALTER TABLE cards ADD COLUMN foil INTEGER NOT NULL DEFAULT 0');
-  batch.execute('ALTER TABLE cards ADD COLUMN nonfoil INTEGER NOT NULL DEFAULT 0');
+  batch.execute(
+    'ALTER TABLE cards ADD COLUMN nonfoil INTEGER NOT NULL DEFAULT 0',
+  );
   batch.execute('ALTER TABLE cards ADD COLUMN prices_json TEXT');
   batch.execute('ALTER TABLE cards ADD COLUMN extras_json TEXT');
 
@@ -221,8 +234,11 @@ void main() {
     expect(entries.first['quantity'], 3);
     expect(entries.first['binder'], 'Binder A');
     expect(entries.first['purchase_price'], 9.0);
-    expect(entries.first['game'], 'mtg',
-        reason: 'pre-existing rows become Magic rows');
+    expect(
+      entries.first['game'],
+      'mtg',
+      reason: 'pre-existing rows become Magic rows',
+    );
 
     final cards = await v2.query('cards');
     expect(cards, hasLength(1));
@@ -254,8 +270,11 @@ void main() {
       'fetched_at': now,
     });
     final both = await v2.query('sets', where: 'code = ?', whereArgs: ['fra']);
-    expect(both, hasLength(2),
-        reason: 'the same set code must be allowed in both games');
+    expect(
+      both,
+      hasLength(2),
+      reason: 'the same set code must be allowed in both games',
+    );
 
     await v2.close();
   });
@@ -298,26 +317,31 @@ void main() {
     );
 
     final mtgTotal = await v2.rawQuery(
-        "SELECT COALESCE(SUM(quantity),0) AS n FROM collection_entries WHERE game = 'mtg'");
+      "SELECT COALESCE(SUM(quantity),0) AS n FROM collection_entries WHERE game = 'mtg'",
+    );
     final pkTotal = await v2.rawQuery(
-        "SELECT COALESCE(SUM(quantity),0) AS n FROM collection_entries WHERE game = 'pokemon'");
+      "SELECT COALESCE(SUM(quantity),0) AS n FROM collection_entries WHERE game = 'pokemon'",
+    );
 
     expect(mtgTotal.first['n'], 3);
-    expect(pkTotal.first['n'], 0,
-        reason: 'a Pokémon query must not see Magic holdings');
+    expect(
+      pkTotal.first['n'],
+      0,
+      reason: 'a Pokémon query must not see Magic holdings',
+    );
     await v2.close();
   });
 
   /// A Lorcana printing in the Format Coconut set, named as given.
   TcgCard lorcana(String id, String name) => TcgCard(
-        game: CardGame.lorcana,
-        id: id,
-        setCode: 'coconut',
-        setName: 'Format Coconut',
-        name: name,
-        collectorNumber: '1',
-        rarity: 'Promo',
-      );
+    game: CardGame.lorcana,
+    id: id,
+    setCode: 'coconut',
+    setName: 'Format Coconut',
+    name: name,
+    collectorNumber: '1',
+    rarity: 'Promo',
+  );
 
   group('Lorcana data fixes (v4 and v5)', () {
     /// A database at the current schema, which is shape-identical to v3: the
@@ -329,46 +353,49 @@ void main() {
       return db;
     }
 
-    test('folds the provider casing onto the casing the app queries with',
-        () async {
-      final db = await openV4();
-      final dao = CatalogDao(db.db);
+    test(
+      'folds the provider casing onto the casing the app queries with',
+      () async {
+        final db = await openV4();
+        final dao = CatalogDao(db.db);
 
-      // What 1.5.0 stored: Lorcast's own spelling, which the app then asked
-      // for in lowercase and got a 404 back for.
-      await dao.upsertSets(CardGame.lorcana, <TcgSet>[
-        const TcgSet(
-          game: CardGame.lorcana,
-          id: 'set_p1',
-          code: 'P1',
-          name: 'Promo Set 1',
-          setType: 'promo',
-        ),
-        const TcgSet(
-          game: CardGame.lorcana,
-          id: 'set_d23',
-          code: 'D23',
-          name: 'D23 Collection',
-          setType: 'expansion',
-        ),
-        const TcgSet(
-          game: CardGame.lorcana,
-          id: 'set_3',
-          code: '3',
-          name: 'Into the Inklands',
-          setType: 'expansion',
-        ),
-      ]);
+        // What 1.5.0 stored: Lorcast's own spelling, which the app then asked
+        // for in lowercase and got a 404 back for.
+        await dao.upsertSets(CardGame.lorcana, <TcgSet>[
+          const TcgSet(
+            game: CardGame.lorcana,
+            id: 'set_p1',
+            code: 'P1',
+            name: 'Promo Set 1',
+            setType: 'promo',
+          ),
+          const TcgSet(
+            game: CardGame.lorcana,
+            id: 'set_d23',
+            code: 'D23',
+            name: 'D23 Collection',
+            setType: 'expansion',
+          ),
+          const TcgSet(
+            game: CardGame.lorcana,
+            id: 'set_3',
+            code: '3',
+            name: 'Into the Inklands',
+            setType: 'expansion',
+          ),
+        ]);
 
-      await AppDatabase.normaliseLorcanaCodes(db.db);
+        await AppDatabase.normaliseLorcanaCodes(db.db);
 
-      final sets = await dao.sets(CardGame.lorcana);
-      expect(
-        sets.map((s) => s.code).toList()..sort(),
-        <String>['3', 'd23', 'p1'],
-      );
-      await db.close();
-    });
+        final sets = await dao.sets(CardGame.lorcana);
+        expect(sets.map((s) => s.code).toList()..sort(), <String>[
+          '3',
+          'd23',
+          'p1',
+        ]);
+        await db.close();
+      },
+    );
 
     test('moves a printing with its set', () async {
       final db = await openV4();
@@ -467,27 +494,29 @@ void main() {
       await db.close();
     });
 
-    test('survives a database that already stores the lowercase code',
-        () async {
-      // Re-running the step must be a no-op rather than an error: an install
-      // that shipped the fix and then upgraded again would hit it twice.
-      final db = await openV4();
-      final dao = CatalogDao(db.db);
+    test(
+      'survives a database that already stores the lowercase code',
+      () async {
+        // Re-running the step must be a no-op rather than an error: an install
+        // that shipped the fix and then upgraded again would hit it twice.
+        final db = await openV4();
+        final dao = CatalogDao(db.db);
 
-      await dao.upsertSets(CardGame.lorcana, <TcgSet>[
-        const TcgSet(
-          game: CardGame.lorcana,
-          id: 'set_p1',
-          code: 'p1',
-          name: 'Promo Set 1',
-          setType: 'promo',
-        ),
-      ]);
+        await dao.upsertSets(CardGame.lorcana, <TcgSet>[
+          const TcgSet(
+            game: CardGame.lorcana,
+            id: 'set_p1',
+            code: 'p1',
+            name: 'Promo Set 1',
+            setType: 'promo',
+          ),
+        ]);
 
-      await AppDatabase.normaliseLorcanaCodes(db.db);
+        await AppDatabase.normaliseLorcanaCodes(db.db);
 
-      expect((await dao.sets(CardGame.lorcana)).single.code, 'p1');
-      await db.close();
-    });
+        expect((await dao.sets(CardGame.lorcana)).single.code, 'p1');
+        await db.close();
+      },
+    );
   });
 }

@@ -83,8 +83,9 @@ class KalmanRun {
       smoothed.isEmpty ? const <double>[0, 0] : smoothed.last;
 
   /// Smoothed covariance on the final grid day, or `[0, 0, 0]` when empty.
-  List<double> get lastSmoothedCovariance =>
-      smoothedCovariance.isEmpty ? const <double>[0, 0, 0] : smoothedCovariance.last;
+  List<double> get lastSmoothedCovariance => smoothedCovariance.isEmpty
+      ? const <double>[0, 0, 0]
+      : smoothedCovariance.last;
 }
 
 /// Runs the filter and smoother over a daily grid.
@@ -125,7 +126,8 @@ KalmanRun runLocalLinearTrend({
   final predicted = <List<double>>[];
   final predictedCovariance = <List<double>>[];
 
-  final firstObservation = observations[0] ??
+  final firstObservation =
+      observations[0] ??
       (observations.isEmpty ? 0.0 : observations[observations.keys.first]!);
 
   var level = firstObservation;
@@ -195,8 +197,11 @@ KalmanRun runLocalLinearTrend({
   // Rauch-Tung-Striebel backward pass.
   for (var t = 0; t < gridLength; t++) {
     smoothed.add(<double>[filtered[t][0], filtered[t][1]]);
-    smoothedCovariance.add(
-        <double>[filteredCovariance[t][0], filteredCovariance[t][1], filteredCovariance[t][2]]);
+    smoothedCovariance.add(<double>[
+      filteredCovariance[t][0],
+      filteredCovariance[t][1],
+      filteredCovariance[t][2],
+    ]);
   }
   for (var t = gridLength - 2; t >= 0; t--) {
     final a00 = filteredCovariance[t][0];

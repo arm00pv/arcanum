@@ -66,8 +66,7 @@ class ImportPlan {
   final List<ImportProblem> problems;
 
   /// Total physical cards the import will add.
-  int get totalCards =>
-      ready.fold(0, (sum, r) => sum + r.row.quantity);
+  int get totalCards => ready.fold(0, (sum, r) => sum + r.row.quantity);
 
   /// Stacks that will be added to an existing entry.
   int get merging => ready.where((r) => r.mergesExisting).length;
@@ -146,8 +145,8 @@ class CollectionImporter {
   CollectionImporter({
     required CollectionRepository collection,
     required CatalogRepository catalogs,
-  })  : _collection = collection,
-        _catalogs = catalogs;
+  }) : _collection = collection,
+       _catalogs = catalogs;
 
   final CollectionRepository _collection;
   final CatalogRepository _catalogs;
@@ -300,12 +299,7 @@ class CollectionImporter {
           created++;
         }
       } catch (error) {
-        failures.add(
-          ImportProblem(
-            'could not be added ($error).',
-            row: row,
-          ),
-        );
+        failures.add(ImportProblem('could not be added ($error).', row: row));
       }
       done++;
       onProgress?.call(done, plan.ready.length);
@@ -426,7 +420,10 @@ class CollectionImporter {
       '${row.language}|${row.binder}';
 
   /// The existing entry a row would merge into, if there is one.
-  CollectionEntry? _matchExisting(List<CollectionEntry> existing, ImportRow row) {
+  CollectionEntry? _matchExisting(
+    List<CollectionEntry> existing,
+    ImportRow row,
+  ) {
     for (final entry in existing) {
       if (entry.finish == row.finish &&
           entry.condition == row.condition &&

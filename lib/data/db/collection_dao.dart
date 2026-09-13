@@ -19,17 +19,23 @@ class CollectionDao {
 
   /// All entries for a game, newest first.
   Future<List<CollectionEntry>> all(CardGame game) async {
-    final rows = await _db.query('collection_entries',
-        where: 'game = ?', whereArgs: [game.id], orderBy: 'updated_at DESC');
+    final rows = await _db.query(
+      'collection_entries',
+      where: 'game = ?',
+      whereArgs: [game.id],
+      orderBy: 'updated_at DESC',
+    );
     return rows.map(CollectionEntry.fromRow).toList();
   }
 
   /// Entries for a single printing.
   Future<List<CollectionEntry>> forCard(CardGame game, String cardId) async {
-    final rows = await _db.query('collection_entries',
-        where: 'game = ? AND card_id = ?',
-        whereArgs: [game.id, cardId],
-        orderBy: 'updated_at DESC');
+    final rows = await _db.query(
+      'collection_entries',
+      where: 'game = ? AND card_id = ?',
+      whereArgs: [game.id, cardId],
+      orderBy: 'updated_at DESC',
+    );
     return rows.map(CollectionEntry.fromRow).toList();
   }
 
@@ -42,7 +48,10 @@ class CollectionDao {
     final out = <String, List<CollectionEntry>>{};
     // Chunked to stay well under SQLite's variable limit.
     for (var i = 0; i < cardIds.length; i += 400) {
-      final chunk = cardIds.sublist(i, i + 400 > cardIds.length ? cardIds.length : i + 400);
+      final chunk = cardIds.sublist(
+        i,
+        i + 400 > cardIds.length ? cardIds.length : i + 400,
+      );
       final marks = List.filled(chunk.length, '?').join(',');
       final rows = await _db.rawQuery(
         'SELECT * FROM collection_entries WHERE game = ? AND card_id IN ($marks)',
@@ -59,32 +68,37 @@ class CollectionDao {
   /// Distinct card ids currently owned.
   Future<List<String>> ownedCardIds(CardGame game) async {
     final rows = await _db.rawQuery(
-        'SELECT DISTINCT card_id FROM collection_entries WHERE game = ?', [game.id]);
+      'SELECT DISTINCT card_id FROM collection_entries WHERE game = ?',
+      [game.id],
+    );
     return rows.map((r) => r['card_id'] as String).toList();
   }
 
   /// Distinct binder names, excluding the default empty binder.
   Future<List<String>> binders(CardGame game) async {
     final rows = await _db.rawQuery(
-        "SELECT DISTINCT binder FROM collection_entries "
-        "WHERE game = ? AND binder <> '' ORDER BY binder",
-        [game.id]);
+      "SELECT DISTINCT binder FROM collection_entries "
+      "WHERE game = ? AND binder <> '' ORDER BY binder",
+      [game.id],
+    );
     return rows.map((r) => r['binder'] as String).toList();
   }
 
   /// Total number of physical cards owned in a game.
   Future<int> totalCardCount(CardGame game) async {
     final r = await _db.rawQuery(
-        'SELECT COALESCE(SUM(quantity), 0) AS n FROM collection_entries WHERE game = ?',
-        [game.id]);
+      'SELECT COALESCE(SUM(quantity), 0) AS n FROM collection_entries WHERE game = ?',
+      [game.id],
+    );
     return (r.first['n'] as num?)?.toInt() ?? 0;
   }
 
   /// Number of distinct printings owned in a game.
   Future<int> uniqueCount(CardGame game) async {
     final r = await _db.rawQuery(
-        'SELECT COUNT(DISTINCT card_id) AS n FROM collection_entries WHERE game = ?',
-        [game.id]);
+      'SELECT COUNT(DISTINCT card_id) AS n FROM collection_entries WHERE game = ?',
+      [game.id],
+    );
     return (r.first['n'] as num?)?.toInt() ?? 0;
   }
 
@@ -108,9 +122,17 @@ class CollectionDao {
     return _db.transaction((txn) async {
       final existing = await txn.query(
         'collection_entries',
-        where: 'game = ? AND card_id = ? AND finish = ? AND condition = ? '
+        where:
+            'game = ? AND card_id = ? AND finish = ? AND condition = ? '
             'AND language = ? AND binder = ?',
-        whereArgs: [game.id, cardId, finish.code, condition.code, language, binder],
+        whereArgs: [
+          game.id,
+          cardId,
+          finish.code,
+          condition.code,
+          language,
+          binder,
+        ],
         limit: 1,
       );
       if (existing.isNotEmpty) {
@@ -123,15 +145,17 @@ class CollectionDao {
           final oldQty = (row['quantity'] as int?) ?? 0;
           blended = oldQty <= 0
               ? purchasePrice
-              : ((blended ?? purchasePrice) * oldQty + purchasePrice * quantity) / newQty;
+              : ((blended ?? purchasePrice) * oldQty +
+                        purchasePrice * quantity) /
+                    newQty;
         }
         await txn.update(
           'collection_entries',
           {
             'quantity': newQty,
             'purchase_price': blended,
-            'purchase_date':
-                (purchaseDate ?? _dateFrom(row['purchase_date']))?.millisecondsSinceEpoch,
+            'purchase_date': (purchaseDate ?? _dateFrom(row['purchase_date']))
+                ?.millisecondsSinceEpoch,
             if (notes != null && notes.isNotEmpty) 'notes': notes,
             'updated_at': now.millisecondsSinceEpoch,
           },
@@ -168,7 +192,10 @@ class CollectionDao {
     }
     await _db.update(
       'collection_entries',
-      {'quantity': quantity, 'updated_at': DateTime.now().millisecondsSinceEpoch},
+      {
+        'quantity': quantity,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -176,8 +203,13 @@ class CollectionDao {
 
   /// Removes [quantity] copies, deleting the row if it hits zero.
   Future<void> decrement(int id, [int quantity = 1]) async {
-    final rows = await _db.query('collection_entries',
-        columns: ['quantity'], where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await _db.query(
+      'collection_entries',
+      columns: ['quantity'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) return;
     final current = (rows.first['quantity'] as int?) ?? 0;
     await setQuantity(id, current - quantity);
@@ -186,7 +218,12 @@ class CollectionDao {
   Future<void> updateEntry(CollectionEntry entry) async {
     if (entry.id == null) return;
     final row = entry.copyWith(updatedAt: DateTime.now()).toRow()..remove('id');
-    await _db.update('collection_entries', row, where: 'id = ?', whereArgs: [entry.id]);
+    await _db.update(
+      'collection_entries',
+      row,
+      where: 'id = ?',
+      whereArgs: [entry.id],
+    );
   }
 
   Future<void> delete(int id) async {
@@ -194,8 +231,11 @@ class CollectionDao {
   }
 
   Future<void> deleteAllForCard(CardGame game, String cardId) async {
-    await _db.delete('collection_entries',
-        where: 'game = ? AND card_id = ?', whereArgs: [game.id, cardId]);
+    await _db.delete(
+      'collection_entries',
+      where: 'game = ? AND card_id = ?',
+      whereArgs: [game.id, cardId],
+    );
   }
 
   /// Clears one game's collection, or every game when [game] is null.
@@ -203,7 +243,11 @@ class CollectionDao {
     if (game == null) {
       await _db.delete('collection_entries');
     } else {
-      await _db.delete('collection_entries', where: 'game = ?', whereArgs: [game.id]);
+      await _db.delete(
+        'collection_entries',
+        where: 'game = ?',
+        whereArgs: [game.id],
+      );
     }
   }
 }

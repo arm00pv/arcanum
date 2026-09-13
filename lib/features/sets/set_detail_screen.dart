@@ -99,7 +99,8 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     final game = widget.game;
     final setAsync = ref.watch(setProvider(_ref));
     final cardsAsync = ref.watch(setCardsProvider(_ref));
-    final owned = ref.watch(ownedQuantityProvider(game)).value ?? const <String, int>{};
+    final owned =
+        ref.watch(ownedQuantityProvider(game)).value ?? const <String, int>{};
     final set = setAsync.value;
 
     // Counted in binder slots, matching what the grid shows and what the
@@ -107,16 +108,17 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
     final ownedInSet = cardsAsync.value == null
         ? 0
         : groupIntoSlots(cardsAsync.value!)
-            .where((slot) => slot.ownedWith(owned) > 0)
-            .length;
+              .where((slot) => slot.ownedWith(owned) > 0)
+              .length;
 
     return Scaffold(
       body: Stack(
         children: [
           Positioned.fill(
             child: DecoratedBox(
-              decoration:
-                  BoxDecoration(gradient: AppTheme.backdrop(c, tint: game.accent)),
+              decoration: BoxDecoration(
+                gradient: AppTheme.backdrop(c, tint: game.accent),
+              ),
             ),
           ),
           RefreshIndicator(
@@ -175,14 +177,16 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                         onPressed: cardsAsync.value == null
                             ? null
                             : () => _openFilters(
-                                  groupIntoSlots(cardsAsync.value!),
-                                ),
+                                groupIntoSlots(cardsAsync.value!),
+                              ),
                       ),
                       IconButton(
                         tooltip: _grid ? 'List view' : 'Grid view',
                         onPressed: () => setState(() => _grid = !_grid),
                         icon: Icon(
-                          _grid ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                          _grid
+                              ? Icons.view_list_rounded
+                              : Icons.grid_view_rounded,
                         ),
                       ),
                     ],
@@ -196,14 +200,17 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                               SizedBox(
                                 width: 30,
                                 height: 30,
-                                child: Center(child: SetGlyph(set: set, size: 26)),
+                                child: Center(
+                                  child: SetGlyph(set: set, size: 26),
+                                ),
                               ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: PillToggle(
                                 options: ['All cards', 'Owned ($ownedInSet)'],
                                 selected: _ownedOnly ? 1 : 0,
-                                onChanged: (i) => setState(() => _ownedOnly = i == 1),
+                                onChanged: (i) =>
+                                    setState(() => _ownedOnly = i == 1),
                                 height: 34,
                               ),
                             ),
@@ -222,8 +229,8 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                         onEdit: cardsAsync.value == null
                             ? null
                             : () => _openFilters(
-                                  groupIntoSlots(cardsAsync.value!),
-                                ),
+                                groupIntoSlots(cardsAsync.value!),
+                              ),
                         onClear: () =>
                             setState(() => _filter = const SetFilter()),
                       ),
@@ -235,7 +242,8 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   onRetry: () => ref.invalidate(setCardsProvider(_ref)),
                   isEmpty: (cards) => cards.isEmpty,
                   emptyTitle: 'No cards cached',
-                  emptyMessage: 'Pull down to download this set from ${game.dataSource}.',
+                  emptyMessage:
+                      'Pull down to download this set from ${game.dataSource}.',
                   builder: (cards) {
                     // One tile per binder slot, not per printing: the provider
                     // lists a Yu-Gi-Oh! card several times over - by rarity and
@@ -271,8 +279,7 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                               : const EmptyState(
                                   icon: Icons.inbox_rounded,
                                   title: 'Nothing owned here yet',
-                                  message:
-                                      'You have not added any cards from this set.',
+                                  message: 'You have not added any cards from this set.',
                                 ),
                         ),
                       );
@@ -283,11 +290,11 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                             sliver: SliverGrid.builder(
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                mainAxisSpacing: 12,
-                                crossAxisSpacing: 10,
-                                childAspectRatio: 0.52,
-                              ),
+                                    crossAxisCount: 3,
+                                    mainAxisSpacing: 12,
+                                    crossAxisSpacing: 10,
+                                    childAspectRatio: 0.52,
+                                  ),
                               itemCount: visible.length,
                               itemBuilder: (context, i) => _SlotGridTile(
                                 slot: visible[i],
@@ -361,7 +368,8 @@ class _CardGridTile extends StatelessWidget {
     final c = context.c;
     final rarity = CardRarity.fromCode(card.rarity);
     final versions = slot;
-    final shown = slotPrice ??
+    final shown =
+        slotPrice ??
         SlotPrice(
           versions?.lowestPrice ?? card.prices.from,
           versions?.highestPrice ?? card.prices.from,
@@ -370,76 +378,90 @@ class _CardGridTile extends StatelessWidget {
     final price = shown.low;
 
     return GestureDetector(
-      onTap: onTap ??
-          () => Navigator.of(context).push(
+          onTap:
+              onTap ??
+              () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) =>
                       CardDetailScreen(game: card.game, cardId: card.id),
                 ),
               ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: CardThumbnail(
-              imageUrl: card.imageUrl(size: 'normal'),
-              heroTag: 'card-${card.id}',
-              rarity: rarity,
-              quantity: owned > 0 ? owned.toDouble() : null,
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: c.surfaceRaised,
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(color: c.hairline),
-                ),
-                child: Text(
-                  '#${card.collectorNumber}',
-                  style: context.t.labelSmall?.copyWith(color: c.textTertiary),
-                ),
-              ),
-              const Spacer(),
-              if (price != null)
-                Text(
-                  // A slot whose versions are worth different money says so
-                  // rather than quoting one of them as if it were the price.
-                  spread
-                      ? 'from ${Fmt.moneyAdaptive(price)}'
-                      : Fmt.moneyAdaptive(price),
-                  style: context.t.labelMedium?.copyWith(color: c.textSecondary),
-                ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: Text(
-                  card.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.t.bodySmall?.copyWith(color: c.textPrimary),
+                child: CardThumbnail(
+                  imageUrl: card.imageUrl(size: 'normal'),
+                  heroTag: 'card-${card.id}',
+                  rarity: rarity,
+                  quantity: owned > 0 ? owned.toDouble() : null,
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              const SizedBox(width: 4),
-              // A slot holding versions shows how many instead of a rarity:
-              // the rarity varies inside it, so any one of them would be a
-              // claim about the whole slot that is not true.
-              if (versions != null && versions.hasVersions)
-                _VersionChip(count: versions.versionCount)
-              else
-                RarityBadge(rarity: rarity, compact: true, code: card.rarityCode),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: c.surfaceRaised,
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: c.hairline),
+                    ),
+                    child: Text(
+                      '#${card.collectorNumber}',
+                      style: context.t.labelSmall?.copyWith(
+                        color: c.textTertiary,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (price != null)
+                    Text(
+                      // A slot whose versions are worth different money says so
+                      // rather than quoting one of them as if it were the price.
+                      spread
+                          ? 'from ${Fmt.moneyAdaptive(price)}'
+                          : Fmt.moneyAdaptive(price),
+                      style: context.t.labelMedium?.copyWith(
+                        color: c.textSecondary,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      card.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.t.bodySmall?.copyWith(
+                        color: c.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  // A slot holding versions shows how many instead of a rarity:
+                  // the rarity varies inside it, so any one of them would be a
+                  // claim about the whole slot that is not true.
+                  if (versions != null && versions.hasVersions)
+                    _VersionChip(count: versions.versionCount)
+                  else
+                    RarityBadge(
+                      rarity: rarity,
+                      compact: true,
+                      code: card.rarityCode,
+                    ),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
-    )
+        )
         .animate()
         .fadeIn(duration: 200.ms, delay: (index.clamp(0, 18) * 18).ms)
         .scale(begin: const Offset(0.96, 0.96), end: const Offset(1, 1));
@@ -476,7 +498,8 @@ class _CardListTile extends StatelessWidget {
     final c = context.c;
     final rarity = CardRarity.fromCode(card.rarity);
     final versions = slot;
-    final shown = slotPrice ??
+    final shown =
+        slotPrice ??
         SlotPrice(
           versions?.lowestPrice ?? card.prices.from,
           versions?.highestPrice ?? card.prices.from,
@@ -489,13 +512,14 @@ class _CardListTile extends StatelessWidget {
 
     return GlassCard(
       padding: EdgeInsets.zero,
-      onTap: onTap ??
+      onTap:
+          onTap ??
           () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      CardDetailScreen(game: card.game, cardId: card.id),
-                ),
-              ),
+            MaterialPageRoute<void>(
+              builder: (_) =>
+                  CardDetailScreen(game: card.game, cardId: card.id),
+            ),
+          ),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Row(
@@ -526,7 +550,9 @@ class _CardListTile extends StatelessWidget {
                     children: [
                       Text(
                         '#${card.collectorNumber}',
-                        style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                        style: context.t.labelSmall?.copyWith(
+                          color: c.textTertiary,
+                        ),
                       ),
                       const SizedBox(width: 6),
                       if (versions != null && versions.hasVersions)
@@ -576,6 +602,7 @@ class _CardListTile extends StatelessWidget {
     ).animate().fadeIn(duration: 180.ms, delay: (index.clamp(0, 14) * 16).ms);
   }
 }
+
 /// A grid tile standing for a whole binder slot.
 ///
 /// The rendering is the ordinary card tile's, because a slot's versions share
@@ -595,13 +622,13 @@ class _SlotGridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _CardGridTile(
-        card: slot.primary,
-        owned: owned,
-        index: index,
-        slot: slot,
-        slotPrice: price,
-        onTap: () => openSlot(context, slot),
-      );
+    card: slot.primary,
+    owned: owned,
+    index: index,
+    slot: slot,
+    slotPrice: price,
+    onTap: () => openSlot(context, slot),
+  );
 }
 
 /// A list row standing for a whole binder slot.
@@ -620,13 +647,13 @@ class _SlotListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => _CardListTile(
-        card: slot.primary,
-        owned: owned,
-        index: index,
-        slot: slot,
-        slotPrice: price,
-        onTap: () => openSlot(context, slot),
-      );
+    card: slot.primary,
+    owned: owned,
+    index: index,
+    slot: slot,
+    slotPrice: price,
+    onTap: () => openSlot(context, slot),
+  );
 }
 
 /// Opens a slot: straight to the card when there is one version, and to the
@@ -731,8 +758,9 @@ class _VersionSheet extends StatelessWidget {
                                     Text(
                                       card.printingCode!,
                                       maxLines: 1,
-                                      style: context.t.labelSmall
-                                          ?.copyWith(color: c.textTertiary),
+                                      style: context.t.labelSmall?.copyWith(
+                                        color: c.textTertiary,
+                                      ),
                                     ),
                                 ],
                               ),
@@ -853,8 +881,7 @@ class _FilterSummary extends StatelessWidget {
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
-        for (final label in labels)
-          _SummaryChip(label: label, onTap: onEdit),
+        for (final label in labels) _SummaryChip(label: label, onTap: onEdit),
         _SummaryChip(
           label: 'Clear',
           icon: Icons.close_rounded,
@@ -907,10 +934,7 @@ class _SummaryChip extends StatelessWidget {
                 Icon(icon, size: 13, color: tint),
                 const SizedBox(width: 4),
               ],
-              Text(
-                label,
-                style: context.t.labelMedium?.copyWith(color: tint),
-              ),
+              Text(label, style: context.t.labelMedium?.copyWith(color: tint)),
             ],
           ),
         ),
@@ -918,4 +942,3 @@ class _SummaryChip extends StatelessWidget {
     );
   }
 }
-

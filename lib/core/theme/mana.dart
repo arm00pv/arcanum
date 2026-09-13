@@ -71,8 +71,12 @@ enum ManaColor implements ColourBucket {
   static ManaColor dominant(List<String> colorIdentity) {
     if (colorIdentity.isEmpty) return ManaColor.colorless;
     const order = ['W', 'U', 'B', 'R', 'G'];
-    final sorted = [...colorIdentity]..sort(
-        (a, b) => order.indexOf(a.toUpperCase()).compareTo(order.indexOf(b.toUpperCase())));
+    final sorted = [...colorIdentity]
+      ..sort(
+        (a, b) => order
+            .indexOf(a.toUpperCase())
+            .compareTo(order.indexOf(b.toUpperCase())),
+      );
     return fromSymbol(sorted.first);
   }
 }
@@ -171,7 +175,11 @@ enum CardFinish {
   holofoil('holofoil', 'Holofoil', 'Holo'),
   reverseHolofoil('reverse_holofoil', 'Reverse Holo', 'Rev. Holo'),
   firstEdition('first_edition', '1st Edition', '1st Ed.'),
-  firstEditionHolofoil('first_edition_holofoil', '1st Ed. Holo', '1st Ed. Holo');
+  firstEditionHolofoil(
+    'first_edition_holofoil',
+    '1st Ed. Holo',
+    '1st Ed. Holo',
+  );
 
   const CardFinish(this.code, this.label, this.shortLabel);
 
@@ -206,15 +214,37 @@ enum CardFinish {
 /// the grades its collectors actually use.
 enum CardCondition {
   mint('mint', 'Mint', 'M', {CardGameTag.mtg}),
-  nearMint('near_mint', 'Near Mint', 'NM', {CardGameTag.mtg, CardGameTag.pokemon, CardGameTag.yugioh, CardGameTag.lorcana}),
+  nearMint('near_mint', 'Near Mint', 'NM', {
+    CardGameTag.mtg,
+    CardGameTag.pokemon,
+    CardGameTag.yugioh,
+    CardGameTag.lorcana,
+  }),
   excellent('excellent', 'Excellent', 'EX', {CardGameTag.mtg}),
   good('good', 'Good', 'GD', {CardGameTag.mtg}),
-  lightPlayed('light_played', 'Lightly Played', 'LP', {CardGameTag.mtg, CardGameTag.pokemon, CardGameTag.yugioh, CardGameTag.lorcana}),
-  moderatelyPlayed('moderately_played', 'Moderately Played', 'MP', {CardGameTag.pokemon, CardGameTag.yugioh, CardGameTag.lorcana}),
-  heavilyPlayed('heavily_played', 'Heavily Played', 'HP', {CardGameTag.pokemon, CardGameTag.yugioh, CardGameTag.lorcana}),
+  lightPlayed('light_played', 'Lightly Played', 'LP', {
+    CardGameTag.mtg,
+    CardGameTag.pokemon,
+    CardGameTag.yugioh,
+    CardGameTag.lorcana,
+  }),
+  moderatelyPlayed('moderately_played', 'Moderately Played', 'MP', {
+    CardGameTag.pokemon,
+    CardGameTag.yugioh,
+    CardGameTag.lorcana,
+  }),
+  heavilyPlayed('heavily_played', 'Heavily Played', 'HP', {
+    CardGameTag.pokemon,
+    CardGameTag.yugioh,
+    CardGameTag.lorcana,
+  }),
   played('played', 'Played', 'PL', {CardGameTag.mtg}),
   poor('poor', 'Poor', 'PO', {CardGameTag.mtg}),
-  damaged('damaged', 'Damaged', 'DMG', {CardGameTag.pokemon, CardGameTag.yugioh, CardGameTag.lorcana});
+  damaged('damaged', 'Damaged', 'DMG', {
+    CardGameTag.pokemon,
+    CardGameTag.yugioh,
+    CardGameTag.lorcana,
+  });
 
   const CardCondition(this.code, this.label, this.short, this.games);
 
@@ -231,20 +261,22 @@ enum CardCondition {
   /// These are conventional grading discounts used by major vendors; they are
   /// deliberately conservative and surfaced in the UI as an estimate.
   double get priceMultiplier => switch (this) {
-        CardCondition.mint => 1.05,
-        CardCondition.nearMint => 1.0,
-        CardCondition.excellent => 0.9,
-        CardCondition.good => 0.8,
-        CardCondition.lightPlayed => 0.7,
-        CardCondition.moderatelyPlayed => 0.62,
-        CardCondition.heavilyPlayed => 0.5,
-        CardCondition.played => 0.55,
-        CardCondition.poor => 0.35,
-        CardCondition.damaged => 0.35,
-      };
+    CardCondition.mint => 1.05,
+    CardCondition.nearMint => 1.0,
+    CardCondition.excellent => 0.9,
+    CardCondition.good => 0.8,
+    CardCondition.lightPlayed => 0.7,
+    CardCondition.moderatelyPlayed => 0.62,
+    CardCondition.heavilyPlayed => 0.5,
+    CardCondition.played => 0.55,
+    CardCondition.poor => 0.35,
+    CardCondition.damaged => 0.35,
+  };
 
-  static CardCondition fromCode(String? c) =>
-      CardCondition.values.firstWhere((e) => e.code == c, orElse: () => CardCondition.nearMint);
+  static CardCondition fromCode(String? c) => CardCondition.values.firstWhere(
+    (e) => e.code == c,
+    orElse: () => CardCondition.nearMint,
+  );
 }
 
 /// A game tag used by the condition table.

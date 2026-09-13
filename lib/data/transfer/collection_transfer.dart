@@ -11,7 +11,11 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 enum TransferDialect {
   arcanum('arcanum', 'Arcanum', 'Everything, including cost basis and binder'),
   moxfield('moxfield', 'Moxfield', 'Count, Name, Edition, Condition, Foil'),
-  archidekt('archidekt', 'Archidekt', 'Quantity, Name, Edition, Condition, Foil'),
+  archidekt(
+    'archidekt',
+    'Archidekt',
+    'Quantity, Name, Edition, Condition, Foil',
+  ),
   generic('generic', 'Spreadsheet', 'Plain quantity, name, set and number');
 
   const TransferDialect(this.id, this.label, this.description);
@@ -28,7 +32,15 @@ enum TransferDialect {
 const Map<String, List<String>> _aliases = <String, List<String>>{
   'cardId': <String>['card_id', 'card id', 'scryfall id', 'scryfall_id', 'id'],
   'name': <String>['name', 'card name', 'card', 'title'],
-  'setCode': <String>['set_code', 'set code', 'edition', 'set', 'setcode', 'expansion', 'set id'],
+  'setCode': <String>[
+    'set_code',
+    'set code',
+    'edition',
+    'set',
+    'setcode',
+    'expansion',
+    'set id',
+  ],
   'collectorNumber': <String>[
     'collector_number',
     'collector number',
@@ -40,7 +52,14 @@ const Map<String, List<String>> _aliases = <String, List<String>>{
   'finish': <String>['finish', 'foil', 'printing', 'variant', 'is foil'],
   'condition': <String>['condition', 'cond', 'grade'],
   'language': <String>['language', 'lang'],
-  'binder': <String>['binder', 'location', 'categories', 'category', 'tags', 'deck'],
+  'binder': <String>[
+    'binder',
+    'location',
+    'categories',
+    'category',
+    'tags',
+    'deck',
+  ],
   'notes': <String>['notes', 'note', 'comment', 'comments'],
   'purchasePrice': <String>[
     'purchase_price',
@@ -165,7 +184,9 @@ abstract final class CollectionCsvReader {
       return ParsedCollection(
         dialect: resolved,
         rows: const <ImportRow>[],
-        problems: <String>['No card name column found. Looked for: $wantedNames.'],
+        problems: <String>[
+          'No card name column found. Looked for: $wantedNames.',
+        ],
       );
     }
 
@@ -192,27 +213,27 @@ abstract final class CollectionCsvReader {
           sourceLine: line,
           name: name,
           cardId: id,
-          setCode: (_cell(cells, _column(columns, 'setCode')) ?? '').toLowerCase(),
-          collectorNumber: _cell(cells, _column(columns, 'collectorNumber')) ?? '',
+          setCode: (_cell(cells, _column(columns, 'setCode')) ?? '')
+              .toLowerCase(),
+          collectorNumber:
+              _cell(cells, _column(columns, 'collectorNumber')) ?? '',
           quantity: quantity,
           finish: parseFinish(_cell(cells, _column(columns, 'finish')) ?? ''),
-          condition:
-              parseCondition(_cell(cells, _column(columns, 'condition')) ?? ''),
+          condition: parseCondition(
+            _cell(cells, _column(columns, 'condition')) ?? '',
+          ),
           language: _language(_cell(cells, _column(columns, 'language'))),
           binder: _cell(cells, _column(columns, 'binder')) ?? '',
           notes: _cell(cells, _column(columns, 'notes')),
-          purchasePrice:
-              _money(_cell(cells, _column(columns, 'purchasePrice'))),
+          purchasePrice: _money(
+            _cell(cells, _column(columns, 'purchasePrice')),
+          ),
           purchaseDate: _date(_cell(cells, _column(columns, 'purchaseDate'))),
         ),
       );
     }
 
-    return ParsedCollection(
-      dialect: resolved,
-      rows: rows,
-      problems: problems,
-    );
+    return ParsedCollection(dialect: resolved, rows: rows, problems: problems);
   }
 
   static int? _column(Map<String, int> header, String field) {
@@ -289,7 +310,11 @@ abstract final class CollectionCsvReader {
 
   /// Reads a finish from the many spellings used across services.
   static CardFinish parseFinish(String raw) {
-    final s = raw.trim().toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
+    final s = raw
+        .trim()
+        .toLowerCase()
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ');
     if (s.isEmpty) return CardFinish.nonfoil;
     if (s.startsWith('non') || s == 'normal' || s == 'nf') {
       return CardFinish.nonfoil;
@@ -363,58 +388,58 @@ class ExportRow {
 abstract final class CollectionCsvWriter {
   /// The header row for [dialect].
   static List<String> header(TransferDialect dialect) => switch (dialect) {
-        TransferDialect.arcanum => <String>[
-            'card_id',
-            'name',
-            'set_code',
-            'set_name',
-            'collector_number',
-            'rarity',
-            'finish',
-            'condition',
-            'language',
-            'quantity',
-            'purchase_price',
-            'purchase_date',
-            'binder',
-            'notes',
-            'market_value',
-            'total_value',
-          ],
-        TransferDialect.moxfield => <String>[
-            'Count',
-            'Tradelist Count',
-            'Name',
-            'Edition',
-            'Condition',
-            'Language',
-            'Foil',
-            'Tags',
-            'Collector Number',
-          ],
-        TransferDialect.archidekt => <String>[
-            'Quantity',
-            'Name',
-            'Edition',
-            'Condition',
-            'Language',
-            'Foil',
-            'Collector Number',
-            'Categories',
-          ],
-        TransferDialect.generic => <String>[
-            'Quantity',
-            'Name',
-            'Set Code',
-            'Collector Number',
-            'Finish',
-            'Condition',
-            'Language',
-            'Purchase Price',
-            'Binder',
-            'Notes',
-          ],
-      };
+    TransferDialect.arcanum => <String>[
+      'card_id',
+      'name',
+      'set_code',
+      'set_name',
+      'collector_number',
+      'rarity',
+      'finish',
+      'condition',
+      'language',
+      'quantity',
+      'purchase_price',
+      'purchase_date',
+      'binder',
+      'notes',
+      'market_value',
+      'total_value',
+    ],
+    TransferDialect.moxfield => <String>[
+      'Count',
+      'Tradelist Count',
+      'Name',
+      'Edition',
+      'Condition',
+      'Language',
+      'Foil',
+      'Tags',
+      'Collector Number',
+    ],
+    TransferDialect.archidekt => <String>[
+      'Quantity',
+      'Name',
+      'Edition',
+      'Condition',
+      'Language',
+      'Foil',
+      'Collector Number',
+      'Categories',
+    ],
+    TransferDialect.generic => <String>[
+      'Quantity',
+      'Name',
+      'Set Code',
+      'Collector Number',
+      'Finish',
+      'Condition',
+      'Language',
+      'Purchase Price',
+      'Binder',
+      'Notes',
+    ],
+  };
 
   /// Builds a complete file from [rows].
   static String build(TransferDialect dialect, List<ExportRow> rows) {
@@ -439,69 +464,69 @@ abstract final class CollectionCsvWriter {
 
     return switch (dialect) {
       TransferDialect.arcanum => <String>[
-          e.cardId,
-          name,
-          setCode,
-          card?.setName ?? '',
-          number,
-          card?.rarity ?? '',
-          e.finish.code,
-          e.condition.code,
-          e.language,
-          e.quantity.toString(),
-          price == null ? '' : price.toStringAsFixed(2),
-          e.purchaseDate == null ? '' : _isoDate(e.purchaseDate!),
-          e.binder,
-          e.notes ?? '',
-          unit == null ? '' : unit.toStringAsFixed(2),
-          total == null ? '' : total.toStringAsFixed(2),
-        ],
+        e.cardId,
+        name,
+        setCode,
+        card?.setName ?? '',
+        number,
+        card?.rarity ?? '',
+        e.finish.code,
+        e.condition.code,
+        e.language,
+        e.quantity.toString(),
+        price == null ? '' : price.toStringAsFixed(2),
+        e.purchaseDate == null ? '' : _isoDate(e.purchaseDate!),
+        e.binder,
+        e.notes ?? '',
+        unit == null ? '' : unit.toStringAsFixed(2),
+        total == null ? '' : total.toStringAsFixed(2),
+      ],
       TransferDialect.moxfield => <String>[
-          e.quantity.toString(),
-          '',
-          name,
-          setCode.toUpperCase(),
-          condition,
-          e.language,
-          finish,
-          e.binder,
-          number,
-        ],
+        e.quantity.toString(),
+        '',
+        name,
+        setCode.toUpperCase(),
+        condition,
+        e.language,
+        finish,
+        e.binder,
+        number,
+      ],
       TransferDialect.archidekt => <String>[
-          e.quantity.toString(),
-          name,
-          setCode.toUpperCase(),
-          condition,
-          e.language,
-          finish,
-          number,
-          e.binder,
-        ],
+        e.quantity.toString(),
+        name,
+        setCode.toUpperCase(),
+        condition,
+        e.language,
+        finish,
+        number,
+        e.binder,
+      ],
       TransferDialect.generic => <String>[
-          e.quantity.toString(),
-          name,
-          setCode.toUpperCase(),
-          number,
-          e.finish.code,
-          e.condition.code,
-          e.language,
-          price == null ? '' : price.toStringAsFixed(2),
-          e.binder,
-          e.notes ?? '',
-        ],
+        e.quantity.toString(),
+        name,
+        setCode.toUpperCase(),
+        number,
+        e.finish.code,
+        e.condition.code,
+        e.language,
+        price == null ? '' : price.toStringAsFixed(2),
+        e.binder,
+        e.notes ?? '',
+      ],
     };
   }
 
   /// The vocabulary Moxfield and Archidekt use for finishes.
   static String _finishLabel(CardFinish finish) => switch (finish) {
-        CardFinish.nonfoil => 'nonfoil',
-        CardFinish.foil => 'foil',
-        CardFinish.etched => 'etched',
-        CardFinish.holofoil => 'holo',
-        CardFinish.reverseHolofoil => 'reverseholo',
-        CardFinish.firstEdition => '1st edition',
-        CardFinish.firstEditionHolofoil => '1st edition holo',
-      };
+    CardFinish.nonfoil => 'nonfoil',
+    CardFinish.foil => 'foil',
+    CardFinish.etched => 'etched',
+    CardFinish.holofoil => 'holo',
+    CardFinish.reverseHolofoil => 'reverseholo',
+    CardFinish.firstEdition => '1st edition',
+    CardFinish.firstEditionHolofoil => '1st edition holo',
+  };
 
   static String _isoDate(DateTime d) {
     final month = d.month.toString().padLeft(2, '0');

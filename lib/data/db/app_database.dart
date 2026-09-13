@@ -105,7 +105,9 @@ class AppDatabase {
         PRIMARY KEY (game, code)
       )
     ''');
-    batch.execute('CREATE INDEX idx_sets_game_released ON sets(game, released_at DESC)');
+    batch.execute(
+      'CREATE INDEX idx_sets_game_released ON sets(game, released_at DESC)',
+    );
     batch.execute('CREATE INDEX idx_sets_type ON sets(game, set_type)');
 
     // --------------------------------------------------------------- cards
@@ -152,8 +154,11 @@ class AppDatabase {
       )
     ''');
     batch.execute(
-        'CREATE INDEX idx_cards_set ON cards(game, set_code, collector_sort, collector_number)');
-    batch.execute('CREATE INDEX idx_cards_name ON cards(game, name COLLATE NOCASE)');
+      'CREATE INDEX idx_cards_set ON cards(game, set_code, collector_sort, collector_number)',
+    );
+    batch.execute(
+      'CREATE INDEX idx_cards_name ON cards(game, name COLLATE NOCASE)',
+    );
     batch.execute('CREATE INDEX idx_cards_oracle ON cards(game, oracle_id)');
     batch.execute('CREATE INDEX idx_cards_rarity ON cards(game, rarity)');
 
@@ -176,10 +181,15 @@ class AppDatabase {
       )
     ''');
     batch.execute(
-        'CREATE UNIQUE INDEX idx_entries_unique ON collection_entries(game, card_id, finish, condition, language, binder)');
+      'CREATE UNIQUE INDEX idx_entries_unique ON collection_entries(game, card_id, finish, condition, language, binder)',
+    );
     batch.execute('CREATE INDEX idx_entries_game ON collection_entries(game)');
-    batch.execute('CREATE INDEX idx_entries_card ON collection_entries(card_id)');
-    batch.execute('CREATE INDEX idx_entries_binder ON collection_entries(game, binder)');
+    batch.execute(
+      'CREATE INDEX idx_entries_card ON collection_entries(card_id)',
+    );
+    batch.execute(
+      'CREATE INDEX idx_entries_binder ON collection_entries(game, binder)',
+    );
 
     // ------------------------------------------------------- price history
     batch.execute('''
@@ -194,8 +204,11 @@ class AppDatabase {
       ) WITHOUT ROWID
     ''');
     batch.execute(
-        'CREATE INDEX idx_history_lookup ON price_history(card_id, finish, date DESC)');
-    batch.execute('CREATE INDEX idx_history_game ON price_history(game, date DESC)');
+      'CREATE INDEX idx_history_lookup ON price_history(card_id, finish, date DESC)',
+    );
+    batch.execute(
+      'CREATE INDEX idx_history_game ON price_history(game, date DESC)',
+    );
 
     // --------------------------------------------------- portfolio tracking
     batch.execute('''
@@ -292,7 +305,9 @@ class AppDatabase {
   static Future<void> _migrateV2ToV3(Database d) async {
     final batch = d.batch();
     batch.execute('ALTER TABLE alerts ADD COLUMN baseline REAL');
-    batch.execute('UPDATE alerts SET baseline = last_value WHERE baseline IS NULL');
+    batch.execute(
+      'UPDATE alerts SET baseline = last_value WHERE baseline IS NULL',
+    );
     await batch.commit(noResult: true);
   }
 
@@ -341,7 +356,9 @@ class AppDatabase {
     ''');
     batch.execute('DROP TABLE sets');
     batch.execute('ALTER TABLE sets_v2 RENAME TO sets');
-    batch.execute('CREATE INDEX idx_sets_game_released ON sets(game, released_at DESC)');
+    batch.execute(
+      'CREATE INDEX idx_sets_game_released ON sets(game, released_at DESC)',
+    );
     batch.execute('CREATE INDEX idx_sets_type ON sets(game, set_type)');
 
     // portfolio_snapshots: primary key becomes (game, date).
@@ -360,17 +377,31 @@ class AppDatabase {
       SELECT 'mtg', date, total_value, unique_cards, total_cards FROM portfolio_snapshots
     ''');
     batch.execute('DROP TABLE portfolio_snapshots');
-    batch.execute('ALTER TABLE portfolio_snapshots_v2 RENAME TO portfolio_snapshots');
+    batch.execute(
+      'ALTER TABLE portfolio_snapshots_v2 RENAME TO portfolio_snapshots',
+    );
 
     // The remaining tables only gain columns.
-    for (final table in ['cards', 'collection_entries', 'price_history', 'alerts']) {
+    for (final table in [
+      'cards',
+      'collection_entries',
+      'price_history',
+      'alerts',
+    ]) {
       batch.execute(
-          "ALTER TABLE $table ADD COLUMN game TEXT NOT NULL DEFAULT 'mtg'");
+        "ALTER TABLE $table ADD COLUMN game TEXT NOT NULL DEFAULT 'mtg'",
+      );
     }
     batch.execute('ALTER TABLE cards ADD COLUMN flavor_text TEXT');
-    batch.execute('ALTER TABLE cards ADD COLUMN booster INTEGER NOT NULL DEFAULT 0');
-    batch.execute('ALTER TABLE cards ADD COLUMN foil INTEGER NOT NULL DEFAULT 0');
-    batch.execute('ALTER TABLE cards ADD COLUMN nonfoil INTEGER NOT NULL DEFAULT 0');
+    batch.execute(
+      'ALTER TABLE cards ADD COLUMN booster INTEGER NOT NULL DEFAULT 0',
+    );
+    batch.execute(
+      'ALTER TABLE cards ADD COLUMN foil INTEGER NOT NULL DEFAULT 0',
+    );
+    batch.execute(
+      'ALTER TABLE cards ADD COLUMN nonfoil INTEGER NOT NULL DEFAULT 0',
+    );
     batch.execute('ALTER TABLE cards ADD COLUMN prices_json TEXT');
     batch.execute('ALTER TABLE cards ADD COLUMN extras_json TEXT');
 
@@ -383,16 +414,24 @@ class AppDatabase {
     batch.execute('DROP INDEX IF EXISTS idx_entries_binder');
     batch.execute('DROP INDEX IF EXISTS idx_alerts_card');
     batch.execute(
-        'CREATE INDEX idx_cards_set ON cards(game, set_code, collector_sort, collector_number)');
-    batch.execute('CREATE INDEX idx_cards_name ON cards(game, name COLLATE NOCASE)');
+      'CREATE INDEX idx_cards_set ON cards(game, set_code, collector_sort, collector_number)',
+    );
+    batch.execute(
+      'CREATE INDEX idx_cards_name ON cards(game, name COLLATE NOCASE)',
+    );
     batch.execute('CREATE INDEX idx_cards_oracle ON cards(game, oracle_id)');
     batch.execute('CREATE INDEX idx_cards_rarity ON cards(game, rarity)');
     batch.execute(
-        'CREATE UNIQUE INDEX idx_entries_unique ON collection_entries(game, card_id, finish, condition, language, binder)');
+      'CREATE UNIQUE INDEX idx_entries_unique ON collection_entries(game, card_id, finish, condition, language, binder)',
+    );
     batch.execute('CREATE INDEX idx_entries_game ON collection_entries(game)');
-    batch.execute('CREATE INDEX idx_entries_binder ON collection_entries(game, binder)');
+    batch.execute(
+      'CREATE INDEX idx_entries_binder ON collection_entries(game, binder)',
+    );
     batch.execute('CREATE INDEX idx_alerts_card ON alerts(game, card_id)');
-    batch.execute('CREATE INDEX IF NOT EXISTS idx_history_game ON price_history(game, date DESC)');
+    batch.execute(
+      'CREATE INDEX IF NOT EXISTS idx_history_game ON price_history(game, date DESC)',
+    );
 
     await batch.commit(noResult: true);
   }

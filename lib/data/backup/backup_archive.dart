@@ -79,21 +79,21 @@ class BackupArchive {
 
   /// How many rows of each table the archive holds.
   Map<String, int> get counts => {
-        for (final entry in tables.entries) entry.key: entry.value.length,
-      };
+    for (final entry in tables.entries) entry.key: entry.value.length,
+  };
 
   int get totalRows =>
       tables.values.fold<int>(0, (sum, rows) => sum + rows.length);
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'format': format,
-        'version': version,
-        'created': created.toUtc().toIso8601String(),
-        'app': appVersion,
-        'counts': counts,
-        'tables': tables,
-        'settings': settings,
-      };
+    'format': format,
+    'version': version,
+    'created': created.toUtc().toIso8601String(),
+    'app': appVersion,
+    'counts': counts,
+    'tables': tables,
+    'settings': settings,
+  };
 
   /// Reads an archive, or explains why the document is not one.
   ///
@@ -124,7 +124,9 @@ class BackupArchive {
       final rows = rawTables[name];
       if (rows == null) continue;
       if (rows is! List) {
-        throw BackupFormatException('That backup has an unreadable "$name" section.');
+        throw BackupFormatException(
+          'That backup has an unreadable "$name" section.',
+        );
       }
       tables[name] = <Map<String, Object?>>[
         for (final row in rows)
@@ -139,7 +141,8 @@ class BackupArchive {
           entry.key.toString(): entry.value,
     };
 
-    final created = DateTime.tryParse(raw['created']?.toString() ?? '')?.toUtc();
+    final created = DateTime.tryParse(raw['created']?.toString() ?? '')
+        ?.toUtc();
 
     return BackupArchive(
       created: created ?? DateTime.now().toUtc(),
@@ -150,8 +153,7 @@ class BackupArchive {
   }
 
   /// The archive as the bytes that travel: gzipped JSON.
-  List<int> encode() =>
-      gzip.encode(utf8.encode(jsonEncode(toJson())));
+  List<int> encode() => gzip.encode(utf8.encode(jsonEncode(toJson())));
 
   /// Reads the bytes that arrive back.
   static BackupArchive decode(List<int> bytes) {

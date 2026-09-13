@@ -49,7 +49,10 @@ class GameSwitcherBar extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color: game.accent.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(5),
@@ -64,16 +67,21 @@ class GameSwitcherBar extends ConsumerWidget {
                   child: Text(
                     summary == null || summary.totalCards == 0
                         ? (summary?.hasCatalog == true
-                            ? '${Fmt.count(summary!.setCount)} sets catalogued'
-                            : 'Not downloaded yet')
+                              ? '${Fmt.count(summary!.setCount)} sets catalogued'
+                              : 'Not downloaded yet')
                         : '${Fmt.count(summary.totalCards)} cards · '
-                            '${Fmt.moneyCompact(summary.totalValue)}',
+                              '${Fmt.moneyCompact(summary.totalValue)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                    style: context.t.labelSmall?.copyWith(
+                      color: c.textTertiary,
+                    ),
                   ),
                 ),
-                Text('Switch', style: context.t.labelSmall?.copyWith(color: game.accent)),
+                Text(
+                  'Switch',
+                  style: context.t.labelSmall?.copyWith(color: game.accent),
+                ),
                 Icon(Icons.unfold_more_rounded, size: 16, color: game.accent),
               ],
             ),
@@ -176,10 +184,12 @@ class _GameCard extends StatelessWidget {
       padding: EdgeInsets.zero,
       onTap: onTap,
       borderGradient: selected
-          ? LinearGradient(colors: [
-              game.accent.withValues(alpha: 0.9),
-              game.accent.withValues(alpha: 0.15),
-            ])
+          ? LinearGradient(
+              colors: [
+                game.accent.withValues(alpha: 0.9),
+                game.accent.withValues(alpha: 0.15),
+              ],
+            )
           : null,
       semanticLabel: '${game.label}${selected ? ', currently selected' : ''}',
       child: Padding(
@@ -201,7 +211,10 @@ class _GameCard extends StatelessWidget {
                 ),
                 if (selected)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: game.accent.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
@@ -288,7 +301,9 @@ class _Stat extends StatelessWidget {
         children: [
           Text(
             label,
-            style: context.t.labelSmall?.copyWith(color: context.c.textTertiary),
+            style: context.t.labelSmall?.copyWith(
+              color: context.c.textTertiary,
+            ),
           ),
           const SizedBox(height: 2),
           Text(value, style: context.t.bodyMedium),

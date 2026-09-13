@@ -34,8 +34,10 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 /// direct.
 class LorcanaCatalog implements CardCatalog {
   LorcanaCatalog({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: _base,
               connectTimeout: const Duration(seconds: 12),
               // A large set - 242 cards - is roughly 300 KB in one response.
@@ -44,7 +46,8 @@ class LorcanaCatalog implements CardCatalog {
                 'Accept': 'application/json',
                 'User-Agent': 'Arcanum/1.0 (+https://github.com/arcanum)',
               },
-            ));
+            ),
+          );
 
   static const _base = 'https://api.lorcast.com/v0';
 
@@ -114,22 +117,24 @@ class LorcanaCatalog implements CardCatalog {
       final name = item['name']?.toString() ?? code;
       final released = _string(item['released_at']);
       _canonicalCodes[code.toLowerCase()] = code;
-      sets.add(TcgSet(
-        game: CardGame.lorcana,
-        // Lorcast addresses a set by id or by code, and the code is the short
-        // handle the rest of the app stores and prints.
-        id: _string(item['id']) ?? code,
-        // Lowercase, because that is the casing every other layer stores and
-        // queries. The provider's own spelling is kept in [_canonicalCodes] for
-        // the requests that need it.
-        code: code.toLowerCase(),
-        name: name,
-        setType: _setTypeFor(code, name),
-        releasedAt: released == null ? null : DateTime.tryParse(released),
-        // The list endpoint publishes no card count, and the only way to learn
-        // one is to download the set, so a zero here means "not known" rather
-        // than "empty" and is reported as such by the UI.
-      ));
+      sets.add(
+        TcgSet(
+          game: CardGame.lorcana,
+          // Lorcast addresses a set by id or by code, and the code is the short
+          // handle the rest of the app stores and prints.
+          id: _string(item['id']) ?? code,
+          // Lowercase, because that is the casing every other layer stores and
+          // queries. The provider's own spelling is kept in [_canonicalCodes] for
+          // the requests that need it.
+          code: code.toLowerCase(),
+          name: name,
+          setType: _setTypeFor(code, name),
+          releasedAt: released == null ? null : DateTime.tryParse(released),
+          // The list endpoint publishes no card count, and the only way to learn
+          // one is to download the set, so a zero here means "not known" rather
+          // than "empty" and is reported as such by the UI.
+        ),
+      );
       onProgress?.call(sets.length, raw.length);
     }
     return sets;
@@ -170,7 +175,8 @@ class LorcanaCatalog implements CardCatalog {
   /// something, so this is the split the provider's own naming describes.
   static String _setTypeFor(String code, String name) {
     final upper = code.trim().toUpperCase();
-    final isPromo = upper.startsWith('P') ||
+    final isPromo =
+        upper.startsWith('P') ||
         upper.startsWith('Q') ||
         name.toLowerCase().contains('promo');
     return isPromo ? 'promo' : 'expansion';
@@ -219,8 +225,9 @@ class LorcanaCatalog implements CardCatalog {
     // places from one download to the next.
     final ordered = [for (var i = 0; i < cards.length; i++) (i, cards[i])]
       ..sort((a, b) {
-        final byNumber =
-            a.$2.collectorNumberSortKey.compareTo(b.$2.collectorNumberSortKey);
+        final byNumber = a.$2.collectorNumberSortKey.compareTo(
+          b.$2.collectorNumberSortKey,
+        );
         return byNumber != 0 ? byNumber : a.$1.compareTo(b.$1);
       });
 
@@ -252,10 +259,9 @@ class LorcanaCatalog implements CardCatalog {
       // The search endpoint answers with full card objects rather than ids, so
       // - unlike TCGdex, where every hit costs a detail call - a result is
       // showable the moment it arrives and no second request is made.
-      final res = await _retry(() => _dio.get<dynamic>(
-            '/cards/search',
-            queryParameters: {'q': query},
-          ));
+      final res = await _retry(
+        () => _dio.get<dynamic>('/cards/search', queryParameters: {'q': query}),
+      );
       raw = _results(res.data);
     } on DioException {
       // A search is a convenience: a provider that is down or rate limiting
@@ -331,8 +337,8 @@ class LorcanaCatalog implements CardCatalog {
     // Lowercased for the same reason the set list is: the card's own response
     // carries the provider's spelling, and a card fetched by id has to land in
     // the same bucket as the set it was downloaded with.
-    final setCode =
-        (_string(setMap['code']) ?? fallbackSetCode ?? '').toLowerCase();
+    final setCode = (_string(setMap['code']) ?? fallbackSetCode ?? '')
+        .toLowerCase();
 
     // `inks` is the full list - a handful of cards are two inks - while `ink`
     // is Lorcast's single-ink shorthand. The list wins, and the shorthand is
@@ -521,9 +527,11 @@ class LorcanaCatalog implements CardCatalog {
     if (text == null) return 'unknown';
     return text
         .split('_')
-        .map((word) => word.isEmpty
-            ? word
-            : '${word[0].toUpperCase()}${word.substring(1)}')
+        .map(
+          (word) => word.isEmpty
+              ? word
+              : '${word[0].toUpperCase()}${word.substring(1)}',
+        )
         .join(' ');
   }
 
@@ -540,9 +548,7 @@ class LorcanaCatalog implements CardCatalog {
   /// The non-empty string entries of a JSON list, in order.
   static List<String> _stringList(Object? raw) {
     if (raw is! List) return const [];
-    return [
-      for (final value in raw) ?_string(value),
-    ];
+    return [for (final value in raw) ?_string(value)];
   }
 
   /// Joins a list for display, or null when there is nothing to join.

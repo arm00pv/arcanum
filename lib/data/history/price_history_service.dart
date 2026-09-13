@@ -17,11 +17,9 @@ import 'package:arcanum/domain/quant/quant.dart';
 /// Providers declare which games they serve, so a Pokémon card is never sent to
 /// an MTG-only price endpoint.
 class PriceHistoryService {
-  PriceHistoryService({
-    required HistoryDao dao,
-    required AppSettings settings,
-  })  : _dao = dao,
-        _settings = settings;
+  PriceHistoryService({required HistoryDao dao, required AppSettings settings})
+    : _dao = dao,
+      _settings = settings;
 
   final HistoryDao _dao;
   final AppSettings _settings;
@@ -100,7 +98,15 @@ class PriceHistoryService {
     final pending = _inFlight[k];
     if (pending != null) return pending;
 
-    final future = _resolve(game, cardId, f, days, allowNetwork, cardName, externalId);
+    final future = _resolve(
+      game,
+      cardId,
+      f,
+      days,
+      allowNetwork,
+      cardName,
+      externalId,
+    );
     _inFlight[k] = future;
     try {
       final result = await future;
@@ -176,9 +182,19 @@ class PriceHistoryService {
       while (true) {
         final id = queue.isEmpty ? null : queue.removeLast();
         if (id == null) return;
-        final before = (await _dao.series(game, id, finish: f, days: days)).length;
+        final before = (await _dao.series(
+          game,
+          id,
+          finish: f,
+          days: days,
+        )).length;
         _cache.remove(_key(game, id, f));
-        final after = (await historyFor(game, id, finish: f, days: days)).length;
+        final after = (await historyFor(
+          game,
+          id,
+          finish: f,
+          days: days,
+        )).length;
         if (after > before && after >= minUsefulPoints) improved++;
         done++;
         onProgress?.call(done, cardIds.length);

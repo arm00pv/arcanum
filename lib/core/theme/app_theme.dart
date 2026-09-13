@@ -150,7 +150,8 @@ class ArcanumColors extends ThemeExtension<ArcanumColors> {
 
 /// Convenience accessor: `context.c` returns the Arcanum palette.
 extension ArcanumContext on BuildContext {
-  ArcanumColors get c => Theme.of(this).extension<ArcanumColors>() ?? ArcanumColors.dark;
+  ArcanumColors get c =>
+      Theme.of(this).extension<ArcanumColors>() ?? ArcanumColors.dark;
   TextTheme get t => Theme.of(this).textTheme;
 }
 
@@ -165,21 +166,31 @@ abstract final class AppTheme {
   /// A text theme where every numeric display style uses tabular figures so
   /// prices do not jitter as they animate.
   static TextTheme _textTheme(ArcanumColors c) {
-    TextStyle n(double size, FontWeight w, {double spacing = -0.02, Color? color}) => TextStyle(
-          fontFamily: _numericFont,
-          fontSize: size,
-          fontWeight: w,
-          letterSpacing: spacing * size,
-          color: color ?? c.textPrimary,
-          fontFeatures: const [FontFeature.tabularFigures()],
-        );
-    TextStyle u(double size, FontWeight w, {double spacing = -0.01, Color? color}) => TextStyle(
-          fontFamily: _uiFont,
-          fontSize: size,
-          fontWeight: w,
-          letterSpacing: spacing * size,
-          color: color ?? c.textPrimary,
-        );
+    TextStyle n(
+      double size,
+      FontWeight w, {
+      double spacing = -0.02,
+      Color? color,
+    }) => TextStyle(
+      fontFamily: _numericFont,
+      fontSize: size,
+      fontWeight: w,
+      letterSpacing: spacing * size,
+      color: color ?? c.textPrimary,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+    TextStyle u(
+      double size,
+      FontWeight w, {
+      double spacing = -0.01,
+      Color? color,
+    }) => TextStyle(
+      fontFamily: _uiFont,
+      fontSize: size,
+      fontWeight: w,
+      letterSpacing: spacing * size,
+      color: color ?? c.textPrimary,
+    );
 
     return TextTheme(
       displayLarge: n(52, FontWeight.w700),
@@ -212,17 +223,19 @@ abstract final class AppTheme {
   }) {
     var c = dark ? ArcanumColors.dark : ArcanumColors.light;
     if (accent != null) {
-      c = c.copyWith(accent: accent, accentSoft: accent.withValues(alpha: 0.22));
+      c = c.copyWith(
+        accent: accent,
+        accentSoft: accent.withValues(alpha: 0.22),
+      );
     }
 
-    final scheme = (dynamicScheme ?? ColorScheme.fromSeed(
-      seedColor: c.accent,
-      brightness: dark ? Brightness.dark : Brightness.light,
-    )).copyWith(
-      surface: c.canvas,
-      primary: c.accent,
-      error: c.negative,
-    );
+    final scheme =
+        (dynamicScheme ??
+                ColorScheme.fromSeed(
+                  seedColor: c.accent,
+                  brightness: dark ? Brightness.dark : Brightness.light,
+                ))
+            .copyWith(surface: c.canvas, primary: c.accent, error: c.negative);
 
     return ThemeData(
       useMaterial3: true,
@@ -242,7 +255,9 @@ abstract final class AppTheme {
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: _textTheme(c).headlineSmall,
-        systemOverlayStyle: dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+        systemOverlayStyle: dark
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
       ),
       cardTheme: CardThemeData(
         color: c.surface,
@@ -266,7 +281,10 @@ abstract final class AppTheme {
         filled: true,
         fillColor: c.surfaceRaised,
         hintStyle: TextStyle(color: c.textTertiary, fontFamily: _uiFont),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: c.hairline),
@@ -285,7 +303,9 @@ abstract final class AppTheme {
           backgroundColor: c.accent,
           foregroundColor: Colors.white,
           minimumSize: const Size(0, 52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           textStyle: _textTheme(c).labelLarge,
         ),
       ),
@@ -294,7 +314,9 @@ abstract final class AppTheme {
           foregroundColor: c.textPrimary,
           minimumSize: const Size(0, 52),
           side: BorderSide(color: c.hairlineStrong),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           textStyle: _textTheme(c).labelLarge,
         ),
       ),
@@ -332,7 +354,10 @@ abstract final class AppTheme {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(color: c.accent, linearMinHeight: 3),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: c.accent,
+        linearMinHeight: 3,
+      ),
       listTileTheme: ListTileThemeData(
         iconColor: c.textSecondary,
         textColor: c.textPrimary,
@@ -345,34 +370,43 @@ abstract final class AppTheme {
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith(
-            (s) => s.contains(WidgetState.selected) ? Colors.white : c.textTertiary),
+          (s) =>
+              s.contains(WidgetState.selected) ? Colors.white : c.textTertiary,
+        ),
         trackColor: WidgetStateProperty.resolveWith(
-            (s) => s.contains(WidgetState.selected) ? c.accent : c.surfaceRaised),
+          (s) => s.contains(WidgetState.selected) ? c.accent : c.surfaceRaised,
+        ),
       ),
-      pageTransitionsTheme: const PageTransitionsTheme(builders: {
-        TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
-      }),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: PredictiveBackPageTransitionsBuilder(),
+        },
+      ),
     );
   }
 
   /// Gradients used across the app.
   static LinearGradient manaGradient(ManaColor mana) => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [mana.accent.withValues(alpha: 0.85), mana.deep.withValues(alpha: 0.95)],
-      );
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      mana.accent.withValues(alpha: 0.85),
+      mana.deep.withValues(alpha: 0.95),
+    ],
+  );
 
   static LinearGradient rarityGradient(CardRarity rarity) => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          rarity.color.withValues(alpha: 0.9),
-          rarity.color.withValues(alpha: 0.35),
-        ],
-      );
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      rarity.color.withValues(alpha: 0.9),
+      rarity.color.withValues(alpha: 0.35),
+    ],
+  );
 
   /// The ambient background wash used behind scroll views.
-  static LinearGradient backdrop(ArcanumColors c, {Color? tint}) => LinearGradient(
+  static LinearGradient backdrop(ArcanumColors c, {Color? tint}) =>
+      LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [

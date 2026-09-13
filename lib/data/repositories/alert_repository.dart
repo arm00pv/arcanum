@@ -15,11 +15,9 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 /// genuinely want fresh data can refresh prices first via the catalogue
 /// repository and then evaluate.
 class AlertRepository {
-  AlertRepository({
-    required AlertDao dao,
-    required CatalogDao catalogDao,
-  })  : _dao = dao,
-        _cat = catalogDao;
+  AlertRepository({required AlertDao dao, required CatalogDao catalogDao})
+    : _dao = dao,
+      _cat = catalogDao;
 
   final AlertDao _dao;
   final CatalogDao _cat;
@@ -45,18 +43,20 @@ class AlertRepository {
   }) async {
     final f = finish ?? card.game.finishes.first;
     final current = card.prices.priceFor(f) ?? card.prices.from;
-    return _dao.insert(PriceAlert(
-      game: card.game,
-      cardId: card.id,
-      finish: f,
-      kind: kind,
-      threshold: threshold,
-      createdAt: DateTime.now(),
-      baseline: current,
-      lastValue: current,
-      cardName: card.name,
-      setCode: card.setCode,
-    ));
+    return _dao.insert(
+      PriceAlert(
+        game: card.game,
+        cardId: card.id,
+        finish: f,
+        kind: kind,
+        threshold: threshold,
+        createdAt: DateTime.now(),
+        baseline: current,
+        lastValue: current,
+        cardName: card.name,
+        setCode: card.setCode,
+      ),
+    );
   }
 
   Future<void> delete(int id) => _dao.delete(id);
@@ -64,8 +64,8 @@ class AlertRepository {
   /// Re-arms a fired alert, rebasing it on the current price.
   Future<void> rearm(PriceAlert alert, TcgCard? card) async {
     if (alert.id == null) return;
-    final current = card?.prices.priceFor(alert.effectiveFinish) ??
-        card?.prices.from;
+    final current =
+        card?.prices.priceFor(alert.effectiveFinish) ?? card?.prices.from;
     await _dao.rearm(alert.id!, baseline: current);
   }
 
@@ -112,19 +112,27 @@ class AlertRepository {
 
       final triggered = _isTriggered(alert, current);
       if (persist && alert.id != null) {
-        await _dao.markEvaluated(alert.id!,
-            lastValue: current ?? alert.lastValue, triggered: triggered);
+        await _dao.markEvaluated(
+          alert.id!,
+          lastValue: current ?? alert.lastValue,
+          triggered: triggered,
+        );
       }
       if (triggered) {
-        fired.add(AlertEvaluation(
-          alert: alert,
-          triggered: true,
-          current: current,
-          message: _describe(alert, current),
-        ));
+        fired.add(
+          AlertEvaluation(
+            alert: alert,
+            triggered: true,
+            current: current,
+            message: _describe(alert, current),
+          ),
+        );
       } else if (current != null && alert.lastValue != current) {
-        await _dao.markEvaluated(alert.id!,
-            lastValue: current, triggered: false);
+        await _dao.markEvaluated(
+          alert.id!,
+          lastValue: current,
+          triggered: false,
+        );
       }
     }
 
@@ -134,11 +142,11 @@ class AlertRepository {
 
   /// Evaluates one alert without persisting, for live preview in the UI.
   AlertEvaluation preview(PriceAlert alert, double? current) => AlertEvaluation(
-        alert: alert,
-        triggered: _isTriggered(alert, current),
-        current: current,
-        message: _isTriggered(alert, current) ? _describe(alert, current) : null,
-      );
+    alert: alert,
+    triggered: _isTriggered(alert, current),
+    current: current,
+    message: _isTriggered(alert, current) ? _describe(alert, current) : null,
+  );
 
   static bool _isTriggered(PriceAlert alert, double? current) {
     if (current == null || current <= 0) return false;

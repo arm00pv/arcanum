@@ -74,7 +74,8 @@ List<PricePoint> parseHistoryPack(
   final series = body['series'];
   if (series is! Map) return const [];
   final key = finish.code;
-  final raw = series[key] ??
+  final raw =
+      series[key] ??
       (finish != CardFinish.nonfoil ? series['foil'] : null) ??
       series['nonfoil'];
   if (raw is! List) return const [];
@@ -88,7 +89,10 @@ List<PricePoint> parseHistoryPack(
       final t = item[0];
       final p = item[1];
       if (t is num) {
-        date = DateTime.fromMillisecondsSinceEpoch(t.toInt() * 1000, isUtc: true).toLocal();
+        date = DateTime.fromMillisecondsSinceEpoch(
+          t.toInt() * 1000,
+          isUtc: true,
+        ).toLocal();
       }
       if (t is String) date = DateTime.tryParse(t);
       if (p is num) price = p.toDouble();
@@ -96,7 +100,10 @@ List<PricePoint> parseHistoryPack(
       final t = item['t'] ?? item['date'];
       final p = item['p'] ?? item['price'];
       if (t is num) {
-        date = DateTime.fromMillisecondsSinceEpoch(t.toInt() * 1000, isUtc: true).toLocal();
+        date = DateTime.fromMillisecondsSinceEpoch(
+          t.toInt() * 1000,
+          isUtc: true,
+        ).toLocal();
       }
       if (t is String) date = DateTime.tryParse(t);
       if (p is num) price = p.toDouble();
@@ -115,12 +122,15 @@ class BackfillPackSource implements PriceHistorySource {
     required this.baseUrl,
     this.serveGame = CardGame.mtg,
     Dio? dio,
-  }) : _dio = dio ??
-            Dio(BaseOptions(
-              connectTimeout: const Duration(seconds: 6),
-              receiveTimeout: const Duration(seconds: 12),
-              headers: const {'Accept': 'application/json'},
-            ));
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: const Duration(seconds: 6),
+               receiveTimeout: const Duration(seconds: 12),
+               headers: const {'Accept': 'application/json'},
+             ),
+           );
 
   /// Root of the companion service, e.g. `http://100.90.30.95:8787`.
   final String baseUrl;
@@ -189,18 +199,20 @@ class BackfillPackSource implements PriceHistorySource {
 /// treat an empty result as normal.
 class MtgStocksHistorySource implements PriceHistorySource {
   MtgStocksHistorySource({required HistoryDao cache, Dio? dio})
-      : _cache = cache,
-        _dio = dio ??
-            Dio(BaseOptions(
+    : _cache = cache,
+      _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: _base,
               connectTimeout: const Duration(seconds: 8),
               receiveTimeout: const Duration(seconds: 20),
               headers: const {
                 'Accept': 'application/json',
-                'User-Agent':
-                    'Mozilla/5.0 (Linux; Android 17) AppleWebKit/537.36 Arcanum/1.0',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 17) AppleWebKit/537.36 Arcanum/1.0',
               },
-            ));
+            ),
+          );
 
   static const _base = 'https://api.mtgstocks.com';
 
@@ -244,7 +256,9 @@ class MtgStocksHistorySource implements PriceHistorySource {
     final candidates = <int>[];
     for (final n in names) {
       try {
-        final res = await _dio.get<dynamic>('/search/autocomplete/${Uri.encodeComponent(n)}');
+        final res = await _dio.get<dynamic>(
+          '/search/autocomplete/${Uri.encodeComponent(n)}',
+        );
         final data = decodeJsonBody(res.data);
         if (data is! List) continue;
         for (final item in data) {
@@ -337,12 +351,15 @@ class MtgStocksHistorySource implements PriceHistorySource {
 /// screen is explicit about this.
 class TcgDexPriceHistorySource implements PriceHistorySource {
   TcgDexPriceHistorySource({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               connectTimeout: const Duration(seconds: 8),
               receiveTimeout: const Duration(seconds: 25),
               headers: const {'Accept': 'application/json'},
-            ));
+            ),
+          );
 
   static const _base =
       'https://raw.githubusercontent.com/tcgdex/price-history/master/en';
@@ -377,7 +394,9 @@ class TcgDexPriceHistorySource implements PriceHistorySource {
     if (setId.isEmpty || localId.isEmpty) return const [];
 
     try {
-      final res = await _dio.get<dynamic>('$_base/$setId/$localId.tcgplayer.json');
+      final res = await _dio.get<dynamic>(
+        '$_base/$setId/$localId.tcgplayer.json',
+      );
       final data = decodeJsonBody(res.data);
       if (data is! Map) return const [];
 
@@ -438,7 +457,9 @@ class TcgDexPriceHistorySource implements PriceHistorySource {
           cents = value.toDouble();
         }
         if (cents == null || cents <= 0) return;
-        points.add(PricePoint(DateTime(date.year, date.month, date.day), cents / 100.0));
+        points.add(
+          PricePoint(DateTime(date.year, date.month, date.day), cents / 100.0),
+        );
       });
       if (points.length < 5) return const [];
       points.sort((a, b) => a.date.compareTo(b.date));
@@ -461,13 +482,19 @@ class TcgDexPriceHistorySource implements PriceHistorySource {
 /// request), so the app uses it for targeted backfills rather than whole
 /// collections.
 class JustTcgHistorySource implements PriceHistorySource {
-  JustTcgHistorySource({required this.apiKey, this.game = CardGame.mtg, Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
-              baseUrl: 'https://api.justtcg.com/v1',
-              connectTimeout: const Duration(seconds: 8),
-              receiveTimeout: const Duration(seconds: 20),
-            ));
+  JustTcgHistorySource({
+    required this.apiKey,
+    this.game = CardGame.mtg,
+    Dio? dio,
+  }) : _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               baseUrl: 'https://api.justtcg.com/v1',
+               connectTimeout: const Duration(seconds: 8),
+               receiveTimeout: const Duration(seconds: 20),
+             ),
+           );
 
   final String apiKey;
 
@@ -496,8 +523,11 @@ class JustTcgHistorySource implements PriceHistorySource {
     String? externalId,
   }) async {
     if (!isConfigured) return const [];
-    final duration =
-        days <= 7 ? '7d' : (days <= 30 ? '30d' : (days <= 90 ? '90d' : (days <= 180 ? '180d' : '1y')));
+    final duration = days <= 7
+        ? '7d'
+        : (days <= 30
+              ? '30d'
+              : (days <= 90 ? '90d' : (days <= 180 ? '180d' : '1y')));
     try {
       // Magic is addressed by Scryfall id; Pokémon has no Scryfall id, so the
       // provider's own TCGplayer product id is used when the catalogue
@@ -517,17 +547,21 @@ class JustTcgHistorySource implements PriceHistorySource {
       if (data is! Map) return const [];
       final list = data['data'];
       if (list is! List || list.isEmpty) return const [];
-      final variants = (list.first is Map) ? (list.first as Map)['variants'] : null;
+      final variants = (list.first is Map)
+          ? (list.first as Map)['variants']
+          : null;
       if (variants is! List) return const [];
 
       // Prefer the variant matching the requested finish.
       Map? chosen;
       for (final v in variants) {
         if (v is! Map) continue;
-        final printing =
-            (v['printing'] ?? v['finish'] ?? v['name'] ?? '').toString().toLowerCase();
+        final printing = (v['printing'] ?? v['finish'] ?? v['name'] ?? '')
+            .toString()
+            .toLowerCase();
         final wantsFoil = finish.isPremium;
-        final isFoil = printing.contains('holo') ||
+        final isFoil =
+            printing.contains('holo') ||
             printing.contains('foil') ||
             printing.contains('1st');
         if (wantsFoil == isFoil) {
@@ -546,7 +580,10 @@ class JustTcgHistorySource implements PriceHistorySource {
         final t = h['t'];
         final p = h['p'];
         if (t is! num || p is! num) continue;
-        final d = DateTime.fromMillisecondsSinceEpoch(t.toInt() * 1000, isUtc: true).toLocal();
+        final d = DateTime.fromMillisecondsSinceEpoch(
+          t.toInt() * 1000,
+          isUtc: true,
+        ).toLocal();
         points.add(PricePoint(DateTime(d.year, d.month, d.day), p.toDouble()));
       }
       points.sort((a, b) => a.date.compareTo(b.date));
@@ -563,7 +600,10 @@ class JustTcgHistorySource implements PriceHistorySource {
 ///
 /// Shared by the companion tooling and the export feature so the two can never
 /// drift apart.
-String encodeHistoryPack(String cardId, Map<CardFinish, List<PricePoint>> series) {
+String encodeHistoryPack(
+  String cardId,
+  Map<CardFinish, List<PricePoint>> series,
+) {
   final out = <String, dynamic>{
     'id': cardId,
     'updated': DateTime.now().toIso8601String().split('T').first,
@@ -572,7 +612,10 @@ String encodeHistoryPack(String cardId, Map<CardFinish, List<PricePoint>> series
         if (e.value.isNotEmpty)
           e.key.code: [
             for (final p in e.value)
-              [p.date.millisecondsSinceEpoch ~/ 1000, double.parse(p.price.toStringAsFixed(4))],
+              [
+                p.date.millisecondsSinceEpoch ~/ 1000,
+                double.parse(p.price.toStringAsFixed(4)),
+              ],
           ],
     },
   };

@@ -61,8 +61,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
     final c = context.c;
     final game = ref.watch(activeGameProvider);
     final overviewAsync = ref.watch(collectionOverviewProvider(game));
-    final cards = ref.watch(ownedCardsProvider(game)).value ??
-        const <String, TcgCard>{};
+    final cards =
+        ref.watch(ownedCardsProvider(game)).value ?? const <String, TcgCard>{};
     final overview = overviewAsync.value;
 
     return Scaffold(
@@ -70,7 +70,9 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
         children: [
           Positioned.fill(
             child: DecoratedBox(
-              decoration: BoxDecoration(gradient: AppTheme.backdrop(c, tint: c.positive)),
+              decoration: BoxDecoration(
+                gradient: AppTheme.backdrop(c, tint: c.positive),
+              ),
             ),
           ),
           RefreshIndicator(
@@ -111,7 +113,9 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                         tooltip: _listMode ? 'Grid view' : 'List view',
                         onPressed: () => setState(() => _listMode = !_listMode),
                         icon: Icon(
-                          _listMode ? Icons.grid_view_rounded : Icons.view_list_rounded,
+                          _listMode
+                              ? Icons.grid_view_rounded
+                              : Icons.view_list_rounded,
                         ),
                       ),
                     ],
@@ -152,7 +156,8 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                 SliverAsyncView<CollectionOverview>(
                   value: overviewAsync,
                   loadingHeight: 320,
-                  onRetry: () => ref.invalidate(collectionOverviewProvider(game)),
+                  onRetry: () =>
+                      ref.invalidate(collectionOverviewProvider(game)),
                   isEmpty: (o) => o.entries.isEmpty,
                   emptyTitle: 'Nothing in your ${game.shortLabel} collection',
                   emptyMessage:
@@ -194,11 +199,11 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                             sliver: SliverGrid.builder(
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                mainAxisSpacing: 12,
-                                crossAxisSpacing: 10,
-                                childAspectRatio: 0.5,
-                              ),
+                                    crossAxisCount: 3,
+                                    mainAxisSpacing: 12,
+                                    crossAxisSpacing: 10,
+                                    childAspectRatio: 0.5,
+                                  ),
                               itemCount: rows.length,
                               itemBuilder: (context, i) => _EntryGridTile(
                                 valued: rows[i],
@@ -258,9 +263,11 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       case _CollectionSort.quantity:
         out.sort((a, b) => b.entry.quantity.compareTo(a.entry.quantity));
       case _CollectionSort.change:
-        out.sort((a, b) => (b.dayChangePercent ?? 0)
-            .abs()
-            .compareTo((a.dayChangePercent ?? 0).abs()));
+        out.sort(
+          (a, b) => (b.dayChangePercent ?? 0).abs().compareTo(
+            (a.dayChangePercent ?? 0).abs(),
+          ),
+        );
     }
     return out;
   }
@@ -292,11 +299,10 @@ class _EntryRow extends StatelessWidget {
       onTap: card == null
           ? null
           : () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      CardDetailScreen(game: game, cardId: card!.id),
-                ),
+              MaterialPageRoute<void>(
+                builder: (_) => CardDetailScreen(game: game, cardId: card!.id),
               ),
+            ),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Row(
@@ -329,7 +335,9 @@ class _EntryRow extends StatelessWidget {
                         card == null
                             ? '--'
                             : '${card!.setCode.toUpperCase()} #${card!.collectorNumber}',
-                        style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                        style: context.t.labelSmall?.copyWith(
+                          color: c.textTertiary,
+                        ),
                       ),
                       // Any finish the game actually prints is worth a badge:
                       // Magic's foils and etched, Pokémon's holos, reverse holos
@@ -337,7 +345,10 @@ class _EntryRow extends StatelessWidget {
                       if (e.finish != CardFinish.nonfoil) ...[
                         const SizedBox(width: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: c.gold.withValues(alpha: 0.16),
                             borderRadius: BorderRadius.circular(5),
@@ -345,7 +356,9 @@ class _EntryRow extends StatelessWidget {
                           child: Text(
                             e.finish.shortLabel,
                             maxLines: 1,
-                            style: context.t.labelSmall?.copyWith(color: c.gold),
+                            style: context.t.labelSmall?.copyWith(
+                              color: c.gold,
+                            ),
                           ),
                         ),
                       ],
@@ -353,7 +366,9 @@ class _EntryRow extends StatelessWidget {
                         const SizedBox(width: 4),
                         Text(
                           e.condition.short,
-                          style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                          style: context.t.labelSmall?.copyWith(
+                            color: c.textTertiary,
+                          ),
                         ),
                       ],
                       if (e.binder.isNotEmpty) ...[
@@ -363,7 +378,9 @@ class _EntryRow extends StatelessWidget {
                             e.binder,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                            style: context.t.labelSmall?.copyWith(
+                              color: c.textTertiary,
+                            ),
                           ),
                         ),
                       ],
@@ -377,22 +394,27 @@ class _EntryRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  valued.totalValue == null ? '--' : Fmt.money(valued.totalValue),
+                  valued.totalValue == null
+                      ? '--'
+                      : Fmt.money(valued.totalValue),
                   style: context.t.titleSmall,
                 ),
                 const SizedBox(height: 2),
                 if (valued.unitValue != null)
                   Text(
                     '${e.quantity} x ${Fmt.moneyAdaptive(valued.unitValue)}',
-                    style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                    style: context.t.labelSmall?.copyWith(
+                      color: c.textTertiary,
+                    ),
                   ),
                 if (valued.profit != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       Fmt.moneySigned(valued.profit),
-                      style: context.t.labelSmall
-                          ?.copyWith(color: c.forDelta(valued.profit!)),
+                      style: context.t.labelSmall?.copyWith(
+                        color: c.forDelta(valued.profit!),
+                      ),
                     ),
                   ),
               ],
@@ -424,11 +446,10 @@ class _EntryGridTile extends StatelessWidget {
       onTap: card == null
           ? null
           : () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      CardDetailScreen(game: game, cardId: card!.id),
-                ),
+              MaterialPageRoute<void>(
+                builder: (_) => CardDetailScreen(game: game, cardId: card!.id),
               ),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -448,7 +469,9 @@ class _EntryGridTile extends StatelessWidget {
             style: context.t.bodySmall?.copyWith(color: c.textPrimary),
           ),
           Text(
-            valued.totalValue == null ? '--' : Fmt.moneyAdaptive(valued.totalValue),
+            valued.totalValue == null
+                ? '--'
+                : Fmt.moneyAdaptive(valued.totalValue),
             style: context.t.labelMedium?.copyWith(color: c.textSecondary),
           ),
         ],

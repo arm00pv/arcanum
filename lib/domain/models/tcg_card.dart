@@ -23,7 +23,10 @@ class TcgCardFace {
   final Map<String, String> imageUris;
 
   String? imageUrl({String size = 'normal'}) =>
-      imageUris[size] ?? imageUris['normal'] ?? imageUris['large'] ?? imageUris['small'];
+      imageUris[size] ??
+      imageUris['normal'] ??
+      imageUris['large'] ??
+      imageUris['small'];
 }
 
 /// Market prices for one printing, keyed by physical finish.
@@ -75,21 +78,23 @@ class TcgPrices {
   /// Used by list rows where showing every variant would be noise. Null when
   /// nothing is priced.
   double? get from {
-    final values = byFinish.values.whereType<double>().where((v) => v > 0).toList();
+    final values = byFinish.values
+        .whereType<double>()
+        .where((v) => v > 0)
+        .toList();
     if (values.isEmpty) return null;
     return values.reduce((a, b) => a < b ? a : b);
   }
 
   /// The finishes that actually carry a price, in declaration order.
-  List<CardFinish> get quotedFinishes => CardFinish.values
-      .where((f) => (byFinish[f.code] ?? 0) > 0)
-      .toList();
+  List<CardFinish> get quotedFinishes =>
+      CardFinish.values.where((f) => (byFinish[f.code] ?? 0) > 0).toList();
 
   Map<String, Object?> toJson() => {
-        'byFinish': byFinish,
-        'secondary': secondary,
-        if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
-      };
+    'byFinish': byFinish,
+    'secondary': secondary,
+    if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
+  };
 
   factory TcgPrices.fromJson(Map<String, Object?>? json) {
     if (json == null) return empty;
@@ -224,7 +229,8 @@ class TcgCard {
 
   /// The best image for this card, handling multi-faced cards.
   String? imageUrl({String size = 'normal', int face = 0}) {
-    final direct = imageUris[size] ??
+    final direct =
+        imageUris[size] ??
         imageUris['normal'] ??
         imageUris['large'] ??
         imageUris['small'];
@@ -314,41 +320,40 @@ class TcgCard {
     Map<String, String>? imageUris,
     List<TcgCardFace>? faces,
     Map<String, Object?>? extras,
-  }) =>
-      TcgCard(
-        game: game,
-        id: id ?? this.id,
-        setCode: setCode ?? this.setCode,
-        setName: setName ?? this.setName,
-        name: name ?? this.name,
-        collectorNumber: collectorNumber ?? this.collectorNumber,
-        rarity: rarity ?? this.rarity,
-        layout: layout,
-        typeLine: typeLine,
-        oracleText: oracleText,
-        manaCost: manaCost,
-        artist: artist,
-        flavorText: flavorText,
-        cmc: cmc,
-        colors: colors,
-        colorIdentity: colorIdentity,
-        digital: digital,
-        foil: foil,
-        nonfoil: nonfoil,
-        promo: promo,
-        reprint: reprint,
-        reserved: reserved,
-        fullArt: fullArt,
-        booster: booster,
-        releasedAt: releasedAt,
-        prices: prices ?? this.prices,
-        imageUris: imageUris ?? this.imageUris,
-        faces: faces ?? this.faces,
-        scryfallUri: scryfallUri,
-        edhrecRank: edhrecRank,
-        oracleId: oracleId,
-        extras: extras ?? this.extras,
-      );
+  }) => TcgCard(
+    game: game,
+    id: id ?? this.id,
+    setCode: setCode ?? this.setCode,
+    setName: setName ?? this.setName,
+    name: name ?? this.name,
+    collectorNumber: collectorNumber ?? this.collectorNumber,
+    rarity: rarity ?? this.rarity,
+    layout: layout,
+    typeLine: typeLine,
+    oracleText: oracleText,
+    manaCost: manaCost,
+    artist: artist,
+    flavorText: flavorText,
+    cmc: cmc,
+    colors: colors,
+    colorIdentity: colorIdentity,
+    digital: digital,
+    foil: foil,
+    nonfoil: nonfoil,
+    promo: promo,
+    reprint: reprint,
+    reserved: reserved,
+    fullArt: fullArt,
+    booster: booster,
+    releasedAt: releasedAt,
+    prices: prices ?? this.prices,
+    imageUris: imageUris ?? this.imageUris,
+    faces: faces ?? this.faces,
+    scryfallUri: scryfallUri,
+    edhrecRank: edhrecRank,
+    oracleId: oracleId,
+    extras: extras ?? this.extras,
+  );
 }
 
 /// A set, independent of which game it belongs to.

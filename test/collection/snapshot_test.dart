@@ -51,15 +51,13 @@ class _MovableCatalog implements CardCatalog {
   @override
   Future<List<TcgSet>> fetchAllSets({
     void Function(int done, int total)? onProgress,
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<List<TcgCard>> fetchCardsInSet(
     String setCode, {
     void Function(int done, int total)? onProgress,
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<TcgCard?> fetchCardById(String id) async => null;
@@ -74,15 +72,15 @@ class _MovableCatalog implements CardCatalog {
 
 /// A printing cached at $10.
 TcgCard _cachedCard() => TcgCard(
-      game: CardGame.mtg,
-      id: 'c1',
-      setCode: 'tst',
-      setName: 'Test Set',
-      name: 'Test Card',
-      collectorNumber: '1',
-      rarity: 'rare',
-      prices: TcgPrices(byFinish: {CardFinish.nonfoil.code: 10.0}),
-    );
+  game: CardGame.mtg,
+  id: 'c1',
+  setCode: 'tst',
+  setName: 'Test Set',
+  name: 'Test Card',
+  collectorNumber: '1',
+  rarity: 'rare',
+  prices: TcgPrices(byFinish: {CardFinish.nonfoil.code: 10.0}),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

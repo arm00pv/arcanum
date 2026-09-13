@@ -11,27 +11,35 @@ TcgCard printing({
   String number = '001',
   String rarity = 'Ultra Rare',
   double? price,
-}) =>
-    TcgCard(
-      game: CardGame.yugioh,
-      id: id,
-      setCode: 'lob',
-      setName: 'Legend of Blue Eyes White Dragon',
-      name: name,
-      collectorNumber: number,
-      rarity: rarity,
-      prices: price == null
-          ? TcgPrices.empty
-          : TcgPrices(byFinish: <String, double?>{CardFinish.nonfoil.code: price}),
-    );
+}) => TcgCard(
+  game: CardGame.yugioh,
+  id: id,
+  setCode: 'lob',
+  setName: 'Legend of Blue Eyes White Dragon',
+  name: name,
+  collectorNumber: number,
+  rarity: rarity,
+  prices: price == null
+      ? TcgPrices.empty
+      : TcgPrices(byFinish: <String, double?>{CardFinish.nonfoil.code: price}),
+);
 
 void main() {
   group('TcgCard.printingCode', () {
     test('reads the region code out of a Yu-Gi-Oh! id', () {
       // Three versions of one card, told apart only by this.
-      expect(printing(id: '83764718:lob:lob-000:secret-rare').printingCode, 'lob-000');
-      expect(printing(id: '83764718:lob:lob-e000:secret-rare').printingCode, 'lob-e000');
-      expect(printing(id: '83764718:lob:lob-en000:secret-rare').printingCode, 'lob-en000');
+      expect(
+        printing(id: '83764718:lob:lob-000:secret-rare').printingCode,
+        'lob-000',
+      );
+      expect(
+        printing(id: '83764718:lob:lob-e000:secret-rare').printingCode,
+        'lob-e000',
+      );
+      expect(
+        printing(id: '83764718:lob:lob-en000:secret-rare').printingCode,
+        'lob-en000',
+      );
     });
 
     test('is null for ids that are not shaped like one', () {
@@ -61,7 +69,10 @@ void main() {
 
     test('is null when the field is empty or the passcode is not a number', () {
       expect(printing(id: '83764718:lob::secret-rare').printingCode, isNull);
-      expect(printing(id: 'notapasscode:lob:lob-000:secret').printingCode, isNull);
+      expect(
+        printing(id: 'notapasscode:lob:lob-000:secret').printingCode,
+        isNull,
+      );
       expect(printing(id: '83764718:lob').printingCode, isNull);
     });
   });
@@ -121,7 +132,11 @@ void main() {
         printing(id: 'c', number: '002'),
       ]);
 
-      expect(slots.map((s) => s.collectorNumber), <String>['003', '001', '002']);
+      expect(slots.map((s) => s.collectorNumber), <String>[
+        '003',
+        '001',
+        '002',
+      ]);
     });
 
     test('handles an empty set', () {
@@ -188,7 +203,8 @@ void main() {
     });
 
     test('a single-version slot needs no range', () {
-      final slot = groupIntoSlots(<TcgCard>[printing(id: 'a', price: 3)]).single;
+      final slot = groupIntoSlots(<TcgCard>[printing(id: 'a', price: 3)])
+          .single;
 
       expect(slot.hasVersions, isFalse);
       expect(slot.hasPriceSpread, isFalse);

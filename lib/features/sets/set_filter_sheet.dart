@@ -90,8 +90,9 @@ class _SetFilterSheetState extends State<_SetFilterSheet> {
   Widget build(BuildContext context) {
     final c = context.c;
     final facets = rarityFacets(widget.slots);
-    final selectedBand =
-        _draft.price == null ? null : PriceBand.matching(_draft.price!);
+    final selectedBand = _draft.price == null
+        ? null
+        : PriceBand.matching(_draft.price!);
     final unpricedShown = _draft.price?.unpriced ?? false;
 
     return SafeArea(
@@ -150,8 +151,9 @@ class _SetFilterSheetState extends State<_SetFilterSheet> {
                                     count: _countForWindow(band.window),
                                     selected: selectedBand == band,
                                     onTap: () => setState(
-                                      () =>
-                                          _draft = _draft.withPrice(band.window),
+                                      () => _draft = _draft.withPrice(
+                                        band.window,
+                                      ),
                                     ),
                                   ),
                               ],
@@ -162,8 +164,10 @@ class _SetFilterSheetState extends State<_SetFilterSheet> {
                               high: _high,
                               ceiling: _ceiling,
                               unpriced: unpricedShown,
-                              onChanged: (range) =>
-                                  _setRange(_snap(range.start), _snap(range.end)),
+                              onChanged: (range) => _setRange(
+                                _snap(range.start),
+                                _snap(range.end),
+                              ),
                             ),
                           ],
                         ),
@@ -180,11 +184,13 @@ class _SetFilterSheetState extends State<_SetFilterSheet> {
                                     _ChoiceChip(
                                       label: facet.rarity,
                                       count: facet.count,
-                                      selected:
-                                          _draft.rarities.contains(facet.rarity),
+                                      selected: _draft.rarities.contains(
+                                        facet.rarity,
+                                      ),
                                       onTap: () => setState(
-                                        () => _draft =
-                                            _draft.toggleRarity(facet.rarity),
+                                        () => _draft = _draft.toggleRarity(
+                                          facet.rarity,
+                                        ),
                                       ),
                                     ),
                                 ],
@@ -277,7 +283,9 @@ class _Section extends StatelessWidget {
                     note!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                    style: context.t.labelSmall?.copyWith(
+                      color: c.textTertiary,
+                    ),
                   ),
                 ),
               ],
@@ -332,13 +340,17 @@ class _RangeRow extends StatelessWidget {
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackHeight: 3,
-            rangeThumbShape:
-                const RoundRangeSliderThumbShape(enabledThumbRadius: 9),
+            rangeThumbShape: const RoundRangeSliderThumbShape(
+              enabledThumbRadius: 9,
+            ),
           ),
           child: RangeSlider(
             min: 0,
             max: ceiling,
-            values: RangeValues(low.clamp(0, ceiling), high.clamp(low, ceiling)),
+            values: RangeValues(
+              low.clamp(0, ceiling),
+              high.clamp(low, ceiling),
+            ),
             onChanged: onChanged,
           ),
         ),

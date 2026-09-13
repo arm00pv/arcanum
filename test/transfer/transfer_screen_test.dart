@@ -27,15 +27,13 @@ class _FakeCatalog implements CardCatalog {
   @override
   Future<List<TcgSet>> fetchAllSets({
     void Function(int done, int total)? onProgress,
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<List<TcgCard>> fetchCardsInSet(
     String setCode, {
     void Function(int done, int total)? onProgress,
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<TcgCard?> fetchCardById(String id) async => null;
@@ -118,15 +116,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('says there is nothing to export when the collection is empty',
-      (tester) async {
+  testWidgets('says there is nothing to export when the collection is empty', (
+    tester,
+  ) async {
     await pumpScreen(tester);
     expect(find.text('There is nothing to export yet.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('every dialect is offered and switching one updates the text',
-      (tester) async {
+  testWidgets('every dialect is offered and switching one updates the text', (
+    tester,
+  ) async {
     await pumpScreen(tester);
 
     for (final dialect in TransferDialect.values) {

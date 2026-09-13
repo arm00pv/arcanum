@@ -163,16 +163,13 @@ class ScryfallClient {
     this.searchRequestGap = kScryfallSearchRequestGap,
     this.maxRetries = 4,
     int cacheSize = kScryfallDefaultCacheSize,
-  })  : _dio = dio ??
-            _createDio(
-              baseUrl: baseUrl,
-              userAgent: userAgent,
-              accept: accept,
-            ),
-        _baseUrl = _resolveBaseUrl(dio, baseUrl),
-        _userAgent = userAgent,
-        _accept = accept,
-        _cardCache = _LruCache<String, ScryfallCard>(cacheSize);
+  }) : _dio =
+           dio ??
+           _createDio(baseUrl: baseUrl, userAgent: userAgent, accept: accept),
+       _baseUrl = _resolveBaseUrl(dio, baseUrl),
+       _userAgent = userAgent,
+       _accept = accept,
+       _cardCache = _LruCache<String, ScryfallCard>(cacheSize);
 
   static final math.Random _random = math.Random();
 
@@ -180,6 +177,7 @@ class ScryfallClient {
   final String _baseUrl;
   final String _userAgent;
   final String _accept;
+
   /// Minimum gap enforced between requests to the 10/second endpoints
   /// (everything except search and collection).
   final Duration requestGap;
@@ -499,9 +497,7 @@ class ScryfallClient {
         if (data is List) {
           for (final Object? item in data) {
             if (item is Map) {
-              final ScryfallCard card = ScryfallCard.fromJson(
-                _asJsonMap(item),
-              );
+              final ScryfallCard card = ScryfallCard.fromJson(_asJsonMap(item));
               cards.add(card);
               _remember(card);
             }
@@ -533,7 +529,9 @@ class ScryfallClient {
   Future<List<ScryfallCard>> fetchCardsByOracleId(String oracleId) async {
     final String id = oracleId.trim();
     if (id.isEmpty) {
-      throw const ScryfallException('fetchCardsByOracleId requires an oracle id');
+      throw const ScryfallException(
+        'fetchCardsByOracleId requires an oracle id',
+      );
     }
 
     final List<ScryfallCard> cards = <ScryfallCard>[];
@@ -596,10 +594,7 @@ class ScryfallClient {
         receiveTimeout: const Duration(seconds: 60),
         sendTimeout: const Duration(seconds: 30),
         responseType: ResponseType.json,
-        headers: <String, dynamic>{
-          'User-Agent': userAgent,
-          'Accept': accept,
-        },
+        headers: <String, dynamic>{'User-Agent': userAgent, 'Accept': accept},
       ),
     );
   }
@@ -613,8 +608,9 @@ class ScryfallClient {
   }
 
   static int _byCollectorNumber(ScryfallCard a, ScryfallCard b) {
-    final int byKey =
-        a.collectorNumberSortKey.compareTo(b.collectorNumberSortKey);
+    final int byKey = a.collectorNumberSortKey.compareTo(
+      b.collectorNumberSortKey,
+    );
     if (byKey != 0) {
       return byKey;
     }
@@ -737,7 +733,10 @@ class ScryfallClient {
           return _decodeJsonObject(response.data, uri);
         } on DioException catch (error, stackTrace) {
           if (!_isRetryable(error) || attempt >= maxRetries) {
-            Error.throwWithStackTrace(_toScryfallException(error, uri), stackTrace);
+            Error.throwWithStackTrace(
+              _toScryfallException(error, uri),
+              stackTrace,
+            );
           }
           attempt += 1;
           await Future<void>.delayed(
@@ -772,11 +771,7 @@ class ScryfallClient {
 
   /// Exponential backoff with jitter: 700 ms, 1.4 s, 2.8 s, 5.6 s (+ up to
   /// 250 ms of jitter), or Scryfall's `Retry-After` when it sent one.
-  Duration _backoffDelay(
-    int attempt, {
-    int? statusCode,
-    Duration? retryAfter,
-  }) {
+  Duration _backoffDelay(int attempt, {int? statusCode, Duration? retryAfter}) {
     if (retryAfter != null && retryAfter > Duration.zero) {
       return retryAfter;
     }
@@ -860,10 +855,7 @@ class ScryfallClient {
     if (data is String) {
       final Map<String, dynamic>? decoded = _tryJsonObject(data);
       if (decoded == null) {
-        throw ScryfallException(
-          'Expected a JSON object from $uri',
-          uri: uri,
-        );
+        throw ScryfallException('Expected a JSON object from $uri', uri: uri);
       }
       return decoded;
     }

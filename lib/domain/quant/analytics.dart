@@ -77,13 +77,15 @@ List<PricePoint> _sanitize(List<PricePoint> input) {
     final point = input[i];
     final price = point.price;
     if (!price.isFinite || price <= 0) continue;
-    indexed.add(_IndexedPoint(
-      i,
-      PricePoint(
-        DateTime.utc(point.date.year, point.date.month, point.date.day),
-        price,
+    indexed.add(
+      _IndexedPoint(
+        i,
+        PricePoint(
+          DateTime.utc(point.date.year, point.date.month, point.date.day),
+          price,
+        ),
       ),
-    ));
+    );
   }
   indexed.sort((a, b) {
     final byDate = a.point.date.compareTo(b.point.date);
@@ -114,20 +116,21 @@ class _IndexedPoint {
 
 /// The result returned when there is nothing to analyse.
 CardAnalytics _emptyResult(int window) => CardAnalytics(
-      currentPrice: null,
-      trendScore: 50,
-      direction: TrendDirection.flat,
-      confidence: 0,
-      headline: 'No data',
-      summary: 'No usable price history was supplied, so no trend can be '
-          'estimated. Prices must be finite and greater than zero.',
-      anomalies: const <AnomalyFlag>[],
-      readings: const <IndicatorReading>[],
-      effectiveSamples: 0,
-      windowDays: window,
-      thinData: true,
-      series: const <PricePoint>[],
-    );
+  currentPrice: null,
+  trendScore: 50,
+  direction: TrendDirection.flat,
+  confidence: 0,
+  headline: 'No data',
+  summary:
+      'No usable price history was supplied, so no trend can be '
+      'estimated. Prices must be finite and greater than zero.',
+  anomalies: const <AnomalyFlag>[],
+  readings: const <IndicatorReading>[],
+  effectiveSamples: 0,
+  windowDays: window,
+  thinData: true,
+  series: const <PricePoint>[],
+);
 
 /// Maps a composite score onto its direction bucket.
 TrendDirection _directionFor(double score) {
@@ -217,14 +220,16 @@ List<IndicatorReading> _buildReadings({
     } else {
       interpretation = 'Neutral';
     }
-    readings.add(IndicatorReading(
-      label: 'RSI (14)',
-      value: rsi.toStringAsFixed(1),
-      interpretation: interpretation,
-      signal: interpretation == 'Neutral'
-          ? null
-          : ((rsi - 50) / 50).clamp(-1.0, 1.0),
-    ));
+    readings.add(
+      IndicatorReading(
+        label: 'RSI (14)',
+        value: rsi.toStringAsFixed(1),
+        interpretation: interpretation,
+        signal: interpretation == 'Neutral'
+            ? null
+            : ((rsi - 50) / 50).clamp(-1.0, 1.0),
+      ),
+    );
   }
 
   if (macdResult != null && price > 0) {
@@ -238,12 +243,14 @@ List<IndicatorReading> _buildReadings({
     } else {
       interpretation = 'Bearish momentum';
     }
-    readings.add(IndicatorReading(
-      label: 'MACD (12,26,9)',
-      value: '${_signedPct(percent, decimals: 2)} of price',
-      interpretation: interpretation,
-      signal: interpretation == 'Flat' ? null : _squash(relative, 0.02),
-    ));
+    readings.add(
+      IndicatorReading(
+        label: 'MACD (12,26,9)',
+        value: '${_signedPct(percent, decimals: 2)} of price',
+        interpretation: interpretation,
+        signal: interpretation == 'Flat' ? null : _squash(relative, 0.02),
+      ),
+    );
   }
 
   if (bands != null) {
@@ -259,19 +266,23 @@ List<IndicatorReading> _buildReadings({
     } else {
       interpretation = 'Lower half of the band';
     }
-    readings.add(IndicatorReading(
-      label: 'Bollinger %B (20,2)',
-      value: bands.percentB.toStringAsFixed(2),
-      interpretation: interpretation,
-      signal: ((bands.percentB - 0.5) * 2).clamp(-1.0, 1.0),
-    ));
-    readings.add(IndicatorReading(
-      label: 'Bollinger bandwidth (20,2)',
-      value: _plainPct(bands.bandwidth * 100),
-      interpretation: bands.bandwidth < 0.08
-          ? 'Compressed range'
-          : (bands.bandwidth > 0.35 ? 'Very wide range' : 'Normal range'),
-    ));
+    readings.add(
+      IndicatorReading(
+        label: 'Bollinger %B (20,2)',
+        value: bands.percentB.toStringAsFixed(2),
+        interpretation: interpretation,
+        signal: ((bands.percentB - 0.5) * 2).clamp(-1.0, 1.0),
+      ),
+    );
+    readings.add(
+      IndicatorReading(
+        label: 'Bollinger bandwidth (20,2)',
+        value: _plainPct(bands.bandwidth * 100),
+        interpretation: bands.bandwidth < 0.08
+            ? 'Compressed range'
+            : (bands.bandwidth > 0.35 ? 'Very wide range' : 'Normal range'),
+      ),
+    );
   }
 
   if (sma20 != null && sma50 != null && sma50 > 0) {
@@ -284,74 +295,92 @@ List<IndicatorReading> _buildReadings({
     } else {
       interpretation = 'Short average below the long average';
     }
-    readings.add(IndicatorReading(
-      label: 'SMA 20 vs SMA 50',
-      value: _signedPct(spread, decimals: 2),
-      interpretation: interpretation,
-      signal: spread.abs() < 0.25 ? null : _squash(spread / 100, 0.05),
-    ));
+    readings.add(
+      IndicatorReading(
+        label: 'SMA 20 vs SMA 50',
+        value: _signedPct(spread, decimals: 2),
+        interpretation: interpretation,
+        signal: spread.abs() < 0.25 ? null : _squash(spread / 100, 0.05),
+      ),
+    );
   }
 
   if (mom30 != null) {
-    readings.add(IndicatorReading(
-      label: 'Momentum (30d)',
-      value: _signedPct(mom30),
-      interpretation: mom30.abs() < 1
-          ? 'Little change'
-          : (mom30 > 0 ? 'Price higher than 30 days ago' : 'Price lower than 30 days ago'),
-      signal: _squash(mom30 / 100, 0.15),
-    ));
+    readings.add(
+      IndicatorReading(
+        label: 'Momentum (30d)',
+        value: _signedPct(mom30),
+        interpretation: mom30.abs() < 1
+            ? 'Little change'
+            : (mom30 > 0
+                  ? 'Price higher than 30 days ago'
+                  : 'Price lower than 30 days ago'),
+        signal: _squash(mom30 / 100, 0.15),
+      ),
+    );
   }
 
   if (mom90 != null) {
-    readings.add(IndicatorReading(
-      label: 'Momentum (90d)',
-      value: _signedPct(mom90),
-      interpretation: mom90.abs() < 1
-          ? 'Little change'
-          : (mom90 > 0 ? 'Price higher than 90 days ago' : 'Price lower than 90 days ago'),
-      signal: _squash(mom90 / 100, 0.15),
-    ));
+    readings.add(
+      IndicatorReading(
+        label: 'Momentum (90d)',
+        value: _signedPct(mom90),
+        interpretation: mom90.abs() < 1
+            ? 'Little change'
+            : (mom90 > 0
+                  ? 'Price higher than 90 days ago'
+                  : 'Price lower than 90 days ago'),
+        signal: _squash(mom90 / 100, 0.15),
+      ),
+    );
   }
 
   if (volatility != null) {
-    readings.add(IndicatorReading(
-      label: 'Volatility (annualised)',
-      value: _plainPct(volatility),
-      interpretation: volatility < 20
-          ? 'Low'
-          : (volatility < 45 ? 'Moderate' : 'High'),
-    ));
+    readings.add(
+      IndicatorReading(
+        label: 'Volatility (annualised)',
+        value: _plainPct(volatility),
+        interpretation: volatility < 20
+            ? 'Low'
+            : (volatility < 45 ? 'Moderate' : 'High'),
+      ),
+    );
   }
 
   if (drawdown != null) {
-    readings.add(IndicatorReading(
-      label: 'Max drawdown',
-      value: _plainPct(drawdown),
-      interpretation: drawdown < 10
-          ? 'Shallow'
-          : (drawdown < 30 ? 'Moderate' : 'Deep'),
-    ));
+    readings.add(
+      IndicatorReading(
+        label: 'Max drawdown',
+        value: _plainPct(drawdown),
+        interpretation: drawdown < 10
+            ? 'Shallow'
+            : (drawdown < 30 ? 'Moderate' : 'Deep'),
+      ),
+    );
   }
 
   if (kalman != null) {
-    readings.add(IndicatorReading(
-      label: 'Trend (Kalman, annualised)',
-      value: _signedPct(kalman.trendAnnualPct),
-      interpretation: kalman.trendAnnualPct.abs() < 5
-          ? 'No clear drift'
-          : (kalman.trendAnnualPct > 0 ? 'Upward drift' : 'Downward drift'),
-      signal: _squash(kalman.slope * 365, 0.30),
-    ));
+    readings.add(
+      IndicatorReading(
+        label: 'Trend (Kalman, annualised)',
+        value: _signedPct(kalman.trendAnnualPct),
+        interpretation: kalman.trendAnnualPct.abs() < 5
+            ? 'No clear drift'
+            : (kalman.trendAnnualPct > 0 ? 'Upward drift' : 'Downward drift'),
+        signal: _squash(kalman.slope * 365, 0.30),
+      ),
+    );
   }
 
   if (anomalies.isNotEmpty) {
     final kinds = <String>{for (final a in anomalies) a.kind}.toList()..sort();
-    readings.add(IndicatorReading(
-      label: 'Unusual moves',
-      value: '${anomalies.length} flagged',
-      interpretation: kinds.join(', '),
-    ));
+    readings.add(
+      IndicatorReading(
+        label: 'Unusual moves',
+        value: '${anomalies.length} flagged',
+        interpretation: kinds.join(', '),
+      ),
+    );
   }
 
   return readings;
@@ -402,8 +431,9 @@ CardAnalytics analyzeSeries(
 
   final gridObservations = <int, double>{};
   for (final point in observations) {
-    gridObservations[point.date.difference(firstDate).inDays] =
-        math.log(point.price);
+    gridObservations[point.date.difference(firstDate).inDays] = math.log(
+      point.price,
+    );
   }
   final rawPrices = <double>[for (final point in observations) point.price];
   final hasMissingDays = nEff < gridLength;
@@ -413,7 +443,8 @@ CardAnalytics analyzeSeries(
   // A structural break is only meaningful when the series has a measurable
   // daily dispersion to be extreme relative to. On a perfectly deterministic
   // ramp sigma is ~1e-16 and every single day would "exceed 5 sigma".
-  final hasUsableDispersion = sigmaDaily != null && sigmaDaily > _minimumDispersion;
+  final hasUsableDispersion =
+      sigmaDaily != null && sigmaDaily > _minimumDispersion;
   final breakThreshold = hasUsableDispersion ? 5 * sigmaDaily : null;
 
   final run = runLocalLinearTrend(
@@ -431,7 +462,9 @@ CardAnalytics analyzeSeries(
     }
     final state = run.smoothed[gridIndex];
     final smoothed = safeExp(state[0]);
-    analysisPrices.add(smoothed.isFinite && smoothed > 0 ? smoothed : point.price);
+    analysisPrices.add(
+      smoothed.isFinite && smoothed > 0 ? smoothed : point.price,
+    );
   }
 
   final series = <PricePoint>[
@@ -447,8 +480,9 @@ CardAnalytics analyzeSeries(
   final macdResult = macd(analysisPrices);
   final bands = bollingerBands(analysisPrices);
   final regression = olsLogTrend(analysisPrices, window: 90);
-  final forecast =
-      horizon > 0 ? holtLinearForecast(analysisPrices, horizon: horizon) : null;
+  final forecast = horizon > 0
+      ? holtLinearForecast(analysisPrices, horizon: horizon)
+      : null;
 
   // --- Realised statistics on the raw observations -------------------------
   final volatility = annualizedVolatility(rawPrices);
@@ -458,7 +492,8 @@ CardAnalytics analyzeSeries(
   final mom90 = momentumPct(observations, 90);
   final meanReturn = mean(returns);
   final riskAdjusted = (hasUsableDispersion && meanReturn != null)
-      ? (kDaysPerYear * meanReturn - 0.04) / (sigmaDaily * math.sqrt(kDaysPerYear))
+      ? (kDaysPerYear * meanReturn - 0.04) /
+            (sigmaDaily * math.sqrt(kDaysPerYear))
       : null;
 
   // --- Kalman reading ------------------------------------------------------
@@ -494,15 +529,18 @@ CardAnalytics analyzeSeries(
     final change = index > 0 && observations[index - 1].price > 0
         ? (point.price / observations[index - 1].price - 1) * 100
         : 0.0;
-    anomalies.add(AnomalyFlag(
-      date: point.date,
-      price: point.price,
-      zScore: 0,
-      kind: 'gap',
-      description: 'Structural break: price moved '
-          '${_signedPct(change)} in a single day, far outside the recent '
-          'range, so the trend model was re-based.',
-    ));
+    anomalies.add(
+      AnomalyFlag(
+        date: point.date,
+        price: point.price,
+        zScore: 0,
+        kind: 'gap',
+        description:
+            'Structural break: price moved '
+            '${_signedPct(change)} in a single day, far outside the recent '
+            'range, so the trend model was re-based.',
+      ),
+    );
   }
   anomalies.sort((a, b) => a.date.compareTo(b.date));
 
@@ -510,15 +548,15 @@ CardAnalytics analyzeSeries(
   final holtAt14 = forecast == null || forecast.point.isEmpty
       ? null
       : (forecast.point.length >= 14
-          ? forecast.point[13]
-          : forecast.point.last);
+            ? forecast.point[13]
+            : forecast.point.last);
   final rSquared = regression?.rSquared ?? 0.0;
   final components = <double>[
     regression == null
         ? 0.0
         : _squash(regression.slope * kDaysPerYear, 0.30) *
-            rSquared.clamp(0.0, 1.0) *
-            (regression.tStat.abs() < 2 ? 0.3 : 1.0),
+              rSquared.clamp(0.0, 1.0) *
+              (regression.tStat.abs() < 2 ? 0.3 : 1.0),
     _squash(kalman.slope * kDaysPerYear, 0.30),
     mom30 == null ? 0.0 : _squash(mom30 / 100.0, 0.15),
     (macdResult == null || !(price > 0))
@@ -537,11 +575,11 @@ CardAnalytics analyzeSeries(
   for (var i = 0; i < _weights.length; i++) {
     rawSignal += _weights[i] * components[i];
   }
-  final finiteVolatility =
-      volatility != null && volatility.isFinite ? volatility : 0.0;
+  final finiteVolatility = volatility != null && volatility.isFinite
+      ? volatility
+      : 0.0;
   final sigmaAnnual = finiteVolatility / 100.0;
-  final confidence =
-      rSquared * coverage * (1 / (1 + sigmaAnnual / 0.60));
+  final confidence = rSquared * coverage * (1 / (1 + sigmaAnnual / 0.60));
   final score = (50 + 50 * confidence * rawSignal).clamp(0.0, 100.0);
   final direction = _directionFor(score);
 
@@ -550,7 +588,8 @@ CardAnalytics analyzeSeries(
   final String summary;
   if (nEff < _minimumObservationsForTrend) {
     headline = 'Insufficient data';
-    summary = 'Only $nEff price observation${nEff == 1 ? '' : 's'} '
+    summary =
+        'Only $nEff price observation${nEff == 1 ? '' : 's'} '
         '${nEff == 1 ? 'is' : 'are'} available in the last $window days, '
         'which is not enough to estimate a trend. The price shown is the '
         'latest observation.';
@@ -566,28 +605,32 @@ CardAnalytics analyzeSeries(
       final strength = regression == null
           ? null
           : (regression.rSquared >= 0.5
-              ? 'statistically strong'
-              : (regression.rSquared >= 0.2
-                  ? 'statistically weak'
-                  : 'statistically very weak'));
+                ? 'statistically strong'
+                : (regression.rSquared >= 0.2
+                      ? 'statistically weak'
+                      : 'statistically very weak'));
       final move = momentum.abs() < 0.05
           ? 'The price is unchanged over $momentumDays days'
           : '${momentum >= 0 ? 'Up' : 'Down'} '
-              '${momentum.abs().toStringAsFixed(1)}% over $momentumDays days';
+                '${momentum.abs().toStringAsFixed(1)}% over $momentumDays days';
       sentences.add(
         '$move${strength == null ? '.' : '; the trend is $strength '
-            '(R-squared ${rSquared.toStringAsFixed(2)}).'}',
+                  '(R-squared ${rSquared.toStringAsFixed(2)}).'}',
       );
     }
     final caveats = <String>[];
     if (thinData) {
-      caveats.add('Only $nEff of the last $window days carry prices, so this '
-          'reading is low trust.');
+      caveats.add(
+        'Only $nEff of the last $window days carry prices, so this '
+        'reading is low trust.',
+      );
     }
     if (anomalies.isNotEmpty) {
-      caveats.add('${anomalies.length} unusual '
-          'move${anomalies.length == 1 ? '' : 's'} '
-          '${anomalies.length == 1 ? 'was' : 'were'} flagged in the window.');
+      caveats.add(
+        '${anomalies.length} unusual '
+        'move${anomalies.length == 1 ? '' : 's'} '
+        '${anomalies.length == 1 ? 'was' : 'were'} flagged in the window.',
+      );
     }
     if (forecast != null) {
       caveats.add('The forecast is a statistical range, not a prediction.');
@@ -632,8 +675,9 @@ CardAnalytics analyzeSeries(
     momentum90: mom90,
     volatilityAnnualized: volatility,
     maxDrawdown: drawdown,
-    riskAdjustedMomentum:
-        riskAdjusted != null && riskAdjusted.isFinite ? riskAdjusted : null,
+    riskAdjustedMomentum: riskAdjusted != null && riskAdjusted.isFinite
+        ? riskAdjusted
+        : null,
     forecast: forecast,
     kalman: kalman,
     anomalies: List<AnomalyFlag>.unmodifiable(anomalies),

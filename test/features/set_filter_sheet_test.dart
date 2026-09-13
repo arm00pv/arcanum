@@ -14,33 +14,32 @@ TcgCard printing({
   String number = '001',
   String rarity = 'Ultra Rare',
   double? price,
-}) =>
-    TcgCard(
-      game: CardGame.yugioh,
-      id: id,
-      setCode: 'lob',
-      setName: 'Legend of Blue Eyes White Dragon',
-      name: name,
-      collectorNumber: number,
-      rarity: rarity,
-      prices: price == null
-          ? TcgPrices.empty
-          : TcgPrices(byFinish: <String, double?>{CardFinish.nonfoil.code: price}),
-    );
+}) => TcgCard(
+  game: CardGame.yugioh,
+  id: id,
+  setCode: 'lob',
+  setName: 'Legend of Blue Eyes White Dragon',
+  name: name,
+  collectorNumber: number,
+  rarity: rarity,
+  prices: price == null
+      ? TcgPrices.empty
+      : TcgPrices(byFinish: <String, double?>{CardFinish.nonfoil.code: price}),
+);
 
 List<PrintingSlot> fixture() => groupIntoSlots(<TcgCard>[
-      printing(id: 'a', price: 0.14),
-      printing(id: 'b', price: 62.15),
-      printing(id: 'c', price: 681.5),
-      printing(
-        id: 'd',
-        name: 'Skull Servant',
-        number: '002',
-        rarity: 'Common',
-        price: 0.2,
-      ),
-      printing(id: 'e', name: 'Dark Magician', number: '003', rarity: 'Super Rare'),
-    ]);
+  printing(id: 'a', price: 0.14),
+  printing(id: 'b', price: 62.15),
+  printing(id: 'c', price: 681.5),
+  printing(
+    id: 'd',
+    name: 'Skull Servant',
+    number: '002',
+    rarity: 'Common',
+    price: 0.2,
+  ),
+  printing(id: 'e', name: 'Dark Magician', number: '003', rarity: 'Super Rare'),
+]);
 
 void main() {
   late SetFilter? returned;

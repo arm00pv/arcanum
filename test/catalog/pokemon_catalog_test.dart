@@ -126,8 +126,11 @@ class _FakeTcgdexApi implements HttpClientAdapter {
     };
     final body = _respond(uri);
     if (body == null) {
-      return ResponseBody.fromString('{"error":"Not found"}', 404,
-          headers: headers);
+      return ResponseBody.fromString(
+        '{"error":"Not found"}',
+        404,
+        headers: headers,
+      );
     }
     return ResponseBody.fromString(body, 200, headers: headers);
   }
@@ -157,7 +160,9 @@ PokemonCatalog catalogWith({
     if (path.endsWith('/cards')) {
       // The provider keeps names and rules in separate fields, so the adapter
       // asks twice and the fake answers each filter in kind.
-      return uri.queryParameters.containsKey('effect') ? effectBody : searchBody;
+      return uri.queryParameters.containsKey('effect')
+          ? effectBody
+          : searchBody;
     }
     final setMatch = RegExp(r'/sets/([^/]+)$').firstMatch(path);
     if (setMatch != null) return bySet[setMatch.group(1)];
@@ -250,15 +255,18 @@ void main() {
       expect(variants, isNot(contains(CardFinish.nonfoil.code)));
     });
 
-    test('takes art from the response rather than rebuilding the URL', () async {
-      final cards = await catalogWith().fetchCardsInSet('base1');
-      final charizard = cards.firstWhere((c) => c.id == 'base1-4');
+    test(
+      'takes art from the response rather than rebuilding the URL',
+      () async {
+        final cards = await catalogWith().fetchCardsInSet('base1');
+        final charizard = cards.firstWhere((c) => c.id == 'base1-4');
 
-      expect(
-        charizard.imageUrl(size: 'normal'),
-        'https://assets.tcgdex.net/en/base/base1/4/high.webp',
-      );
-    });
+        expect(
+          charizard.imageUrl(size: 'normal'),
+          'https://assets.tcgdex.net/en/base/base1/4/high.webp',
+        );
+      },
+    );
 
     test('keeps a card whose detail call fails, with working art', () async {
       // The regression this pins: the CDN needs the series segment, and a URL
@@ -284,10 +292,7 @@ void main() {
         requests.where((u) => RegExp(r'/sets/base1$').hasMatch(u.path)),
         hasLength(1),
       );
-      expect(
-        requests.where((u) => u.path.contains('/cards/')),
-        hasLength(3),
-      );
+      expect(requests.where((u) => u.path.contains('/cards/')), hasLength(3));
     });
 
     test('answers empty for a set the provider does not hold', () async {
@@ -319,14 +324,16 @@ void main() {
       expect(await catalogWith().fetchCardById('base1-100'), isNull);
     });
 
-    test('leaves the release date empty when only the card was fetched',
-        () async {
-      // Documented degradation: the card response carries no date, so a card
-      // reached this way shows no date chip until its set is browsed.
-      final card = await catalogWith().fetchCardById('base1-4');
+    test(
+      'leaves the release date empty when only the card was fetched',
+      () async {
+        // Documented degradation: the card response carries no date, so a card
+        // reached this way shows no date chip until its set is browsed.
+        final card = await catalogWith().fetchCardById('base1-4');
 
-      expect(card!.releasedAt, isNull);
-    });
+        expect(card!.releasedAt, isNull);
+      },
+    );
   });
 
   group('search', () {
@@ -334,8 +341,11 @@ void main() {
       final results = await catalogWith().search('charizard');
 
       // Name matches first, then the rules-text hit that resolved.
-      expect(results.map((c) => c.name),
-          <String>['Charizard', 'Pikachu', 'Energy Removal']);
+      expect(results.map((c) => c.name), <String>[
+        'Charizard',
+        'Pikachu',
+        'Energy Removal',
+      ]);
       // Relevance order, not the order the workers finished in.
       expect(results.first.rarity, 'Rare');
     });
@@ -354,10 +364,14 @@ void main() {
 
       final lists = requests.where((u) => u.path.endsWith('/cards')).toList();
       expect(lists, hasLength(2));
-      expect(lists.where((u) => u.queryParameters.containsKey('name')),
-          hasLength(1));
-      expect(lists.where((u) => u.queryParameters.containsKey('effect')),
-          hasLength(1));
+      expect(
+        lists.where((u) => u.queryParameters.containsKey('name')),
+        hasLength(1),
+      );
+      expect(
+        lists.where((u) => u.queryParameters.containsKey('effect')),
+        hasLength(1),
+      );
     });
 
     test('leads with name matches when both filters hit', () async {
@@ -372,19 +386,20 @@ void main() {
     test('answers names when the rules-text pass fails', () async {
       // One filter being unavailable narrows the results; it must not empty
       // them.
-      final results =
-          await catalogWith(effectBody: null).search('charizard');
+      final results = await catalogWith(effectBody: null).search('charizard');
 
       expect(results.map((c) => c.name), <String>['Charizard', 'Pikachu']);
     });
 
-    test('drops a hit it cannot resolve instead of failing the search',
-        () async {
-      final results = await catalogWith().search('anything');
+    test(
+      'drops a hit it cannot resolve instead of failing the search',
+      () async {
+        final results = await catalogWith().search('anything');
 
-      expect(results.every((c) => c.id != 'base1-100'), isTrue);
-      expect(results, hasLength(3));
-    });
+        expect(results.every((c) => c.id != 'base1-100'), isTrue);
+        expect(results, hasLength(3));
+      },
+    );
 
     test('caps the detail calls one search will make', () async {
       // The provider matches over two hundred printings for a name like
@@ -397,28 +412,34 @@ void main() {
       many.write(']');
 
       final requests = <Uri>[];
-      await catalogWith(searchBody: many.toString(), requests: requests)
-          .search('pikachu');
+      await catalogWith(
+        searchBody: many.toString(),
+        requests: requests,
+      ).search('pikachu');
 
       final detailCalls = requests.where((u) => u.path.contains('/cards/'));
       expect(detailCalls.length, lessThanOrEqualTo(60));
       expect(detailCalls, isNotEmpty);
     });
 
-    test('asks the provider for the name, which is all it can filter on',
-        () async {
-      final requests = <Uri>[];
-      await catalogWith(requests: requests).search('charizard');
+    test(
+      'asks the provider for the name, which is all it can filter on',
+      () async {
+        final requests = <Uri>[];
+        await catalogWith(requests: requests).search('charizard');
 
-      final list = requests.firstWhere((u) => u.path.endsWith('/cards'));
-      expect(list.queryParameters['name'], 'charizard');
-    });
+        final list = requests.firstWhere((u) => u.path.endsWith('/cards'));
+        expect(list.queryParameters['name'], 'charizard');
+      },
+    );
 
     test('answers empty when the search itself fails', () async {
       // A search is a convenience, never a reason to show an error screen.
       expect(
-        await catalogWith(searchBody: null, effectBody: null)
-            .search('charizard'),
+        await catalogWith(
+          searchBody: null,
+          effectBody: null,
+        ).search('charizard'),
         isEmpty,
       );
     });
@@ -434,16 +455,13 @@ void main() {
 
   group('game vocabulary', () {
     test('offers the finishes a Pokemon collector sorts by', () {
-      expect(
-        CardGame.pokemon.finishes,
-        <CardFinish>[
-          CardFinish.nonfoil,
-          CardFinish.holofoil,
-          CardFinish.reverseHolofoil,
-          CardFinish.firstEdition,
-          CardFinish.firstEditionHolofoil,
-        ],
-      );
+      expect(CardGame.pokemon.finishes, <CardFinish>[
+        CardFinish.nonfoil,
+        CardFinish.holofoil,
+        CardFinish.reverseHolofoil,
+        CardFinish.firstEdition,
+        CardFinish.firstEditionHolofoil,
+      ]);
     });
 
     test('addresses the set and card by TCGdex ids', () {

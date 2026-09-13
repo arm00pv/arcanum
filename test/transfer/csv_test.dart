@@ -11,16 +11,15 @@ TcgCard _card({
   String name = 'Lightning Bolt',
   String setCode = 'lea',
   String collectorNumber = '161',
-}) =>
-    TcgCard(
-      game: CardGame.mtg,
-      id: id,
-      setCode: setCode,
-      setName: 'Limited Edition Alpha',
-      name: name,
-      collectorNumber: collectorNumber,
-      rarity: 'common',
-    );
+}) => TcgCard(
+  game: CardGame.mtg,
+  id: id,
+  setCode: setCode,
+  setName: 'Limited Edition Alpha',
+  name: name,
+  collectorNumber: collectorNumber,
+  rarity: 'common',
+);
 
 CollectionEntry _entry({
   String cardId = 'abc',
@@ -29,17 +28,16 @@ CollectionEntry _entry({
   int quantity = 1,
   String binder = '',
   double? price,
-}) =>
-    CollectionEntry(
-      cardId: cardId,
-      finish: finish,
-      condition: condition,
-      quantity: quantity,
-      binder: binder,
-      purchasePrice: price,
-      createdAt: DateTime(2026, 1, 1),
-      updatedAt: DateTime(2026, 1, 1),
-    );
+}) => CollectionEntry(
+  cardId: cardId,
+  finish: finish,
+  condition: condition,
+  quantity: quantity,
+  binder: binder,
+  purchasePrice: price,
+  createdAt: DateTime(2026, 1, 1),
+  updatedAt: DateTime(2026, 1, 1),
+);
 
 void main() {
   group('Csv.parse', () {
@@ -113,23 +111,35 @@ void main() {
 
   group('CollectionCsvReader.detect', () {
     test('recognises Moxfield', () {
-      final dialect = CollectionCsvReader.detect(
-        ['Count', 'Tradelist Count', 'Name', 'Edition', 'Condition', 'Foil'],
-      );
+      final dialect = CollectionCsvReader.detect([
+        'Count',
+        'Tradelist Count',
+        'Name',
+        'Edition',
+        'Condition',
+        'Foil',
+      ]);
       expect(dialect, TransferDialect.moxfield);
     });
 
     test('recognises Archidekt', () {
-      final dialect = CollectionCsvReader.detect(
-        ['Quantity', 'Name', 'Edition', 'Condition', 'Categories'],
-      );
+      final dialect = CollectionCsvReader.detect([
+        'Quantity',
+        'Name',
+        'Edition',
+        'Condition',
+        'Categories',
+      ]);
       expect(dialect, TransferDialect.archidekt);
     });
 
     test('recognises the Arcanum format', () {
-      final dialect = CollectionCsvReader.detect(
-        ['card_id', 'name', 'set_code', 'quantity'],
-      );
+      final dialect = CollectionCsvReader.detect([
+        'card_id',
+        'name',
+        'set_code',
+        'quantity',
+      ]);
       expect(dialect, TransferDialect.arcanum);
     });
 
@@ -143,7 +153,8 @@ void main() {
 
   group('CollectionCsvReader.parse', () {
     test('reads a Moxfield row end to end', () {
-      const text = 'Count,Tradelist Count,Name,Edition,Condition,Language,Foil,'
+      const text =
+          'Count,Tradelist Count,Name,Edition,Condition,Language,Foil,'
           'Tags,Collector Number\n'
           '4,0,Lightning Bolt,LEA,NM,en,foil,Burn,161\n';
       final parsed = CollectionCsvReader.parse(text);
@@ -163,7 +174,8 @@ void main() {
     });
 
     test('reads a quoted name containing a comma', () {
-      const text = 'Quantity,Name,Set Code,Collector Number\n'
+      const text =
+          'Quantity,Name,Set Code,Collector Number\n'
           '1,"Nicol Bolas, the Ravager",m19,217\n';
       final parsed = CollectionCsvReader.parse(text);
       expect(parsed.rows.single.name, 'Nicol Bolas, the Ravager');
@@ -239,13 +251,25 @@ void main() {
   group('condition parsing', () {
     test('covers both grade vocabularies', () {
       expect(CollectionCsvReader.parseCondition('NM'), CardCondition.nearMint);
-      expect(CollectionCsvReader.parseCondition('Near Mint'), CardCondition.nearMint);
+      expect(
+        CollectionCsvReader.parseCondition('Near Mint'),
+        CardCondition.nearMint,
+      );
       expect(CollectionCsvReader.parseCondition('M'), CardCondition.mint);
       expect(CollectionCsvReader.parseCondition('EX'), CardCondition.excellent);
       expect(CollectionCsvReader.parseCondition('GD'), CardCondition.good);
-      expect(CollectionCsvReader.parseCondition('LP'), CardCondition.lightPlayed);
-      expect(CollectionCsvReader.parseCondition('MP'), CardCondition.moderatelyPlayed);
-      expect(CollectionCsvReader.parseCondition('HP'), CardCondition.heavilyPlayed);
+      expect(
+        CollectionCsvReader.parseCondition('LP'),
+        CardCondition.lightPlayed,
+      );
+      expect(
+        CollectionCsvReader.parseCondition('MP'),
+        CardCondition.moderatelyPlayed,
+      );
+      expect(
+        CollectionCsvReader.parseCondition('HP'),
+        CardCondition.heavilyPlayed,
+      );
       expect(CollectionCsvReader.parseCondition('PL'), CardCondition.played);
       expect(CollectionCsvReader.parseCondition('PO'), CardCondition.poor);
       expect(CollectionCsvReader.parseCondition('DMG'), CardCondition.damaged);
@@ -255,7 +279,8 @@ void main() {
 
   group('money columns', () {
     test('reads plain, symboled and thousands-separated amounts', () {
-      const text = 'Quantity,Name,Purchase Price\n'
+      const text =
+          'Quantity,Name,Purchase Price\n'
           '1,Bolt,12.50\n'
           '1,Bolt,"\$1,234.56"\n'
           '1,Bolt,\n';
@@ -268,7 +293,8 @@ void main() {
 
   group('date columns', () {
     test('reads ISO dates and American short dates', () {
-      const text = 'Quantity,Name,Purchase Date\n'
+      const text =
+          'Quantity,Name,Purchase Date\n'
           '1,Bolt,2024-01-31\n'
           '1,Bolt,1/31/2024\n'
           '1,Bolt,not a date\n';
@@ -317,7 +343,9 @@ void main() {
         ),
         card: _card(),
       );
-      final text = CollectionCsvWriter.build(TransferDialect.generic, [original]);
+      final text = CollectionCsvWriter.build(TransferDialect.generic, [
+        original,
+      ]);
       final parsed = CollectionCsvReader.parse(text);
 
       expect(parsed.problems, isEmpty);
@@ -363,7 +391,10 @@ void main() {
     for (final finish in CardFinish.values) {
       test('finish ${finish.code} survives export and import', () {
         final text = CollectionCsvWriter.build(TransferDialect.arcanum, [
-          ExportRow(entry: _entry(finish: finish), card: _card()),
+          ExportRow(
+            entry: _entry(finish: finish),
+            card: _card(),
+          ),
         ]);
         expect(CollectionCsvReader.parse(text).rows.single.finish, finish);
       });
@@ -372,7 +403,10 @@ void main() {
     for (final condition in CardCondition.values) {
       test('condition ${condition.code} survives export and import', () {
         final text = CollectionCsvWriter.build(TransferDialect.arcanum, [
-          ExportRow(entry: _entry(condition: condition), card: _card()),
+          ExportRow(
+            entry: _entry(condition: condition),
+            card: _card(),
+          ),
         ]);
         expect(
           CollectionCsvReader.parse(text).rows.single.condition,
@@ -385,10 +419,7 @@ void main() {
       final text = CollectionCsvWriter.build(TransferDialect.arcanum, [
         ExportRow(entry: _entry(), card: _card()),
       ]);
-      expect(
-        CollectionCsvReader.parse(text).dialect,
-        TransferDialect.arcanum,
-      );
+      expect(CollectionCsvReader.parse(text).dialect, TransferDialect.arcanum);
     });
   });
 }

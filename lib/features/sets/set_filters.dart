@@ -174,7 +174,9 @@ class SetFilter {
 
   /// How many controls are set, for the badge on the filter button.
   int get activeCount =>
-      (filtersPrice ? 1 : 0) + (rarities.isEmpty ? 0 : 1) + (sort == SetSort.number ? 0 : 1);
+      (filtersPrice ? 1 : 0) +
+      (rarities.isEmpty ? 0 : 1) +
+      (sort == SetSort.number ? 0 : 1);
 
   /// Whether a slot survives the filter.
   bool matches(PrintingSlot slot) {
@@ -253,11 +255,8 @@ class SetFilter {
   }
 
   /// A copy with the price window replaced, or cleared by passing null.
-  SetFilter withPrice(PriceWindow? window) => SetFilter(
-        price: window,
-        rarities: rarities,
-        sort: sort,
-      );
+  SetFilter withPrice(PriceWindow? window) =>
+      SetFilter(price: window, rarities: rarities, sort: sort);
 
   /// A copy with one rarity toggled.
   SetFilter toggleRarity(String rarity) {
@@ -279,7 +278,8 @@ class SetFilter {
       other.rarities.containsAll(rarities);
 
   @override
-  int get hashCode => Object.hash(price, sort, Object.hashAllUnordered(rarities));
+  int get hashCode =>
+      Object.hash(price, sort, Object.hashAllUnordered(rarities));
 }
 
 /// What one slot's price should say once a filter has narrowed what is on show.

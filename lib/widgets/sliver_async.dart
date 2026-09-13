@@ -87,7 +87,11 @@ class SliverAsyncView<T> extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                Icon(Icons.cloud_off_rounded, size: 30, color: context.c.warning),
+                Icon(
+                  Icons.cloud_off_rounded,
+                  size: 30,
+                  color: context.c.warning,
+                ),
                 const SizedBox(height: 12),
                 Text(errorTitle, style: context.t.titleMedium),
                 const SizedBox(height: 6),

@@ -24,8 +24,10 @@ typedef _CardStub = ({String id, String localId, String name});
 /// [onProgress] so the UI can show a real progress bar rather than a spinner.
 class PokemonCatalog implements CardCatalog {
   PokemonCatalog({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: _base,
               connectTimeout: const Duration(seconds: 12),
               receiveTimeout: const Duration(seconds: 25),
@@ -33,7 +35,8 @@ class PokemonCatalog implements CardCatalog {
                 'Accept': 'application/json',
                 'User-Agent': 'Arcanum/1.0 (+https://github.com/arcanum)',
               },
-            ));
+            ),
+          );
 
   static const _base = 'https://api.tcgdex.net/v2/en';
 
@@ -88,16 +91,18 @@ class PokemonCatalog implements CardCatalog {
       if (id == null || id.isEmpty) continue;
       final counts = item['cardCount'];
       final total = counts is Map ? (counts['total'] as num?)?.toInt() ?? 0 : 0;
-      stubs.add(TcgSet(
-        game: CardGame.pokemon,
-        id: id,
-        code: id,
-        name: item['name']?.toString() ?? id,
-        setType: 'expansion',
-        // The list endpoint does not carry release dates; they are filled in
-        // when each set is enriched below.
-        cardCount: total,
-      ));
+      stubs.add(
+        TcgSet(
+          game: CardGame.pokemon,
+          id: id,
+          code: id,
+          name: item['name']?.toString() ?? id,
+          setType: 'expansion',
+          // The list endpoint does not carry release dates; they are filled in
+          // when each set is enriched below.
+          cardCount: total,
+        ),
+      );
     }
 
     // The list endpoint omits the release date, series and logo, so each set is
@@ -112,7 +117,9 @@ class PokemonCatalog implements CardCatalog {
         if (queue.isEmpty) return;
         final i = queue.removeAt(0);
         try {
-          final res = await _retry(() => _dio.get<dynamic>('/sets/${stubs[i].id}'));
+          final res = await _retry(
+            () => _dio.get<dynamic>('/sets/${stubs[i].id}'),
+          );
           final data = res.data;
           enriched[i] = data is Map ? _setFromJson(stubs[i], data) : stubs[i];
         } catch (_) {
@@ -132,7 +139,9 @@ class PokemonCatalog implements CardCatalog {
     final logo = data['logo']?.toString();
     final release = data['releaseDate']?.toString();
     final counts = data['cardCount'];
-    final official = counts is Map ? (counts['official'] as num?)?.toInt() : null;
+    final official = counts is Map
+        ? (counts['official'] as num?)?.toInt()
+        : null;
     return TcgSet(
       game: CardGame.pokemon,
       id: stub.id,
@@ -233,7 +242,9 @@ class PokemonCatalog implements CardCatalog {
         if (queue.isEmpty) return;
         final i = queue.removeAt(0);
         try {
-          final res = await _retry(() => _dio.get<dynamic>('/cards/${stubs[i].id}'));
+          final res = await _retry(
+            () => _dio.get<dynamic>('/cards/${stubs[i].id}'),
+          );
           final data = res.data;
           if (data is Map) {
             results[i] = _cardFromJson(
@@ -286,7 +297,13 @@ class PokemonCatalog implements CardCatalog {
       final dash = id.lastIndexOf('-');
       final setId = dash > 0 ? id.substring(0, dash) : '';
       final localId = dash > 0 ? id.substring(dash + 1) : id;
-      return _cardFromJson(null, data, localId, data['name']?.toString() ?? '', setId: setId);
+      return _cardFromJson(
+        null,
+        data,
+        localId,
+        data['name']?.toString() ?? '',
+        setId: setId,
+      );
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return null;
       throw CatalogException(
@@ -351,13 +368,15 @@ class PokemonCatalog implements CardCatalog {
     int limit,
   ) async {
     try {
-      final res = await _retry(() => _dio.get<dynamic>(
-            '/cards',
-            queryParameters: {
-              filter: query,
-              'pagination:itemsPerPage': limit.clamp(1, 100),
-            },
-          ));
+      final res = await _retry(
+        () => _dio.get<dynamic>(
+          '/cards',
+          queryParameters: {
+            filter: query,
+            'pagination:itemsPerPage': limit.clamp(1, 100),
+          },
+        ),
+      );
       final data = res.data;
       return data is List ? data : const <dynamic>[];
     } on DioException {
@@ -399,7 +418,11 @@ class PokemonCatalog implements CardCatalog {
   /// 404 and `en/base/base1/4/high.webp` is the card. A URL is only built this
   /// way as a last resort, when the response carried no `image` of its own, and
   /// callers that know the series are expected to pass it.
-  static Map<String, String> _images(String cardId, String setId, {String? serie}) {
+  static Map<String, String> _images(
+    String cardId,
+    String setId, {
+    String? serie,
+  }) {
     final base = serie == null
         ? '$_assets/$setId/${cardId.split('-').last}'
         : '$_assets/$serie/$setId/${cardId.split('-').last}';
@@ -419,7 +442,8 @@ class PokemonCatalog implements CardCatalog {
     String? serie,
   }) {
     final id = data['id']?.toString() ?? '';
-    final resolvedSetId = setId ?? set?.id ?? (id.contains('-') ? id.split('-').first : '');
+    final resolvedSetId =
+        setId ?? set?.id ?? (id.contains('-') ? id.split('-').first : '');
     final image = data['image']?.toString();
     // The response's own image URL is authoritative and already includes the
     // series segment, which the set id alone does not.
@@ -441,7 +465,8 @@ class PokemonCatalog implements CardCatalog {
     if (tcg is Map) {
       tcg.forEach((key, value) {
         if (value is! Map) return;
-        final price = (value['marketPrice'] as num?)?.toDouble() ??
+        final price =
+            (value['marketPrice'] as num?)?.toDouble() ??
             (value['midPrice'] as num?)?.toDouble();
         final finish = _finishForVariant(key.toString());
         if (finish != null) {
@@ -483,7 +508,8 @@ class PokemonCatalog implements CardCatalog {
       game: CardGame.pokemon,
       id: id,
       setCode: resolvedSetId,
-      setName: set?.name ??
+      setName:
+          set?.name ??
           ((data['set'] is Map) ? (data['set']['name']?.toString() ?? '') : ''),
       name: data['name']?.toString() ?? name,
       collectorNumber: data['localId']?.toString() ?? localId,
@@ -498,7 +524,10 @@ class PokemonCatalog implements CardCatalog {
       prices: TcgPrices(
         byFinish: byFinish,
         secondary: {
-          if (cm is Map) 'eur': (cm['trend'] as num?)?.toDouble() ?? (cm['avg'] as num?)?.toDouble(),
+          if (cm is Map)
+            'eur':
+                (cm['trend'] as num?)?.toDouble() ??
+                (cm['avg'] as num?)?.toDouble(),
           if (cm is Map) 'eurLow': (cm['low'] as num?)?.toDouble(),
         },
       ),
@@ -556,7 +585,11 @@ class PokemonCatalog implements CardCatalog {
         final name = a['name']?.toString() ?? '';
         final damage = a['damage']?.toString() ?? '';
         final effect = a['effect']?.toString() ?? '';
-        final header = [costText, name, damage].where((s) => s.isNotEmpty).join('  ');
+        final header = [
+          costText,
+          name,
+          damage,
+        ].where((s) => s.isNotEmpty).join('  ');
         buffer.writeln(header);
         if (effect.isNotEmpty) buffer.writeln(effect);
         buffer.writeln();
@@ -587,7 +620,9 @@ class PokemonCatalog implements CardCatalog {
   }
 
   /// Retries transient failures with backoff.
-  Future<Response<dynamic>> _retry(Future<Response<dynamic>> Function() call) async {
+  Future<Response<dynamic>> _retry(
+    Future<Response<dynamic>> Function() call,
+  ) async {
     var attempt = 0;
     while (true) {
       try {

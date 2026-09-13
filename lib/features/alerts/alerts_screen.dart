@@ -63,9 +63,11 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(fired.isEmpty
-                ? 'Checked ${alerts.length} alerts — nothing triggered'
-                : '${fired.length} alert${fired.length == 1 ? '' : 's'} triggered'),
+            content: Text(
+              fired.isEmpty
+                  ? 'Checked ${alerts.length} alerts — nothing triggered'
+                  : '${fired.length} alert${fired.length == 1 ? '' : 's'} triggered',
+            ),
           ),
         );
       }
@@ -84,15 +86,17 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
     final c = context.c;
     final game = ref.watch(activeGameProvider);
     final alertsAsync = ref.watch(alertsProvider(game));
-    final cards = ref.watch(alertCardsProvider(game)).value ?? const <String, TcgCard>{};
+    final cards =
+        ref.watch(alertCardsProvider(game)).value ?? const <String, TcgCard>{};
 
     return Scaffold(
       body: Stack(
         children: [
           Positioned.fill(
             child: DecoratedBox(
-              decoration:
-                  BoxDecoration(gradient: AppTheme.backdrop(c, tint: game.accent)),
+              decoration: BoxDecoration(
+                gradient: AppTheme.backdrop(c, tint: game.accent),
+              ),
             ),
           ),
           CustomScrollView(
@@ -159,7 +163,8 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                         if (fired.isNotEmpty) ...[
                           SectionHeader(
                             title: 'Triggered',
-                            subtitle: '${fired.length} '
+                            subtitle:
+                                '${fired.length} '
                                 '${fired.length == 1 ? 'alert has' : 'alerts have'} fired',
                             padding: const EdgeInsets.only(bottom: 10),
                           ),
@@ -178,7 +183,8 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                         if (armed.isNotEmpty) ...[
                           SectionHeader(
                             title: 'Armed',
-                            subtitle: 'Watching ${armed.length} '
+                            subtitle:
+                                'Watching ${armed.length} '
                                 '${armed.length == 1 ? 'printing' : 'printings'}',
                             padding: const EdgeInsets.only(bottom: 10),
                           ),
@@ -223,25 +229,28 @@ class _AlertCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final c = context.c;
     final game = alert.game;
-    final current = card?.prices.priceFor(alert.effectiveFinish) ?? card?.prices.from;
+    final current =
+        card?.prices.priceFor(alert.effectiveFinish) ?? card?.prices.from;
     final progress = alert.progress(current);
     final fired = !alert.isArmed;
 
     return GlassCard(
       padding: EdgeInsets.zero,
       borderGradient: fired
-          ? LinearGradient(colors: [
-              c.warning.withValues(alpha: 0.9),
-              c.warning.withValues(alpha: 0.15),
-            ])
+          ? LinearGradient(
+              colors: [
+                c.warning.withValues(alpha: 0.9),
+                c.warning.withValues(alpha: 0.15),
+              ],
+            )
           : null,
       onTap: card == null
           ? null
           : () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => CardDetailScreen(game: game, cardId: card!.id),
-                ),
+              MaterialPageRoute<void>(
+                builder: (_) => CardDetailScreen(game: game, cardId: card!.id),
               ),
+            ),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -278,7 +287,9 @@ class _AlertCard extends ConsumerWidget {
                         ].join('  ·  '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                        style: context.t.labelSmall?.copyWith(
+                          color: c.textTertiary,
+                        ),
                       ),
                     ],
                   ),
@@ -319,7 +330,9 @@ class _AlertCard extends ConsumerWidget {
                 if (alert.baseline != null)
                   Text(
                     'armed at ${Fmt.moneyAdaptive(alert.baseline)}',
-                    style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                    style: context.t.labelSmall?.copyWith(
+                      color: c.textTertiary,
+                    ),
                   ),
                 const Spacer(),
                 TextButton.icon(
@@ -339,7 +352,11 @@ class _AlertCard extends ConsumerWidget {
                     }
                     await onChanged();
                   },
-                  icon: Icon(Icons.delete_outline_rounded, size: 18, color: c.textTertiary),
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 18,
+                    color: c.textTertiary,
+                  ),
                 ),
               ],
             ),
@@ -410,14 +427,14 @@ class _SetAlertSheetState extends ConsumerState<_SetAlertSheet> {
       widget.card.prices.priceFor(_finish) ?? widget.card.prices.from;
 
   PriceAlert get _draft => PriceAlert(
-        game: widget.card.game,
-        cardId: widget.card.id,
-        finish: _finish,
-        kind: _kind,
-        threshold: double.tryParse(_threshold.text.trim()) ?? 0,
-        createdAt: DateTime.now(),
-        baseline: _current,
-      );
+    game: widget.card.game,
+    cardId: widget.card.id,
+    finish: _finish,
+    kind: _kind,
+    threshold: double.tryParse(_threshold.text.trim()) ?? 0,
+    createdAt: DateTime.now(),
+    baseline: _current,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -456,10 +473,17 @@ class _SetAlertSheetState extends ConsumerState<_SetAlertSheet> {
               const SizedBox(height: 18),
               Row(
                 children: [
-                  Icon(Icons.notifications_active_outlined, color: game.accent, size: 22),
+                  Icon(
+                    Icons.notifications_active_outlined,
+                    color: game.accent,
+                    size: 22,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text('Set a price alert', style: context.t.headlineSmall),
+                    child: Text(
+                      'Set a price alert',
+                      style: context.t.headlineSmall,
+                    ),
                   ),
                 ],
               ),
@@ -498,7 +522,9 @@ class _SetAlertSheetState extends ConsumerState<_SetAlertSheet> {
               const SizedBox(height: 8),
               TextField(
                 controller: _threshold,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                 ],
@@ -542,7 +568,9 @@ class _SetAlertSheetState extends ConsumerState<_SetAlertSheet> {
                             const SizedBox(height: 2),
                             Text(
                               _kind.isPercent
-                                  ? (current == null ? '--' : Fmt.money(current))
+                                  ? (current == null
+                                        ? '--'
+                                        : Fmt.money(current))
                                   : Fmt.money(threshold),
                               style: context.t.titleMedium,
                             ),
@@ -555,14 +583,16 @@ class _SetAlertSheetState extends ConsumerState<_SetAlertSheet> {
                       evaluation.triggered
                           ? 'This would fire immediately at the current price.'
                           : _kind.isPercent
-                              ? 'You will be told when the price moves '
-                                  '${threshold.toStringAsFixed(threshold % 1 == 0 ? 0 : 1)}% '
-                                  'from ${Fmt.money(current)}.'
-                              : 'You will be told when the price '
-                                  '${_kind == AlertKind.above ? 'rises above' : 'falls below'} '
-                                  '${Fmt.money(threshold)}.',
+                          ? 'You will be told when the price moves '
+                                '${threshold.toStringAsFixed(threshold % 1 == 0 ? 0 : 1)}% '
+                                'from ${Fmt.money(current)}.'
+                          : 'You will be told when the price '
+                                '${_kind == AlertKind.above ? 'rises above' : 'falls below'} '
+                                '${Fmt.money(threshold)}.',
                       style: context.t.bodySmall?.copyWith(
-                        color: evaluation.triggered ? c.warning : c.textSecondary,
+                        color: evaluation.triggered
+                            ? c.warning
+                            : c.textSecondary,
                       ),
                     ),
                   ],
@@ -574,7 +604,9 @@ class _SetAlertSheetState extends ConsumerState<_SetAlertSheet> {
                 onPressed: threshold <= 0 || current == null
                     ? null
                     : () async {
-                        await ref.read(alertRepositoryProvider).create(
+                        await ref
+                            .read(alertRepositoryProvider)
+                            .create(
                               card: widget.card,
                               kind: _kind,
                               threshold: threshold,
@@ -602,7 +634,11 @@ class _SetAlertSheetState extends ConsumerState<_SetAlertSheet> {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.selected, required this.onTap});
+  const _Chip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;

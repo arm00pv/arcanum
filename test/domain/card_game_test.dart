@@ -17,10 +17,12 @@ void main() {
     test('covers the four games, and their ids never change', () {
       // The id is written into SQLite rows and SharedPreferences, so renaming
       // one would orphan a collection rather than migrate it.
-      expect(
-        CardGame.values.map((g) => g.id),
-        <String>['mtg', 'pokemon', 'lorcana', 'yugioh'],
-      );
+      expect(CardGame.values.map((g) => g.id), <String>[
+        'mtg',
+        'pokemon',
+        'lorcana',
+        'yugioh',
+      ]);
     });
 
     test('every game declares a usable identity', () {
@@ -52,23 +54,20 @@ void main() {
 
   group('finishes and grades', () {
     test('Lorcana prints an ordinary card and a cold foil', () {
-      expect(
-        CardGame.lorcana.finishes,
-        <CardFinish>[CardFinish.nonfoil, CardFinish.foil],
-      );
+      expect(CardGame.lorcana.finishes, <CardFinish>[
+        CardFinish.nonfoil,
+        CardFinish.foil,
+      ]);
     });
 
     test('Lorcana grades with the scale TCGplayer publishes', () {
-      expect(
-        CardGame.lorcana.conditions,
-        <CardCondition>[
-          CardCondition.nearMint,
-          CardCondition.lightPlayed,
-          CardCondition.moderatelyPlayed,
-          CardCondition.heavilyPlayed,
-          CardCondition.damaged,
-        ],
-      );
+      expect(CardGame.lorcana.conditions, <CardCondition>[
+        CardCondition.nearMint,
+        CardCondition.lightPlayed,
+        CardCondition.moderatelyPlayed,
+        CardCondition.heavilyPlayed,
+        CardCondition.damaged,
+      ]);
     });
 
     test('a game never offers another game\'s finishes', () {
@@ -122,13 +121,17 @@ void main() {
 
     test('the other games keep their own tiers', () {
       expect(CardRarity.fromCode('Mythic Rare'), CardRarity.mythic);
-      expect(CardRarity.fromCode('Special Illustration Rare'),
-          CardRarity.mythic);
+      expect(
+        CardRarity.fromCode('Special Illustration Rare'),
+        CardRarity.mythic,
+      );
       expect(CardRarity.fromCode('Trainer Gallery'), CardRarity.special);
       expect(CardRarity.fromCode('Secret Rare'), CardRarity.mythic);
       // Yu-Gi-Oh!'s long tail still falls through to the rare tier.
-      expect(CardRarity.fromCode('Duel Terminal Parallel Rare'),
-          CardRarity.rare);
+      expect(
+        CardRarity.fromCode('Duel Terminal Parallel Rare'),
+        CardRarity.rare,
+      );
       expect(CardRarity.fromCode(''), CardRarity.unknown);
       expect(CardRarity.fromCode(null), CardRarity.unknown);
     });
@@ -136,18 +139,15 @@ void main() {
 
   group('Lorcana inks', () {
     test('names the six inks plus a bucket for cards that have none', () {
-      expect(
-        LorcanaInk.values.map((i) => i.label),
-        <String>[
-          'Amber',
-          'Amethyst',
-          'Emerald',
-          'Ruby',
-          'Sapphire',
-          'Steel',
-          'Uninked',
-        ],
-      );
+      expect(LorcanaInk.values.map((i) => i.label), <String>[
+        'Amber',
+        'Amethyst',
+        'Emerald',
+        'Ruby',
+        'Sapphire',
+        'Steel',
+        'Uninked',
+      ]);
     });
 
     test('reads an ink from the wire name or the stored symbol', () {
@@ -194,8 +194,10 @@ void main() {
     });
 
     test('a card with no stated ink lands in the catch-all', () {
-      expect(CardGame.lorcana.dominantBucket(<String>[]),
-          LorcanaInk.inconsolable);
+      expect(
+        CardGame.lorcana.dominantBucket(<String>[]),
+        LorcanaInk.inconsolable,
+      );
     });
 
     test('a stored symbol round-trips back to the same bucket', () {
@@ -203,8 +205,11 @@ void main() {
       // category must survive that trip.
       for (final game in CardGame.values) {
         for (final bucket in game.colourCategories) {
-          expect(game.bucketFor(bucket.symbol).symbol, bucket.symbol,
-              reason: '${game.id} ${bucket.symbol}');
+          expect(
+            game.bucketFor(bucket.symbol).symbol,
+            bucket.symbol,
+            reason: '${game.id} ${bucket.symbol}',
+          );
         }
       }
     });

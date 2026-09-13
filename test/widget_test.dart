@@ -6,8 +6,9 @@ import 'package:arcanum/widgets/common.dart';
 import 'package:arcanum/widgets/glass.dart';
 
 void main() {
-  testWidgets('the Arcanum theme builds and renders a glass surface',
-      (tester) async {
+  testWidgets('the Arcanum theme builds and renders a glass surface', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.build(dark: true),

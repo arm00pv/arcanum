@@ -51,18 +51,14 @@ class HistoryDao {
     String source = 'snapshot',
   }) async {
     if (price.isNaN || price.isInfinite || price < 0) return;
-    await _db.insert(
-      'price_history',
-      {
-        'card_id': cardId,
-        'game': game.id,
-        'finish': finish.code,
-        'date': _key(date),
-        'price': price,
-        'source': source,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await _db.insert('price_history', {
+      'card_id': cardId,
+      'game': game.id,
+      'finish': finish.code,
+      'date': _key(date),
+      'price': price,
+      'source': source,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Bulk insert, used when importing a backfill pack.
@@ -77,18 +73,14 @@ class HistoryDao {
     final batch = _db.batch();
     for (final p in points) {
       if (p.price.isNaN || p.price.isInfinite || p.price < 0) continue;
-      batch.insert(
-        'price_history',
-        {
-          'card_id': cardId,
-          'game': game.id,
-          'finish': finish.code,
-          'date': _key(p.date),
-          'price': p.price,
-          'source': source,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      batch.insert('price_history', {
+        'card_id': cardId,
+        'game': game.id,
+        'finish': finish.code,
+        'date': _key(p.date),
+        'price': p.price,
+        'source': source,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
   }
@@ -128,7 +120,10 @@ class HistoryDao {
     if (cardIds.isEmpty) return const {};
     final out = <String, List<PricePoint>>{};
     for (var i = 0; i < cardIds.length; i += 400) {
-      final chunk = cardIds.sublist(i, i + 400 > cardIds.length ? cardIds.length : i + 400);
+      final chunk = cardIds.sublist(
+        i,
+        i + 400 > cardIds.length ? cardIds.length : i + 400,
+      );
       final marks = List.filled(chunk.length, '?').join(',');
       // Newest first, then trimmed per card below, so stale archives survive.
       final rows = await _db.rawQuery(
@@ -157,12 +152,12 @@ class HistoryDao {
       final price = (r['price'] as num).toDouble();
       final rank = _priority((r['source'] as String?) ?? 'snapshot');
       final prev = byDate[d];
-      if (prev == null || rank < prev.rank) byDate[d] = (price: price, rank: rank);
+      if (prev == null || rank < prev.rank) {
+        byDate[d] = (price: price, rank: rank);
+      }
     }
     final dates = byDate.keys.toList()..sort();
-    return [
-      for (final d in dates) PricePoint(_parseKey(d), byDate[d]!.price),
-    ];
+    return [for (final d in dates) PricePoint(_parseKey(d), byDate[d]!.price)];
   }
 
   /// How many observations exist for a printing.
@@ -179,7 +174,10 @@ class HistoryDao {
   }
 
   /// Card ids that already have history, used to skip redundant backfills.
-  Future<Set<String>> idsWithHistory(CardGame game, {int minPoints = 30}) async {
+  Future<Set<String>> idsWithHistory(
+    CardGame game, {
+    int minPoints = 30,
+  }) async {
     final rows = await _db.rawQuery(
       'SELECT card_id FROM price_history WHERE game = ? '
       'GROUP BY card_id HAVING COUNT(*) >= ?',
@@ -192,16 +190,25 @@ class HistoryDao {
   Future<int> prune({CardGame? game, int days = 900}) async {
     final cutoff = _key(DateTime.now().subtract(Duration(days: days)));
     if (game == null) {
-      return _db.delete('price_history', where: 'date < ?', whereArgs: [cutoff]);
+      return _db.delete(
+        'price_history',
+        where: 'date < ?',
+        whereArgs: [cutoff],
+      );
     }
-    return _db.delete('price_history',
-        where: 'game = ? AND date < ?', whereArgs: [game.id, cutoff]);
+    return _db.delete(
+      'price_history',
+      where: 'game = ? AND date < ?',
+      whereArgs: [game.id, cutoff],
+    );
   }
 
   /// How many observations a game has accumulated in total.
   Future<int> totalObservations(CardGame game) async {
     final r = await _db.rawQuery(
-        'SELECT COUNT(*) AS n FROM price_history WHERE game = ?', [game.id]);
+      'SELECT COUNT(*) AS n FROM price_history WHERE game = ?',
+      [game.id],
+    );
     return (r.first['n'] as num?)?.toInt() ?? 0;
   }
 
@@ -214,21 +221,20 @@ class HistoryDao {
     required int uniqueCards,
     required int totalCards,
   }) async {
-    await _db.insert(
-      'portfolio_snapshots',
-      {
-        'game': game.id,
-        'date': _key(DateTime.now()),
-        'total_value': totalValue,
-        'unique_cards': uniqueCards,
-        'total_cards': totalCards,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await _db.insert('portfolio_snapshots', {
+      'game': game.id,
+      'date': _key(DateTime.now()),
+      'total_value': totalValue,
+      'unique_cards': uniqueCards,
+      'total_cards': totalCards,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// The portfolio value series for a game, oldest first.
-  Future<List<PricePoint>> portfolioSeries(CardGame game, {int days = 400}) async {
+  Future<List<PricePoint>> portfolioSeries(
+    CardGame game, {
+    int days = 400,
+  }) async {
     final cutoff = _key(DateTime.now().subtract(Duration(days: days)));
     final rows = await _db.query(
       'portfolio_snapshots',
@@ -239,7 +245,10 @@ class HistoryDao {
     );
     return [
       for (final r in rows)
-        PricePoint(_parseKey(r['date'] as String), (r['total_value'] as num).toDouble()),
+        PricePoint(
+          _parseKey(r['date'] as String),
+          (r['total_value'] as num).toDouble(),
+        ),
     ];
   }
 
@@ -247,15 +256,22 @@ class HistoryDao {
 
   /// Reads a small value from the `meta` table.
   Future<String?> metaValue(String key) async {
-    final rows = await _db
-        .query('meta', columns: ['value'], where: 'key = ?', whereArgs: [key], limit: 1);
+    final rows = await _db.query(
+      'meta',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
     return rows.isEmpty ? null : rows.first['value'] as String?;
   }
 
   /// Writes a small value into the `meta` table.
   Future<void> setMetaValue(String key, String value) async {
-    await _db.insert('meta', {'key': key, 'value': value},
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await _db.insert('meta', {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   // --------------------------------------------------------------- helpers

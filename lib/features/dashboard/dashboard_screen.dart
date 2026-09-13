@@ -75,7 +75,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
     _snapshotting = true;
     try {
-      await ref.read(bootstrapProvider).collectionFor(game).recordDailySnapshot();
+      await ref
+          .read(bootstrapProvider)
+          .collectionFor(game)
+          .recordDailySnapshot();
       if (!mounted) return;
       ref.invalidate(portfolioSeriesProvider(game));
       ref.invalidate(collectionOverviewProvider(game));
@@ -99,8 +102,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final overviewAsync = ref.watch(collectionOverviewProvider(game));
     final series =
         ref.watch(portfolioSeriesProvider(game)).value ?? const <PricePoint>[];
-    final cards = ref.watch(ownedCardsProvider(game)).value ??
-        const <String, TcgCard>{};
+    final cards =
+        ref.watch(ownedCardsProvider(game)).value ?? const <String, TcgCard>{};
     final cataloguedSets = ref.watch(setCountProvider(game)).value ?? 0;
 
     return Scaffold(
@@ -155,7 +158,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 SliverAsyncView<CollectionOverview>(
                   value: overviewAsync,
                   loadingHeight: 420,
-                  onRetry: () => ref.invalidate(collectionOverviewProvider(game)),
+                  onRetry: () =>
+                      ref.invalidate(collectionOverviewProvider(game)),
                   isEmpty: (o) => o.entries.isEmpty,
                   emptyTitle: 'Your ${game.shortLabel} vault is empty',
                   emptyMessage:
@@ -249,22 +253,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 /// Yu-Gi-Oh! by monster attribute and Lorcana by ink, so one shared title would
 /// be a lie for three games out of four.
 String _categorySectionTitle(CardGame game) => switch (game) {
-      CardGame.mtg => 'By colour',
-      CardGame.pokemon => 'By energy type',
-      CardGame.yugioh => 'By attribute',
-      CardGame.lorcana => 'By ink',
-    };
+  CardGame.mtg => 'By colour',
+  CardGame.pokemon => 'By energy type',
+  CardGame.yugioh => 'By attribute',
+  CardGame.lorcana => 'By ink',
+};
 
 /// Explains what the buckets are measured against, per game.
 String _categorySectionSubtitle(CardGame game) => switch (game) {
-      CardGame.mtg => 'Market value by colour identity',
-      CardGame.pokemon => 'Market value by Pokémon type',
-      // Spell and Trap cards carry no attribute, so the chart has a slice for
-      // them rather than pretending they belong to one of the seven.
-      CardGame.yugioh => 'Market value by attribute, Spells and Traps apart',
-      // A handful of cards are printed in two inks; they land in the first.
-      CardGame.lorcana => 'Market value by ink',
-    };
+  CardGame.mtg => 'Market value by colour identity',
+  CardGame.pokemon => 'Market value by Pokémon type',
+  // Spell and Trap cards carry no attribute, so the chart has a slice for
+  // them rather than pretending they belong to one of the seven.
+  CardGame.yugioh => 'Market value by attribute, Spells and Traps apart',
+  // A handful of cards are printed in two inks; they land in the first.
+  CardGame.lorcana => 'Market value by ink',
+};
 
 /// The headline: total value, change, and the portfolio curve.
 class _ValueHero extends StatelessWidget {
@@ -311,10 +315,7 @@ class _ValueHero extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            Fmt.money(overview.totalValue),
-            style: context.t.displayMedium,
-          ),
+          Text(Fmt.money(overview.totalValue), style: context.t.displayMedium),
           const SizedBox(height: 4),
           Text(
             '${game.shortLabel} · ${Fmt.count(overview.totalCards)} cards · '
@@ -353,7 +354,9 @@ class _ValueHero extends StatelessWidget {
                       'Arcanum records one value snapshot per day for '
                       '${game.shortLabel}. Your portfolio curve appears after '
                       'a few days.',
-                      style: context.t.labelSmall?.copyWith(color: c.textSecondary),
+                      style: context.t.labelSmall?.copyWith(
+                        color: c.textSecondary,
+                      ),
                     ),
                   ),
                 ],
@@ -486,21 +489,22 @@ class _CategoryAllocation extends StatelessWidget {
                       e.key.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: context.t.bodySmall?.copyWith(color: c.textSecondary),
+                      style: context.t.bodySmall?.copyWith(
+                        color: c.textSecondary,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    Fmt.moneyCompact(e.value),
-                    style: context.t.bodyMedium,
-                  ),
+                  Text(Fmt.moneyCompact(e.value), style: context.t.bodyMedium),
                   const SizedBox(width: 10),
                   SizedBox(
                     width: 46,
                     child: Text(
                       Fmt.percentPlain(e.value / total * 100),
                       textAlign: TextAlign.right,
-                      style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                      style: context.t.labelSmall?.copyWith(
+                        color: c.textTertiary,
+                      ),
                     ),
                   ),
                 ],
@@ -589,7 +593,9 @@ class _SetAllocation extends StatelessWidget {
                       e.key,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: context.t.bodySmall?.copyWith(color: c.textSecondary),
+                      style: context.t.bodySmall?.copyWith(
+                        color: c.textSecondary,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -647,11 +653,10 @@ class _HoldingRow extends StatelessWidget {
       onTap: card == null
           ? null
           : () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      CardDetailScreen(game: game, cardId: card!.id),
-                ),
+              MaterialPageRoute<void>(
+                builder: (_) => CardDetailScreen(game: game, cardId: card!.id),
               ),
+            ),
       child: Padding(
         padding: const EdgeInsets.all(8),
         child: Row(
@@ -681,10 +686,12 @@ class _HoldingRow extends StatelessWidget {
                     card == null
                         ? '--'
                         : '${card!.setCode.toUpperCase()} #${card!.collectorNumber} · '
-                            '${valued.entry.quantity} x ${Fmt.moneyAdaptive(valued.unitValue)}',
+                              '${valued.entry.quantity} x ${Fmt.moneyAdaptive(valued.unitValue)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+                    style: context.t.labelSmall?.copyWith(
+                      color: c.textTertiary,
+                    ),
                   ),
                 ],
               ),
@@ -702,7 +709,11 @@ class _HoldingRow extends StatelessWidget {
 }
 
 class _MoverRow extends StatelessWidget {
-  const _MoverRow({required this.valued, required this.card, required this.game});
+  const _MoverRow({
+    required this.valued,
+    required this.card,
+    required this.game,
+  });
 
   final ValuedEntry valued;
   final TcgCard? card;
@@ -716,11 +727,10 @@ class _MoverRow extends StatelessWidget {
       onTap: card == null
           ? null
           : () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      CardDetailScreen(game: game, cardId: card!.id),
-                ),
+              MaterialPageRoute<void>(
+                builder: (_) => CardDetailScreen(game: game, cardId: card!.id),
               ),
+            ),
       child: Row(
         children: [
           Expanded(
@@ -757,16 +767,13 @@ class _InsightCard extends StatelessWidget {
     final String body;
     if (hhi > 0.35) {
       headline = 'Highly concentrated';
-      body =
-          'One or two cards dominate your collection. A single price drop would move your total sharply.';
+      body = 'One or two cards dominate your collection. A single price drop would move your total sharply.';
     } else if (hhi > 0.15) {
       headline = 'Moderately concentrated';
-      body =
-          'Your value is spread across a handful of cards. That is typical for a focused collection.';
+      body = 'Your value is spread across a handful of cards. That is typical for a focused collection.';
     } else {
       headline = 'Well diversified';
-      body =
-          'No single card dominates your holdings, so your total is relatively insulated from one card moving.';
+      body = 'No single card dominates your holdings, so your total is relatively insulated from one card moving.';
     }
 
     return GlassCard(
@@ -793,10 +800,7 @@ class _InsightCard extends StatelessWidget {
                 style: context.t.labelSmall?.copyWith(color: c.textTertiary),
               ),
               const Spacer(),
-              Text(
-                hhi.toStringAsFixed(3),
-                style: context.t.labelMedium,
-              ),
+              Text(hhi.toStringAsFixed(3), style: context.t.labelMedium),
             ],
           ),
           if (overview.unpricedCards > 0) ...[
@@ -832,9 +836,8 @@ class _AlertsButton extends ConsumerWidget {
             : Icons.notifications_active_rounded,
         color: fired == 0 ? null : c.warning,
       ),
-      onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(builder: (_) => const AlertsScreen()),
-      ),
+      onPressed: () => Navigator.of(context)
+          .push(MaterialPageRoute<void>(builder: (_) => const AlertsScreen())),
     );
 
     if (fired == 0) return button;
