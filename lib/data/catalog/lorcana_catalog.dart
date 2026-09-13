@@ -317,8 +317,8 @@ class LorcanaCatalog implements CardCatalog {
     final id = _string(data['id']);
     if (id == null) return null;
 
-    final name = data['name']?.toString().trim() ?? '';
-    final version = data['version']?.toString().trim() ?? '';
+    final name = _unquoted(data['name']?.toString() ?? '');
+    final version = _unquoted(data['version']?.toString() ?? '');
     // Lorcana prints many different cards under one name and `version` is what
     // separates them, so the subtitle belongs in the name: a row reading only
     // "Elsa" is ambiguous between a dozen unrelated printings. The oracle id is
@@ -493,6 +493,21 @@ class LorcanaCatalog implements CardCatalog {
   static String? _string(Object? raw) {
     final text = raw?.toString().trim() ?? '';
     return text.isEmpty ? null : text;
+  }
+
+  /// A display string with the provider's stray wrapping quotes removed.
+  ///
+  /// Twenty of Lorcast's 3,198 printings carry a subtitle that is quoted whole -
+  /// the Format Coconut cards read `"Spectacular Singer"` - while others quote
+  /// legitimately, as `Ursula's "Baby"` does. Only a pair that wraps the entire
+  /// string is dropped, so a quoted phrase inside a subtitle survives.
+  static String _unquoted(String raw) {
+    final text = raw.trim();
+    if (text.length < 2) return text;
+    if (text.startsWith('"') && text.endsWith('"')) {
+      return text.substring(1, text.length - 1).trim();
+    }
+    return text;
   }
 
   /// The rarity as a collector reads it.

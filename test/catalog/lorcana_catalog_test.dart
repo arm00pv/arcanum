@@ -42,7 +42,11 @@ const String setsJson = '''
   {"id":"set_c254adfcbf6d4e3482a675ecece86dcc","name":"Promo Set 1",
    "code":"P1","released_at":"2023-08-18","prereleased_at":null},
   {"id":"set_e0eb34fc0fbb446886f84c34381d4dce","name":"Challenge Promo",
-   "code":"cp","released_at":"2024-05-17","prereleased_at":null}
+   "code":"cp","released_at":"2024-05-17","prereleased_at":null},
+  {"id":"set_coco0","name":"Format Coconut",
+   "code":"Coconut","released_at":"2026-07-28","prereleased_at":null},
+  {"id":"set_4","name":"Ursula's Return",
+   "code":"4","released_at":"2024-05-17","prereleased_at":null}
 ]}
 ''';
 
@@ -173,6 +177,50 @@ final String challengePromoJson = '''
 ]
 ''';
 
+/// A card whose subtitle quotes a phrase inside itself, which is printed that
+/// way and must survive untouched.
+const String flotsamJson = '''
+[
+ {"id":"crd_flotsam","name":"Flotsam","version":"Ursula's \\"Baby\\"",
+  "layout":"normal","released_at":"2024-05-17",
+  "image_uris":{"digital":{
+    "small":"https://cards.lorcast.io/card/digital/small/crd_flotsam.avif?1",
+    "normal":"https://cards.lorcast.io/card/digital/normal/crd_flotsam.avif?1",
+    "large":"https://cards.lorcast.io/card/digital/large/crd_flotsam.avif?1"}},
+  "cost":4,"inkwell":true,"ink":"Emerald","inks":["Emerald"],
+  "type":["Character"],"classifications":["Dreamborn","Ally"],
+  "text":"Evasive.","keywords":["Evasive"],"move_cost":null,
+  "strength":3,"willpower":3,"lore":2,
+  "rarity":"Rare","illustrators":["Alice Pisoni"],"collector_number":"81",
+  "lang":"en","flavor_text":null,"tcgplayer_id":400001,
+  "legalities":{"core":"legal"},
+  "set":{"id":"set_4","code":"4","name":"Ursula's Return"},
+  "prices":{"usd":"1.20","usd_foil":"2.40"}}
+]
+''';
+
+/// A beta-test printing whose subtitle the provider wrapped in quotes, as the
+/// Format Coconut cards are.
+const String coconutJson = '''
+[
+ {"id":"crd_coco1","name":"Ariel","version":"\\"Spectacular Singer\\"",
+  "layout":"normal","released_at":"2026-07-28",
+  "image_uris":{"digital":{
+    "small":"https://cards.lorcast.io/card/digital/small/crd_coco1.avif?1",
+    "normal":"https://cards.lorcast.io/card/digital/normal/crd_coco1.avif?1",
+    "large":"https://cards.lorcast.io/card/digital/large/crd_coco1.avif?1"}},
+  "cost":3,"inkwell":true,"ink":"Amber","inks":["Amber"],
+  "type":["Character"],"classifications":["Storyborn","Hero"],
+  "text":"Beta test only.","keywords":[],"move_cost":null,
+  "strength":2,"willpower":2,"lore":1,
+  "rarity":"Promo","illustrators":["Alice Pisoni"],"collector_number":"1",
+  "lang":"en","flavor_text":null,"tcgplayer_id":null,
+  "legalities":{},
+  "set":{"id":"set_coco","code":"Coconut","name":"Format Coconut"},
+  "prices":{}}
+]
+''';
+
 /// A card from a numbered promo run, whose set code is the mixed-case "P1".
 /// The provider answers to that spelling and not to "p1", while the app stores
 /// and asks for the lowercase form.
@@ -272,6 +320,8 @@ LorcanaCatalog catalogWith({
         // Keyed by the spelling the request must carry, not the one the app
         // stores: a request for "p1" would not be routed at all.
         'P1': promoRunJson,
+        'Coconut': coconutJson,
+        '4': flotsamJson,
       };
   final cards = byCard ?? <String, String>{elsaId: elsaJson};
   final log = requests ?? <Uri>[];
@@ -296,7 +346,7 @@ void main() {
     test('reads every set the provider lists', () async {
       final sets = await catalogWith().fetchAllSets();
 
-      expect(sets, hasLength(4));
+      expect(sets, hasLength(6));
       expect(sets.first.code, '1');
       expect(sets.first.name, 'The First Chapter');
       expect(sets.first.game, CardGame.lorcana);
@@ -342,9 +392,9 @@ void main() {
         onProgress: (done, total) => seen.add((done, total)),
       );
 
-      expect(seen.first, (0, 4));
-      expect(seen.last, (4, 4));
-      expect(seen.map((t) => t.$2).every((total) => total == 4), isTrue);
+      expect(seen.first, (0, 6));
+      expect(seen.last, (6, 6));
+      expect(seen.map((t) => t.$2).every((total) => total == 6), isTrue);
     });
   });
 
@@ -395,6 +445,27 @@ void main() {
       // subtitle is part of the name and part of the oracle id.
       expect(elsa.name, 'Elsa – Concerned Sister');
       expect(elsa.oracleId, TcgCard.normaliseName('Elsa – Concerned Sister'));
+    });
+
+    test('drops a subtitle the provider quoted whole', () async {
+      // The Format Coconut printings carry '"Spectacular Singer"' - the whole
+      // subtitle wrapped in quotes, which is an artefact rather than something
+      // printed on the card. Ursula's "Baby" quotes legitimately and is left
+      // alone, so the rule is about a pair wrapping the entire string.
+      final cards = await catalogWith().fetchCardsInSet('coconut');
+
+      expect(cards.single.name, 'Ariel – Spectacular Singer');
+      expect(cards.single.oracleId,
+          TcgCard.normaliseName('Ariel – Spectacular Singer'));
+    });
+
+    test('keeps a subtitle that quotes inside itself', () async {
+      final cards = await catalogWith().fetchCardsInSet('4');
+
+      expect(
+        cards.map((c) => c.name),
+        contains('Flotsam – Ursula\'s "Baby"'),
+      );
     });
 
     test('leaves the name alone when the card has no subtitle', () async {
