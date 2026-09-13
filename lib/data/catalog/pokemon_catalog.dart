@@ -299,32 +299,26 @@ class PokemonCatalog implements CardCatalog {
 
   @override
   Future<List<TcgCard>> search(String query, {int limit = 100}) async {
-    final List<dynamic> hits;
-    try {
-      final res = await _retry(() => _dio.get<dynamic>(
-            '/cards',
-            queryParameters: {
-              'name': query,
-              'pagination:itemsPerPage': limit.clamp(1, 100),
-            },
-          ));
-      final data = res.data;
-      if (data is! List) return const [];
-      hits = data;
-    } on DioException {
-      return const [];
-    }
+    // Two filters, because TCGdex keeps a card's name and its rules in
+    // different fields. `name` matches card names; `effect` matches the rules
+    // text a Trainer or Energy card carries, which is where the search screen's
+    // "discard an Energy" promise is actually answerable. Pokémon attacks have
+    // no filter of their own, so those are found through the cached catalogue
+    // once the user has browsed the set they are in.
+    final nameHits = await _searchList('name', query, limit);
+    final effectHits = await _searchList('effect', query, limit);
 
-    // The search endpoint returns id, name and a thumbnail - enough to count
-    // the matches but not to show them with a rarity and a price - so each hit
-    // gets its own detail call. Those calls fan out across the same workers the
-    // set download uses rather than running one after another, which is the
-    // difference between a search that answers in one round trip and one that
-    // answers in thirty.
-    final ids = <String>[
-      for (final item in hits)
-        if (item is Map && item['id'] != null) item['id'].toString(),
-    ].take(limit.clamp(1, _maxSearchResults)).toList();
+    final ids = <String>[];
+    final seen = <String>{};
+    for (final item in [...nameHits, ...effectHits]) {
+      if (item is! Map) continue;
+      final id = item['id']?.toString();
+      // Name matches lead: someone typing a card's name wants the card first,
+      // not the twenty cards whose text happens to mention it.
+      if (id == null || id.isEmpty || !seen.add(id)) continue;
+      ids.add(id);
+      if (ids.length >= limit.clamp(1, _maxSearchResults)) break;
+    }
     if (ids.isEmpty) return const [];
 
     final results = List<TcgCard?>.filled(ids.length, null);
@@ -345,6 +339,30 @@ class PokemonCatalog implements CardCatalog {
     // Order is the provider's relevance order, not the order the workers
     // happened to finish in.
     return [for (final card in results) ?card];
+  }
+
+  /// One list query against TCGdex, or nothing when it cannot be answered.
+  ///
+  /// A search is a convenience: a provider that is down, rate limiting or
+  /// unhappy with a filter must narrow the results, never raise into the UI.
+  Future<List<dynamic>> _searchList(
+    String filter,
+    String query,
+    int limit,
+  ) async {
+    try {
+      final res = await _retry(() => _dio.get<dynamic>(
+            '/cards',
+            queryParameters: {
+              filter: query,
+              'pagination:itemsPerPage': limit.clamp(1, 100),
+            },
+          ));
+      final data = res.data;
+      return data is List ? data : const <dynamic>[];
+    } on DioException {
+      return const <dynamic>[];
+    }
   }
 
   @override

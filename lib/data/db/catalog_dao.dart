@@ -143,15 +143,98 @@ class CatalogDao {
 
   // ------------------------------------------------------------------ cards
 
-  /// Inserts or updates printings.
+  /// Columns a thinner record is allowed to be silent about.
+  ///
+  /// Every one of these is nullable catalogue metadata that a partial answer
+  /// simply does not carry. Prices are deliberately absent: a refresh is meant
+  /// to replace them, and holding a stale quote because today's answer was
+  /// empty would show a price no provider currently stands behind.
+  static const _fillable = <String>[
+    'oracle_id',
+    'set_name',
+    'layout',
+    'type_line',
+    'oracle_text',
+    'mana_cost',
+    'cmc',
+    'colors',
+    'color_identity',
+    'artist',
+    'flavor_text',
+    'image_small',
+    'image_normal',
+    'image_large',
+    'image_art_crop',
+    'image_png',
+    'back_image_small',
+    'back_image_normal',
+    'edhrec_rank',
+    'released_at',
+    'extras_json',
+  ];
+
+  /// Fills the gaps in [row] from what is already stored.
+  ///
+  /// The same printing arrives in very different states of completeness. A set
+  /// download knows its release date, its art and its rules; a search hit, or a
+  /// price refresh, may know none of them. Replacing blindly let the thinner
+  /// record win, so searching for a card could blank the release date its set
+  /// had already stored - and Pokémon is where that bites, because TCGdex's
+  /// card response carries no date and Scryfall's always does.
+  static void _keepKnownFields(
+    Map<String, Object?> row,
+    Map<String, Object?> prior,
+  ) {
+    for (final key in _fillable) {
+      final stored = prior[key];
+      if (stored == null || stored == '') continue;
+      final incoming = row[key];
+      if (incoming == null || incoming == '') row[key] = stored;
+    }
+    // 'unknown' is the catalogue's word for "the provider did not say", not a
+    // rarity a card can have, so it never displaces a real one.
+    if (row['rarity'] == 'unknown') {
+      final stored = prior['rarity'];
+      if (stored is String && stored.isNotEmpty && stored != 'unknown') {
+        row['rarity'] = stored;
+      }
+    }
+  }
+
+  /// The stored rows for [ids], keyed by id.
+  Future<Map<String, Map<String, Object?>>> _rowsById(
+    CardGame game,
+    List<String> ids,
+  ) async {
+    final out = <String, Map<String, Object?>>{};
+    for (var i = 0; i < ids.length; i += 400) {
+      final chunk = ids.sublist(i, i + 400 > ids.length ? ids.length : i + 400);
+      final marks = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.rawQuery(
+        'SELECT * FROM cards WHERE game = ? AND id IN ($marks)',
+        [game.id, ...chunk],
+      );
+      for (final r in rows) {
+        out[r['id'] as String] = r;
+      }
+    }
+    return out;
+  }
+
+  /// Inserts or updates printings, without letting a partial answer erase what
+  /// is already known about one.
   Future<void> upsertCards(CardGame game, List<TcgCard> cards) async {
     if (cards.isEmpty) return;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final prior = await _rowsById(game, [for (final c in cards) c.id]);
     final batch = _db.batch();
     for (final c in cards) {
+      final row = _cardToRow(game, c, now);
+      final stored = prior[c.id];
+      if (stored != null) _keepKnownFields(row, stored);
       batch.insert(
         'cards',
-        _cardToRow(game, c, now),
+        row,
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     }
@@ -235,15 +318,27 @@ class CatalogDao {
     return rows.map((r) => _cardFromRow(game, r)).toList();
   }
 
-  /// Fuzzy name search across everything cached for a game, newest first.
-  Future<List<TcgCard>> searchByName(CardGame game, String query,
+  /// Search across everything cached for a game, newest first.
+  ///
+  /// Matches the name or the rules text, because those are the two things the
+  /// search screen promises and the only two the cached catalogue can answer
+  /// offline. Name matches come first: someone typing "Charizard" wants the
+  /// card, not the twelve cards that mention it in their rules.
+  ///
+  /// This is the local half of a search. It can only answer for cards the user
+  /// has already browsed, which is why the repository still asks the provider
+  /// when it comes up short.
+  Future<List<TcgCard>> searchCached(CardGame game, String query,
       {int limit = 80}) async {
     final q = query.trim();
     if (q.isEmpty) return const [];
     final rows = await _db.rawQuery(
-      'SELECT * FROM cards WHERE game = ? AND name LIKE ? COLLATE NOCASE '
-      'ORDER BY (name LIKE ? COLLATE NOCASE) DESC, released_at DESC NULLS LAST LIMIT ?',
-      [game.id, '%$q%', '$q%', limit],
+      'SELECT * FROM cards WHERE game = ? AND (name LIKE ? COLLATE NOCASE '
+      'OR oracle_text LIKE ? COLLATE NOCASE) '
+      'ORDER BY (name LIKE ? COLLATE NOCASE) DESC, '
+      '  (name LIKE ? COLLATE NOCASE) DESC, '
+      '  released_at DESC NULLS LAST LIMIT ?',
+      [game.id, '%$q%', '%$q%', '$q%', '%$q%', limit],
     );
     return rows.map((r) => _cardFromRow(game, r)).toList();
   }

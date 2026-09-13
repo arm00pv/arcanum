@@ -9,11 +9,90 @@ import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/features/card/card_detail_screen.dart';
+import 'package:arcanum/features/sets/set_detail_screen.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
 import 'package:arcanum/widgets/common.dart';
 import 'package:arcanum/widgets/glass.dart';
 import 'package:arcanum/widgets/mana_pips.dart';
+
+/// One matching set, above the card results.
+///
+/// Deliberately the same shape as a card row - art or a placeholder on the
+/// left, two lines of text, a chevron - so the list reads as one thing rather
+/// than two lists stacked.
+class _SetHitTile extends StatelessWidget {
+  const _SetHitTile({required this.set, required this.onTap});
+
+  final TcgSet set;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final String released =
+        set.releasedAt == null ? '' : ' · ${set.releasedAt!.year}';
+    return GlassCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: c.surfaceRaised,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: c.hairline),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.style_rounded,
+                  size: 20,
+                  color: set.game.accent,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      set.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.t.titleSmall,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${set.code.toUpperCase()} · '
+                      '${Fmt.count(set.cardCount)} cards$released',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.t.labelSmall?.copyWith(
+                        color: c.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: c.textTertiary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// The Search tab - the fourth bottom-nav destination.
 ///
@@ -154,6 +233,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final bool discovering = _query.length < _minQueryLength;
     final AsyncValue<List<TcgCard>> results =
         ref.watch(searchProvider((game: game, query: _query)));
+    // Matching sets, offered above the cards: typing a set name is the shortest
+    // way into a binder, and without this a query like "Bloomburrow" reported
+    // that no card matched.
+    final List<TcgSet> setHits =
+        ref.watch(setSearchProvider((game: game, query: _query))).value ??
+            const <TcgSet>[];
     // Copies owned of each printing in this game, summed across finishes and
     // conditions by the provider itself.
     final Map<String, int> owned =
@@ -176,7 +261,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               decoration: InputDecoration(
                 hintText: switch (game) {
                   CardGame.mtg => 'Card name, set or oracle text',
-                  CardGame.pokemon => 'Card name, set or attack text',
+                  CardGame.pokemon => 'Card name, set or card text',
                   CardGame.yugioh => 'Card name, set or card text',
                 },
                 prefixIcon: Icon(
@@ -206,7 +291,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: discovering
             ? _discovery(context, c, game)
-            : _results(context, c, game, results, owned),
+            : <Widget>[
+                ..._setHits(context, c, setHits),
+                ..._results(context, c, game, results, owned),
+              ],
       ),
     );
   }
@@ -294,8 +382,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   CardGame.mtg =>
                     'Oracle text is searched, so "draw a card" finds cantrips.',
                   CardGame.pokemon =>
-                    'Attacks and rules are searched, so "discard an Energy" '
-                        'finds the cards that do it.',
+                    'Trainer and Energy text is searched, so "discard an '
+                        'Energy" finds the cards that do it. Attacks match once '
+                        'you have browsed the set they are in.',
                   CardGame.yugioh =>
                     'Card text is searched, so "Special Summon" finds the '
                         'cards that do it.',
@@ -326,6 +415,40 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       };
 
   // ----------------------------------------------------------------- results
+
+  /// Opens a matching set's binder.
+  void _openSet(TcgSet set) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) =>
+            SetDetailScreen(game: set.game, setCode: set.code),
+      ),
+    );
+  }
+
+  /// The sets a query matched, as a compact list above the card results.
+  List<Widget> _setHits(
+    BuildContext context,
+    ArcanumColors c,
+    List<TcgSet> sets,
+  ) {
+    if (sets.isEmpty) return const <Widget>[];
+    return <Widget>[
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+        child: Text(
+          sets.length == 1 ? '1 matching set' : '${sets.length} matching sets',
+          style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+        ),
+      ),
+      for (final TcgSet set in sets)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          child: _SetHitTile(set: set, onTap: () => _openSet(set)),
+        ),
+      const SizedBox(height: 6),
+    ];
+  }
 
   List<Widget> _results(
     BuildContext context,

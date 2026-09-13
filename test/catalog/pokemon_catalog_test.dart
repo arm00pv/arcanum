@@ -41,7 +41,7 @@ const String base1Json = '''
  "cards":[
    {"id":"base1-4","localId":"4","name":"Charizard"},
    {"id":"base1-58","localId":"58","name":"Pikachu"},
-   {"id":"base1-99","localId":"99","name":"Missing Card"}
+   {"id":"base1-100","localId":"100","name":"Missing Card"}
  ]}
 ''';
 
@@ -74,13 +74,32 @@ const String pikachuJson = '''
    "reverseHolofoil":{"productId":2,"marketPrice":31.75}}}}
 ''';
 
+/// A Trainer card: no attacks, and its rules live in the card's own effect
+/// text, which is the field the `effect` filter searches.
+const String energyRemovalJson = '''
+{"id":"base1-99","localId":"99","name":"Energy Removal","rarity":"Common",
+ "category":"Trainer",
+ "effect":"Choose 1 Energy card attached to your opponent's Pokémon and discard it.",
+ "image":"https://assets.tcgdex.net/en/base/base1/99",
+ "set":{"id":"base1","name":"Base Set"}}
+''';
+
 /// The search endpoint answers with ids, names and a thumbnail - never a rarity
 /// or a price.
 const String searchJson = '''
 [
   {"id":"base1-4","localId":"4","name":"Charizard"},
   {"id":"base1-58","localId":"58","name":"Pikachu","image":"https://assets.tcgdex.net/en/base/base1/58"},
-  {"id":"base1-99","localId":"99","name":"Missing Card"}
+  {"id":"base1-100","localId":"100","name":"Missing Card"}
+]
+''';
+
+/// What the `effect` filter answers: Trainer and Energy cards whose rules
+/// text mentions the word, and nothing else.
+const String effectSearchJson = '''
+[
+  {"id":"base1-99","localId":"99","name":"Energy Removal"},
+  {"id":"base1-4","localId":"4","name":"Charizard"}
 ]
 ''';
 
@@ -124,8 +143,10 @@ PokemonCatalog catalogWith({
   Map<String, String> byCard = const <String, String>{
     'base1-4': charizardJson,
     'base1-58': pikachuJson,
+    'base1-99': energyRemovalJson,
   },
   String? searchBody = searchJson,
+  String? effectBody = effectSearchJson,
   List<Uri>? requests,
 }) {
   final log = requests ?? <Uri>[];
@@ -133,7 +154,11 @@ PokemonCatalog catalogWith({
   dio.httpClientAdapter = _FakeTcgdexApi((Uri uri) {
     final path = uri.path;
     if (path.endsWith('/sets')) return setsBody;
-    if (path.endsWith('/cards')) return searchBody;
+    if (path.endsWith('/cards')) {
+      // The provider keeps names and rules in separate fields, so the adapter
+      // asks twice and the fake answers each filter in kind.
+      return uri.queryParameters.containsKey('effect') ? effectBody : searchBody;
+    }
     final setMatch = RegExp(r'/sets/([^/]+)$').firstMatch(path);
     if (setMatch != null) return bySet[setMatch.group(1)];
     final cardMatch = RegExp(r'/cards/([^/]+)$').firstMatch(path);
@@ -240,14 +265,14 @@ void main() {
       // built from the set id alone answers 404. The series is only known
       // because the set call was made, so it has to survive to this point.
       final cards = await catalogWith().fetchCardsInSet('base1');
-      final missing = cards.firstWhere((c) => c.id == 'base1-99');
+      final missing = cards.firstWhere((c) => c.id == 'base1-100');
 
       expect(missing.name, 'Missing Card');
       expect(missing.rarity, 'unknown');
       expect(missing.prices.priceFor(CardFinish.holofoil), isNull);
       expect(
         missing.imageUrl(size: 'normal'),
-        'https://assets.tcgdex.net/en/base/base1/99/high.webp',
+        'https://assets.tcgdex.net/en/base/base1/100/high.webp',
       );
     });
 
@@ -291,7 +316,7 @@ void main() {
     });
 
     test('answers null for a card the provider does not hold', () async {
-      expect(await catalogWith().fetchCardById('base1-99'), isNull);
+      expect(await catalogWith().fetchCardById('base1-100'), isNull);
     });
 
     test('leaves the release date empty when only the card was fetched',
@@ -308,18 +333,57 @@ void main() {
     test('resolves each hit into a card worth showing', () async {
       final results = await catalogWith().search('charizard');
 
-      expect(results, hasLength(2));
-      expect(results.map((c) => c.name), <String>['Charizard', 'Pikachu']);
+      // Name matches first, then the rules-text hit that resolved.
+      expect(results.map((c) => c.name),
+          <String>['Charizard', 'Pikachu', 'Energy Removal']);
       // Relevance order, not the order the workers finished in.
       expect(results.first.rarity, 'Rare');
+    });
+
+    test('searches rules text as well as names', () async {
+      // "discard an Energy" is not a card name. TCGdex answers it through the
+      // effect filter, and both passes are merged.
+      final results = await catalogWith().search('discard');
+
+      expect(results.map((c) => c.name), contains('Energy Removal'));
+    });
+
+    test('asks the provider once per filter, and no more', () async {
+      final requests = <Uri>[];
+      await catalogWith(requests: requests).search('charizard');
+
+      final lists = requests.where((u) => u.path.endsWith('/cards')).toList();
+      expect(lists, hasLength(2));
+      expect(lists.where((u) => u.queryParameters.containsKey('name')),
+          hasLength(1));
+      expect(lists.where((u) => u.queryParameters.containsKey('effect')),
+          hasLength(1));
+    });
+
+    test('leads with name matches when both filters hit', () async {
+      // The effect pass also returns base1-4 in this fake, so dedupe and
+      // ordering both have to hold.
+      final results = await catalogWith().search('charizard');
+
+      expect(results.first.name, 'Charizard');
+      expect(results.where((c) => c.id == 'base1-4'), hasLength(1));
+    });
+
+    test('answers names when the rules-text pass fails', () async {
+      // One filter being unavailable narrows the results; it must not empty
+      // them.
+      final results =
+          await catalogWith(effectBody: null).search('charizard');
+
+      expect(results.map((c) => c.name), <String>['Charizard', 'Pikachu']);
     });
 
     test('drops a hit it cannot resolve instead of failing the search',
         () async {
       final results = await catalogWith().search('anything');
 
-      expect(results.every((c) => c.id != 'base1-99'), isTrue);
-      expect(results, hasLength(2));
+      expect(results.every((c) => c.id != 'base1-100'), isTrue);
+      expect(results, hasLength(3));
     });
 
     test('caps the detail calls one search will make', () async {
@@ -352,7 +416,11 @@ void main() {
 
     test('answers empty when the search itself fails', () async {
       // A search is a convenience, never a reason to show an error screen.
-      expect(await catalogWith(searchBody: null).search('charizard'), isEmpty);
+      expect(
+        await catalogWith(searchBody: null, effectBody: null)
+            .search('charizard'),
+        isEmpty,
+      );
     });
   });
 

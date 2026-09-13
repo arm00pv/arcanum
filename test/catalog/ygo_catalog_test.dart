@@ -169,6 +169,7 @@ YgoCatalog catalogWith({
   Map<String, String> bySetName = const <String, String>{},
   Map<String, String> byId = const <String, String>{},
   String? byFname,
+  String? byDesc,
   List<Uri>? requests,
 }) {
   final log = requests ?? <Uri>[];
@@ -178,7 +179,9 @@ YgoCatalog catalogWith({
     if (uri.path.endsWith('/cardsets.php')) return setsBody;
     if (query.containsKey('cardset')) return bySetName[query['cardset']];
     if (query.containsKey('id')) return byId[query['id']];
+    // A search asks twice: once for names, once for effect text.
     if (query.containsKey('fname')) return byFname;
+    if (query.containsKey('desc')) return byDesc;
     return null;
   }, log);
   return YgoCatalog(dio: dio);
@@ -779,6 +782,42 @@ void main() {
       final catalog = catalogWith();
 
       expect(await catalog.search('nothing like this exists'), isEmpty);
+    });
+
+    test('searches effect text as well as names', () async {
+      // "Special Summon" is not a card name. The provider answers it through
+      // its description filter, which the adapter used not to send at all.
+      final catalog = catalogWith(
+        byFname: cardData(<String>[blueEyesJson]),
+        byDesc: cardData(<String>[monsterRebornJson]),
+      );
+
+      final results = await catalog.search('Special Summon');
+
+      expect(results.map((c) => c.name), contains('Monster Reborn'));
+    });
+
+    test('leads with name matches when both passes hit', () async {
+      final catalog = catalogWith(
+        byFname: cardData(<String>[blueEyesJson]),
+        byDesc: cardData(<String>[blueEyesJson]),
+      );
+
+      final results = await catalog.search('Blue-Eyes');
+
+      // The same card comes back from both passes and is printed in three
+      // sets; it must appear once per printing, not twice.
+      expect(results.map((c) => c.id).toSet(), hasLength(results.length));
+      expect(results.first.name, 'Blue-Eyes White Dragon');
+    });
+
+    test('answers names when the effect pass is unavailable', () async {
+      final catalog = catalogWith(byFname: cardData(<String>[blueEyesJson]));
+
+      final results = await catalog.search('Blue-Eyes');
+
+      expect(results, isNotEmpty);
+      expect(results.every((c) => c.name == 'Blue-Eyes White Dragon'), isTrue);
     });
   });
 }

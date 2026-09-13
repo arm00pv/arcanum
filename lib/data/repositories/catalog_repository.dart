@@ -143,19 +143,37 @@ class CatalogRepository {
   Future<List<TcgCard>> search(CardGame game, String query, {int limit = 80}) async {
     final q = query.trim();
     if (q.isEmpty) return const [];
-    final local = await _dao.searchByName(game, q, limit: limit);
+    final local = await _dao.searchCached(game, q, limit: limit);
     if (local.length >= 12) return local;
     try {
       final remote = await catalogFor(game).search(q, limit: limit);
       if (remote.isNotEmpty) {
         await _dao.upsertCards(game, remote);
-        final merged = await _dao.searchByName(game, q, limit: limit);
+        final merged = await _dao.searchCached(game, q, limit: limit);
         return merged.isNotEmpty ? merged : remote;
       }
     } catch (_) {
       // Offline or no results; the local answer stands.
     }
     return local;
+  }
+
+  /// Sets whose name or code matches [query], newest first.
+  ///
+  /// Answered entirely from the cache, because the set list is downloaded once
+  /// and kept: a set the user has never opened is still searchable, and a search
+  /// does not need the network to say a set exists. The screen offers these
+  /// above card results so typing "Bloomburrow" browses the set rather than
+  /// reporting that no card matched.
+  Future<List<TcgSet>> searchSets(
+    CardGame game,
+    String query, {
+    int limit = 6,
+  }) async {
+    final q = query.trim();
+    if (q.isEmpty) return const [];
+    final matches = await _dao.sets(game, search: q, sort: SetSort.newest);
+    return matches.length > limit ? matches.sublist(0, limit) : matches;
   }
 
   /// Refreshes prices for a set of printings.

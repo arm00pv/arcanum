@@ -295,6 +295,17 @@ final searchProvider =
   return ref.watch(catalogRepositoryProvider).search(ref0.game, ref0.query);
 });
 
+/// Sets whose name or code matches the same query.
+///
+/// The set catalogue is fetched before matching so that a first search still
+/// finds a set the user has never opened; after that it is a cache read.
+final setSearchProvider =
+    FutureProvider.family<List<TcgSet>, SearchRef>((ref, ref0) async {
+  if (ref0.query.trim().length < 2) return const [];
+  await ref.watch(setsProvider(ref0.game).future);
+  return ref.watch(catalogRepositoryProvider).searchSets(ref0.game, ref0.query);
+});
+
 // ----------------------------------------------------------------- collection
 
 /// The full portfolio picture for a game.

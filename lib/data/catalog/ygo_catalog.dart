@@ -315,24 +315,43 @@ class YgoCatalog implements CardCatalog {
     final q = query.trim();
     if (q.isEmpty) return const [];
 
-    final YgoPage? page;
-    try {
-      page = await _pageOrNull('/cardinfo.php', {'fname': q});
-    } on CatalogException {
-      // Offline, or the provider is unhappy: an empty result is the same answer
-      // the user gets from any other source, and the repository keeps whatever
-      // the local cache holds.
-      return const [];
-    }
-    if (page == null) return const [];
+    // Two passes, because the provider keeps a card's name and its effect in
+    // different fields: `fname` is a fuzzy match on the name, `desc` matches
+    // the effect text. Searching only the name meant the screen's promise that
+    // "Special Summon" finds the cards which do it was not backed by anything.
+    final namePage = await _searchPage({'fname': q});
+    final textPage = await _searchPage({'desc': q});
+    if (namePage == null && textPage == null) return const [];
 
     final index = await _indexByName();
     final out = <TcgCard>[];
-    for (final card in page.cards) {
-      out.addAll(_printingsOf(card, index: index));
+    final seen = <String>{};
+    // Name matches lead: a user typing a card's name wants that card, not the
+    // hundred cards whose effect mentions it.
+    for (final card in <YgoCard>[
+      ...?namePage?.cards,
+      ...?textPage?.cards,
+    ]) {
+      for (final printing in _printingsOf(card, index: index)) {
+        if (!seen.add(printing.id)) continue;
+        out.add(printing);
+      }
       if (out.length >= limit) break;
     }
     return out.length > limit ? out.sublist(0, limit) : out;
+  }
+
+  /// One search request, or null when the provider cannot answer it.
+  ///
+  /// Offline, rate limited or unhappy with the query: an empty result is the
+  /// same answer the user gets from any other source, and the repository keeps
+  /// whatever the local cache holds.
+  Future<YgoPage?> _searchPage(Map<String, Object?> query) async {
+    try {
+      return await _pageOrNull('/cardinfo.php', query);
+    } on CatalogException {
+      return null;
+    }
   }
 
   @override
