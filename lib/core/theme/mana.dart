@@ -132,8 +132,19 @@ enum CardRarity {
         s == 'rare') {
       return CardRarity.rare;
     }
-    if (s.contains('trainer gallery') || s.contains('gallery')) {
+    // Lorcana's two chase treatments: an Enchanted card is an alternate-art
+    // reprint of a card already in the set, which is the same idea as a
+    // Pokémon trainer-gallery card and sits in the same tier.
+    if (s.contains('trainer gallery') ||
+        s.contains('gallery') ||
+        s.contains('enchanted')) {
       return CardRarity.special;
+    }
+    // Lorcana's top of the ordinary ladder. "Legendary" is the highest tier a
+    // normal set prints and "Iconic" and "Epic" sit above the usual run, so all
+    // three read as the mythic-equivalent rather than as an unknown badge.
+    if (s.contains('legendary') || s.contains('iconic') || s.contains('epic')) {
+      return CardRarity.mythic;
     }
     if (s.contains('promo')) return CardRarity.bonus;
     if (s.contains('uncommon')) return CardRarity.uncommon;
@@ -188,22 +199,22 @@ enum CardFinish {
 
 /// Condition grades, ordered from best to worst.
 ///
-/// The three games use different vocabularies. Magic players grade with the
-/// M/NM/EX/GD/LP/PL/PO scale; Pokémon collectors and Yu-Gi-Oh! collectors both
-/// use the NM/LP/MP/HP/DMG scale TCGplayer publishes, which is why those five
-/// grades are shared between them and the Magic-only ones are not. Each game
-/// shows only the grades its collectors actually use.
+/// The games use different vocabularies. Magic players grade with the
+/// M/NM/EX/GD/LP/PL/PO scale; Pokémon, Yu-Gi-Oh! and Lorcana collectors all use
+/// the NM/LP/MP/HP/DMG scale TCGplayer publishes, which is why those five grades
+/// are shared between them and the Magic-only ones are not. Each game shows only
+/// the grades its collectors actually use.
 enum CardCondition {
   mint('mint', 'Mint', 'M', {CardGameTag.mtg}),
-  nearMint('near_mint', 'Near Mint', 'NM', {CardGameTag.mtg, CardGameTag.pokemon, CardGameTag.yugioh}),
+  nearMint('near_mint', 'Near Mint', 'NM', {CardGameTag.mtg, CardGameTag.pokemon, CardGameTag.yugioh, CardGameTag.lorcana}),
   excellent('excellent', 'Excellent', 'EX', {CardGameTag.mtg}),
   good('good', 'Good', 'GD', {CardGameTag.mtg}),
-  lightPlayed('light_played', 'Lightly Played', 'LP', {CardGameTag.mtg, CardGameTag.pokemon, CardGameTag.yugioh}),
-  moderatelyPlayed('moderately_played', 'Moderately Played', 'MP', {CardGameTag.pokemon, CardGameTag.yugioh}),
-  heavilyPlayed('heavily_played', 'Heavily Played', 'HP', {CardGameTag.pokemon, CardGameTag.yugioh}),
+  lightPlayed('light_played', 'Lightly Played', 'LP', {CardGameTag.mtg, CardGameTag.pokemon, CardGameTag.yugioh, CardGameTag.lorcana}),
+  moderatelyPlayed('moderately_played', 'Moderately Played', 'MP', {CardGameTag.pokemon, CardGameTag.yugioh, CardGameTag.lorcana}),
+  heavilyPlayed('heavily_played', 'Heavily Played', 'HP', {CardGameTag.pokemon, CardGameTag.yugioh, CardGameTag.lorcana}),
   played('played', 'Played', 'PL', {CardGameTag.mtg}),
   poor('poor', 'Poor', 'PO', {CardGameTag.mtg}),
-  damaged('damaged', 'Damaged', 'DMG', {CardGameTag.pokemon, CardGameTag.yugioh});
+  damaged('damaged', 'Damaged', 'DMG', {CardGameTag.pokemon, CardGameTag.yugioh, CardGameTag.lorcana});
 
   const CardCondition(this.code, this.label, this.short, this.games);
 
@@ -244,7 +255,8 @@ enum CardCondition {
 enum CardGameTag {
   mtg('mtg'),
   pokemon('pokemon'),
-  yugioh('yugioh');
+  yugioh('yugioh'),
+  lorcana('lorcana');
 
   const CardGameTag(this.id);
   final String id;

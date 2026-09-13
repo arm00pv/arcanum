@@ -40,7 +40,14 @@ class PriceHistoryService {
   /// snapshots Arcanum records itself, which is why this returns an empty list
   /// rather than a provider that would only ever answer with nothing.
   List<PriceHistorySource> providersFor(CardGame game) {
-    if (game == CardGame.yugioh) return const <PriceHistorySource>[];
+    // Yu-Gi-Oh! and Lorcana have nothing to backfill from: YGOPRODeck keeps no
+    // history at all, and Lorcast publishes only today's prices. Both run on
+    // the daily snapshots Arcanum records itself, which is why this returns an
+    // empty list rather than a provider that would only ever answer with
+    // nothing. Magic and Pokémon each have at least one real source.
+    if (game == CardGame.yugioh || game == CardGame.lorcana) {
+      return const <PriceHistorySource>[];
+    }
     final out = <PriceHistorySource>[];
     if (_settings.historyEndpoint.isNotEmpty) {
       final hasPokemonEndpoint = _settings.pokemonHistoryEndpoint.isNotEmpty;

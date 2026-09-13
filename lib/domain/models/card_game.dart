@@ -36,6 +36,22 @@ enum CardGame {
     catalogueSince: 1999,
     collectionNoun: 'binder',
   ),
+  lorcana(
+    id: 'lorcana',
+    label: 'Disney Lorcana TCG',
+    shortLabel: 'Lorcana',
+    abbreviation: 'LRC',
+    publisher: 'Ravensburger',
+    // Lorcana's own identity is the ink a card is played from, and its brand
+    // runs purple-to-teal. Purple would sit too close to Magic's violet in the
+    // game switcher and the allocation charts, so the accent is the cyan end of
+    // that iridescent range - distinct at a glance from all three other games.
+    accent: Color(0xFF2BC4D4),
+    deep: Color(0xFF0E5A66),
+    dataSource: 'Lorcast',
+    catalogueSince: 2023,
+    collectionNoun: 'binder',
+  ),
   yugioh(
     id: 'yugioh',
     label: 'Yu-Gi-Oh! Trading Card Game',
@@ -105,6 +121,7 @@ enum CardGame {
         CardGame.mtg => CardGameTag.mtg,
         CardGame.pokemon => CardGameTag.pokemon,
         CardGame.yugioh => CardGameTag.yugioh,
+        CardGame.lorcana => CardGameTag.lorcana,
       };
 
   /// The finishes and print variants that physically exist for this game.
@@ -134,6 +151,13 @@ enum CardGame {
             CardFinish.nonfoil,
             CardFinish.foil,
           ],
+        // Lorcana prints exactly two things: the ordinary card and the cold
+        // foil, which every card in a set has. There is no etched or reverse
+        // treatment to tell apart, so the pair is the whole vocabulary.
+        CardGame.lorcana => const [
+            CardFinish.nonfoil,
+            CardFinish.foil,
+          ],
       };
 
   /// The condition grades recognised by this game's collectors.
@@ -142,12 +166,13 @@ enum CardGame {
 
   /// The categories used by this game's allocation charts.
   ///
-  /// Magic buckets by mana colour, Pokémon by energy type and Yu-Gi-Oh! by
-  /// monster attribute.
+  /// Magic buckets by mana colour, Pokémon by energy type, Yu-Gi-Oh! by monster
+  /// attribute and Lorcana by the ink a card is played from.
   List<ColourBucket> get colourCategories => switch (this) {
         CardGame.mtg => ManaColor.values,
         CardGame.pokemon => PokemonType.values,
         CardGame.yugioh => YgoAttribute.values,
+        CardGame.lorcana => LorcanaInk.values,
       };
 
   /// Resolves a stored symbol to this game's category.
@@ -155,6 +180,7 @@ enum CardGame {
         CardGame.mtg => ManaColor.fromSymbol(symbol),
         CardGame.pokemon => PokemonType.fromSymbol(symbol),
         CardGame.yugioh => YgoAttribute.fromSymbol(symbol),
+        CardGame.lorcana => LorcanaInk.fromSymbol(symbol),
       };
 
   /// Picks the single category a card belongs to.
@@ -172,6 +198,10 @@ enum CardGame {
       // A Yu-Gi-Oh! card carries at most one attribute, so there is nothing to
       // collapse; the first entry is the only entry.
       CardGame.yugioh => YgoAttribute.fromName(values.first),
+      // Lorcana cards are one or two inks. Two-ink cards collapse onto their
+      // first ink, which Lorcast lists in the order the card prints it, so the
+      // bucket is stable rather than dependent on sort order.
+      CardGame.lorcana => LorcanaInk.fromName(values.first),
     };
   }
 
@@ -258,6 +288,74 @@ enum PokemonType implements ColourBucket {
       if (t.symbol == symbol.toUpperCase()) return t;
     }
     return PokemonType.colorless;
+  }
+}
+
+/// The six Lorcana inks, plus the bucket for cards that have none.
+///
+/// Ink is the only thing a Lorcana collection can meaningfully be split by: it
+/// is the game's colour pie, printed on the card's frame, and decks are built
+/// along it. Most cards are a single ink; a few are two, and those collapse onto
+/// their first.
+///
+/// [inconsolable] is the catch-all, in the same spirit as Yu-Gi-Oh!'s
+/// [YgoAttribute.spellTrap]: a card whose ink the provider does not state must
+/// not be painted into an ink it is not, so it gets a bucket of its own that
+/// says so rather than inflating Amber's slice of the chart.
+enum LorcanaInk implements ColourBucket {
+  amber('A', 'Amber', Color(0xFFE8A33D), Color(0xFF9A6212)),
+  amethyst('M', 'Amethyst', Color(0xFF9B6BD6), Color(0xFF5A2E8C)),
+  emerald('E', 'Emerald', Color(0xFF3FA76B), Color(0xFF1B6B3F)),
+  ruby('R', 'Ruby', Color(0xFFD9455F), Color(0xFF8C1F35)),
+  sapphire('S', 'Sapphire', Color(0xFF4A8FE0), Color(0xFF1F4E8C)),
+  steel('T', 'Steel', Color(0xFF8A9BAE), Color(0xFF4A5568)),
+  inconsolable('X', 'Uninked', Color(0xFF6B7480), Color(0xFF39414D));
+
+  const LorcanaInk(this.symbol, this.label, this.accent, this.deep);
+
+  @override
+  final String symbol;
+
+  @override
+  final String label;
+
+  @override
+  final Color accent;
+
+  @override
+  final Color deep;
+
+  /// Maps Lorcast's `ink` or `inks` entry to its palette entry.
+  static LorcanaInk fromName(String? ink) {
+    switch ((ink ?? '').toLowerCase().trim()) {
+      case 'amber':
+        return LorcanaInk.amber;
+      case 'amethyst':
+        return LorcanaInk.amethyst;
+      case 'emerald':
+        return LorcanaInk.emerald;
+      case 'ruby':
+        return LorcanaInk.ruby;
+      case 'sapphire':
+        return LorcanaInk.sapphire;
+      case 'steel':
+        return LorcanaInk.steel;
+      default:
+        return LorcanaInk.inconsolable;
+    }
+  }
+
+  /// Resolves a stored symbol, or the full ink name, back to an ink.
+  ///
+  /// Both spellings are accepted because both are written: the catalogue keeps
+  /// the single-letter symbol on the card, while the provider's wire value is
+  /// the full word.
+  static LorcanaInk fromSymbol(String symbol) {
+    final s = symbol.trim().toUpperCase();
+    for (final ink in LorcanaInk.values) {
+      if (ink.symbol == s) return ink;
+    }
+    return fromName(s);
   }
 }
 

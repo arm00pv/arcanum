@@ -29,6 +29,18 @@ abstract final class Legal {
       'Company, Nintendo, Creatures Inc. or GAME FREAK inc. Pokémon and Pokémon '
       'character names are trademarks of their respective owners.';
 
+  /// Non-affiliation statement for Disney Lorcana.
+  ///
+  /// Ravensburger publishes Lorcana under licence from Disney, and neither
+  /// offers a fan-content licence as permissive or as explicit as Wizards' and
+  /// TPCi's, so this claims the least that can honestly be claimed: the app is
+  /// unofficial, it is not commercial, and it implies no endorsement by anyone.
+  static const lorcanaNotice =
+      'Arcanum is an unofficial, non-commercial reference tool. It is not '
+      'affiliated with, endorsed by, sponsored by or approved by Ravensburger '
+      'or The Walt Disney Company. Disney Lorcana and Disney character names '
+      'are trademarks of their respective owners.';
+
   /// What the app does with the user's data. Written to match the app's actual
   /// behaviour, which is the point: it collects nothing.
   static const privacySummary =
@@ -72,12 +84,22 @@ abstract final class Legal {
       purpose: 'Optional live price history (bring your own free key)',
       url: 'https://justtcg.com',
     ),
+    (
+      name: 'Lorcast',
+      purpose: 'Lorcana card data, card text and current prices',
+      url: 'https://lorcast.com',
+    ),
+    (
+      name: 'TCGplayer',
+      purpose: 'Lorcana card images',
+      url: 'https://www.tcgplayer.com',
+    ),
   ];
 
   /// What the app deliberately does not do, stated plainly.
   static const nonCommercial =
       'Arcanum is free and has no ads, no subscriptions and no in-app '
-      'purchases. Both publishers permit unofficial reference apps only while '
-      'they are non-commercial, so there is nothing to buy and nothing to '
-      'unlock.';
+      'purchases. Every publisher whose game it covers permits unofficial '
+      'reference apps only while they are non-commercial, so there is nothing '
+      'to buy and nothing to unlock.';
 }

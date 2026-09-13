@@ -306,11 +306,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   ) {
     final c = context.c;
     final bool isMtg = game == CardGame.mtg;
-    final bool isYgo = game == CardGame.yugioh;
+    // Yu-Gi-Oh! and Lorcana are the two games with no history source at all, so
+    // both get the short section and neither offers a key field or a probe.
+    final bool isYgo = game == CardGame.yugioh || game == CardGame.lorcana;
     final bool configured = settings.hasHistoryProvider(game);
     // A Pokémon companion is genuinely optional, so the probe only appears
-    // once an endpoint has actually been typed in. Yu-Gi-Oh! has no endpoint to
-    // probe in the first place, so the button is never offered for it.
+    // once an endpoint has actually been typed in. Yu-Gi-Oh! and Lorcana have
+    // no endpoint to probe in the first place, so the button is never offered
+    // for them.
     final bool canTest = !isYgo &&
         (isMtg || _pokemonEndpointController.text.trim().isNotEmpty);
 
@@ -318,7 +321,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          if (isYgo) ...<Widget>[
+          if (game == CardGame.lorcana) ...<Widget>[
+            Text('Lorcana price history', style: context.t.titleSmall),
+            const SizedBox(height: 8),
+            Text(
+              'Lorcast publishes what a card is worth today and nothing else. '
+              'No free archive of Lorcana prices exists to stand in for a '
+              'history endpoint, so trends for this game come from the daily '
+              'snapshots Arcanum records for every card you own, which start '
+              'building the day you add your first card.',
+              style: context.t.bodySmall
+                  ?.copyWith(color: c.textSecondary, height: 1.45),
+            ),
+          ] else if (isYgo) ...<Widget>[
             Text('Yu-Gi-Oh! price history', style: context.t.titleSmall),
             const SizedBox(height: 8),
             Text(
@@ -968,8 +983,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 14),
           _updateRow(context, c),
           const SizedBox(height: 14),
-          // Both notices are shown at all times, not just for the active game:
-          // the app ships both catalogues, so both licences apply to it.
+          // Every notice is shown at all times, not just for the active game:
+          // the app ships every catalogue, so every licence applies to it.
           Text(
             Legal.wizardsFanContent,
             style: context.t.bodySmall
@@ -978,6 +993,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 10),
           Text(
             Legal.pokemonNotice,
+            style: context.t.bodySmall
+                ?.copyWith(color: c.textTertiary, height: 1.4),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            Legal.lorcanaNotice,
             style: context.t.bodySmall
                 ?.copyWith(color: c.textTertiary, height: 1.4),
           ),

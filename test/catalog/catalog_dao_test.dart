@@ -165,6 +165,77 @@ void main() {
     });
   });
 
+  group('sets whose provider publishes no card count', () {
+    TcgSet set({int cardCount = 0}) => TcgSet(
+          game: CardGame.lorcana,
+          id: 'set_1',
+          code: '1',
+          name: 'The First Chapter',
+          setType: 'expansion',
+          cardCount: cardCount,
+          releasedAt: DateTime(2023, 8, 18),
+        );
+
+    test('counts a set as catalogued once anything from it is stored', () async {
+      // Lorcast publishes no count anywhere in its set list, so a set would
+      // otherwise be considered incomplete forever and re-downloaded on every
+      // visit.
+      await dao.upsertSets(CardGame.lorcana, <TcgSet>[set()]);
+      expect(await dao.isCatalogued(CardGame.lorcana, '1'), isFalse);
+
+      await dao.upsertCards(CardGame.lorcana, <TcgCard>[
+        const TcgCard(
+          game: CardGame.lorcana,
+          id: 'crd_1',
+          setCode: '1',
+          setName: 'The First Chapter',
+          name: 'Elsa – Snow Queen',
+          collectorNumber: '41',
+          rarity: 'Super Rare',
+        ),
+      ]);
+
+      expect(await dao.isCatalogued(CardGame.lorcana, '1'), isTrue);
+    });
+
+    test('records the size the card list turned out to have', () async {
+      await dao.upsertSets(CardGame.lorcana, <TcgSet>[set()]);
+      await dao.setCardCount(CardGame.lorcana, '1', 204);
+
+      final stored = await dao.set(CardGame.lorcana, '1');
+
+      expect(stored!.cardCount, 204);
+    });
+
+    test('never lowers a count a provider did publish', () async {
+      // Magic and Pokémon do publish counts; a short card list must not shrink
+      // the set's published size.
+      await dao.upsertSets(
+        CardGame.pokemon,
+        <TcgSet>[
+          TcgSet(
+            game: CardGame.pokemon,
+            id: 'base1',
+            code: 'base1',
+            name: 'Base Set',
+            setType: 'expansion',
+            cardCount: 102,
+          ),
+        ],
+      );
+      await dao.setCardCount(CardGame.pokemon, 'base1', 3);
+
+      expect((await dao.set(CardGame.pokemon, 'base1'))!.cardCount, 102);
+    });
+
+    test('ignores a nonsense count', () async {
+      await dao.upsertSets(CardGame.lorcana, <TcgSet>[set()]);
+      await dao.setCardCount(CardGame.lorcana, '1', 0);
+
+      expect((await dao.set(CardGame.lorcana, '1'))!.cardCount, 0);
+    });
+  });
+
   group('searching the cached catalogue', () {
     setUp(() async {
       await dao.upsertCards(CardGame.pokemon, <TcgCard>[

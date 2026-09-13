@@ -251,6 +251,23 @@ class CatalogDao {
     );
   }
 
+  /// Records how many printings a set actually delivered.
+  ///
+  /// Not every provider publishes a card count up front: Lorcast's set list
+  /// carries none at all, so the only place the real number exists is the set's
+  /// own card list. Writing it back once that list has been read is what makes
+  /// the set row show a size, and what stops [isCatalogued] from deciding the
+  /// set is never complete.
+  Future<void> setCardCount(CardGame game, String setCode, int count) async {
+    if (count <= 0) return;
+    await _db.update(
+      'sets',
+      {'card_count': count},
+      where: 'game = ? AND code = ? AND card_count < ?',
+      whereArgs: [game.id, setCode, count],
+    );
+  }
+
   /// True when every printing of a set is already stored.
   Future<bool> isCatalogued(CardGame game, String setCode) async {
     final r = await _db.rawQuery(
@@ -265,7 +282,12 @@ class CatalogDao {
     // Pokémon sets report both a printedTotal and a secret-card total that can
     // disagree with the API's card list, so a small shortfall still counts as
     // catalogued.
-    return expected > 0 && actual >= (expected * 0.98).floor();
+    //
+    // A set whose provider publishes no count at all is catalogued as soon as
+    // anything from it is stored: expecting zero cards forever would mean
+    // re-downloading the set on every visit.
+    if (expected <= 0) return actual > 0;
+    return actual >= (expected * 0.98).floor();
   }
 
   /// Every stored printing of a set, ordered by collector number.

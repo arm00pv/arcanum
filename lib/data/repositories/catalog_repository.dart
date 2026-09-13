@@ -96,6 +96,10 @@ class CatalogRepository {
           await catalogFor(game).fetchCardsInSet(code, onProgress: onProgress);
       if (cards.isNotEmpty) {
         await _dao.upsertCards(game, cards);
+        // A provider that publishes no card count in its set list - Lorcast
+        // does not - only reveals the size here, so the set row learns it the
+        // first time the set is opened rather than claiming to hold no cards.
+        await _dao.setCardCount(game, code, cards.length);
         await _dao.markCatalogued(game, code);
       }
     } catch (_) {

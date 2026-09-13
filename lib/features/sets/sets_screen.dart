@@ -436,7 +436,9 @@ class _SetTile extends StatelessWidget {
           ),
         );
       },
-      semanticLabel: '${set.name}, ${set.cardCount} cards',
+      semanticLabel: set.cardCount > 0
+          ? '${set.name}, ${set.cardCount} cards'
+          : set.name,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
@@ -472,8 +474,14 @@ class _SetTile extends StatelessWidget {
                   Row(
                     children: [
                       Text(Fmt.dateShort(set.releasedAt), style: context.t.bodySmall),
-                      Text('  ·  ', style: context.t.bodySmall),
-                      Text('${set.cardCount} cards', style: context.t.bodySmall),
+                      // A source that publishes no card count leaves this at
+                      // zero until the set has been opened once; "0 cards" would
+                      // be a lie about the set rather than about the catalogue.
+                      if (set.cardCount > 0) ...[
+                        Text('  ·  ', style: context.t.bodySmall),
+                        Text('${set.cardCount} cards',
+                            style: context.t.bodySmall),
+                      ],
                       if (set.series != null) ...[
                         Text('  ·  ', style: context.t.bodySmall),
                         Flexible(

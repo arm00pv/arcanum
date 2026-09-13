@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:arcanum/core/theme/mana.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
+import 'package:arcanum/data/catalog/lorcana_catalog.dart';
 import 'package:arcanum/data/catalog/mtg_catalog.dart';
 import 'package:arcanum/data/catalog/pokemon_catalog.dart';
 import 'package:arcanum/data/catalog/ygo_catalog.dart';
@@ -104,6 +105,7 @@ class Bootstrap {
           CardGame.mtg: MtgCatalog(),
           CardGame.pokemon: PokemonCatalog(),
           CardGame.yugioh: YgoCatalog(),
+          CardGame.lorcana: LorcanaCatalog(),
         };
 
     final catalogRepository =

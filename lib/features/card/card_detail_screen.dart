@@ -744,6 +744,11 @@ class _AnalyticsSection extends StatelessWidget {
                               'you open the app. YGOPRODeck keeps no price history '
                               'at all, so these snapshots are the only source of a '
                               'trend and analysis begins after a couple of weeks.',
+                        CardGame.lorcana =>
+                          'Arcanum records a Lorcana price snapshot every day you '
+                              'open the app. Lorcast publishes only current '
+                              'prices, so those snapshots are the only source of a '
+                              'trend and analysis begins after a couple of weeks.',
                       },
                       textAlign: TextAlign.center,
                       style: context.t.bodySmall,

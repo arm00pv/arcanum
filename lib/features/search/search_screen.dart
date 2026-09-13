@@ -146,6 +146,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       'Pot of Greed',
       'Exodia',
     ],
+    CardGame.lorcana: <String>[
+      'Elsa',
+      'Mickey Mouse',
+      'Stitch',
+      'Maleficent',
+      'Ariel',
+    ],
   };
 
   final TextEditingController _controller = TextEditingController();
@@ -263,6 +270,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   CardGame.mtg => 'Card name, set or oracle text',
                   CardGame.pokemon => 'Card name, set or card text',
                   CardGame.yugioh => 'Card name, set or card text',
+                  CardGame.lorcana => 'Card name, set or card text',
                 },
                 prefixIcon: Icon(
                   Icons.search_rounded,
@@ -318,6 +326,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           CardGame.mtg => 'Search the multiverse',
           CardGame.pokemon => 'Search every Pokémon set',
           CardGame.yugioh => 'Search every Yu-Gi-Oh! set',
+          CardGame.lorcana => 'Search every Lorcana set',
         },
         message: 'Type at least two characters - card names, set names and '
             '$textNoun all work. '
@@ -361,6 +370,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     'Partial names work: "zard" finds Charizard.',
                   CardGame.yugioh =>
                     'Partial names work: "magician" finds Dark Magician.',
+                  CardGame.lorcana =>
+                    'Partial names work: "elsa" finds every Elsa, and a '
+                        'version name such as "Snow Queen" narrows it.',
                 },
               ),
               _SearchTip(
@@ -373,6 +385,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     'Search a set name such as "Base Set" to browse it.',
                   CardGame.yugioh =>
                     'Search a set name such as "Legend of Blue Eyes" to browse it.',
+                  CardGame.lorcana =>
+                    'Search a set name such as "The First Chapter" to browse it.',
                 },
               ),
               _SearchTip(
@@ -388,6 +402,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   CardGame.yugioh =>
                     'Card text is searched, so "Special Summon" finds the '
                         'cards that do it.',
+                  CardGame.lorcana =>
+                    'Card text is searched, so "banish" finds the cards that '
+                        'do it.',
                 },
               ),
               _SearchTip(
@@ -412,6 +429,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         CardGame.mtg => 'oracle text',
         CardGame.pokemon => 'attack and rules text',
         CardGame.yugioh => 'card text',
+        CardGame.lorcana => 'card text',
       };
 
   // ----------------------------------------------------------------- results

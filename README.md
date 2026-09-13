@@ -1,33 +1,46 @@
 # Arcanum — Trading Card Collection Vault
 
-A precision collection tracker for Android covering **Magic: The Gathering** and
-the **Pokémon Trading Card Game**, with an on-device quantitative price engine.
-Built for a Pixel 7 Pro on Android 17.
+A precision collection tracker for Android covering **Magic: The Gathering**, the
+**Pokémon Trading Card Game**, **Yu-Gi-Oh!** and **Disney Lorcana**, with an
+on-device quantitative price engine. Built for a Pixel 7 Pro on Android 17.
 
-> Arcanum is unofficial. It is not affiliated with Wizards of the Coast or The
-> Pokémon Company.
+> Arcanum is unofficial and non-commercial. It is not affiliated with, endorsed
+> by or approved by Wizards of the Coast, The Pokémon Company, Konami, or
+> Ravensburger and The Walt Disney Company.
 
-## Two games, two collections
+## Four games, four collections
 
 The game switcher sits at the top of every screen. It is **not a filter**: it
 swaps the catalogue, the collection, the portfolio and every price series over
 to the other game, and tints the whole app with that game's signature colour
-(violet for Magic, gold for Pokémon).
+(violet for Magic, gold for Pokémon, brown-gold for Yu-Gi-Oh!, cyan for
+Lorcana).
 
 Nothing is ever merged. A row is scoped by game in SQLite, every repository is
 constructed per game, and the analytics are keyed by game — so a Pokémon holding
 can never be valued against a Magic price list. `sets` and
 `portfolio_snapshots` carry composite `(game, …)` primary keys, which means the
-same set code can legitimately exist in both games at once.
+same set code can legitimately exist in two games at once.
 
-| | Magic: The Gathering | Pokémon TCG |
-|---|---|---|
-| Catalogue | Scryfall — 1,049 sets, since 1993 | TCGdex — 218 sets, since 1999 |
-| Set iconography | monochrome SVG set symbols | full-colour set logos |
-| Finishes | non-foil, foil, etched | normal, holofoil, reverse holo, 1st Edition, 1st Ed. holo |
-| Conditions | M / NM / EX / GD / LP / PL / PO | NM / LP / MP / HP / DMG |
-| Grouping | mana colour identity | energy type |
-| Price history | MTGStocks (2012→), MTGJSON backfill, own snapshots | TCGdex archive (→Sep 2024), JustTCG, own snapshots |
+| | Magic | Pokémon | Yu-Gi-Oh! | Lorcana |
+|---|---|---|---|---|
+| Catalogue | Scryfall — 1,049 sets, since 1993 | TCGdex — 218 sets, since 1999 | YGOPRODeck, since 2002 | Lorcast — 23 sets, since 2023 |
+| Finishes | non-foil, foil, etched | normal, holofoil, reverse holo, 1st Edition, 1st Ed. holo | normal, foil | normal, cold foil |
+| Conditions | M / NM / EX / GD / LP / PL / PO | NM / LP / MP / HP / DMG | NM / LP / MP / HP / DMG | NM / LP / MP / HP / DMG |
+| Grouping | mana colour identity | energy type | monster attribute | ink |
+| Price history | MTGStocks (2012→), MTGJSON backfill, own snapshots | TCGdex archive (→Sep 2024), JustTCG, own snapshots | own snapshots only | own snapshots only |
+
+Two of the four games have **no price history anywhere**, free or paid:
+
+- **Yu-Gi-Oh!** — YGOPRODeck's API has no history endpoint and no archive of its
+  prices exists.
+- **Lorcana** — Lorcast publishes today's price and nothing else. TCGplayer's
+  daily CSV dump (TCGCSV) carries category 71 for Lorcana but holds only current
+  prices, not an archive.
+
+Arcanum records its own daily snapshot for every card you own in every game, so
+those two build a trend from the day a card is added and say so plainly in
+Settings and on the card screen rather than showing an empty chart.
 
 ### An honest note on Pokémon price history
 

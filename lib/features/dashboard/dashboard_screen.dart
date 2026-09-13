@@ -245,13 +245,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
 /// What a game's allocation section is called.
 ///
-/// Magic buckets its collection by mana colour, Pokémon by energy type and
-/// Yu-Gi-Oh! by monster attribute, so one shared title would be a lie for two
-/// games out of three.
+/// Magic buckets its collection by mana colour, Pokémon by energy type,
+/// Yu-Gi-Oh! by monster attribute and Lorcana by ink, so one shared title would
+/// be a lie for three games out of four.
 String _categorySectionTitle(CardGame game) => switch (game) {
       CardGame.mtg => 'By colour',
       CardGame.pokemon => 'By energy type',
       CardGame.yugioh => 'By attribute',
+      CardGame.lorcana => 'By ink',
     };
 
 /// Explains what the buckets are measured against, per game.
@@ -261,6 +262,8 @@ String _categorySectionSubtitle(CardGame game) => switch (game) {
       // Spell and Trap cards carry no attribute, so the chart has a slice for
       // them rather than pretending they belong to one of the seven.
       CardGame.yugioh => 'Market value by attribute, Spells and Traps apart',
+      // A handful of cards are printed in two inks; they land in the first.
+      CardGame.lorcana => 'Market value by ink',
     };
 
 /// The headline: total value, change, and the portfolio curve.
