@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:arcanum/data/backup/backup_schedule.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 
 /// User preferences, backed by SharedPreferences.
@@ -52,6 +53,10 @@ class AppSettings extends ChangeNotifier {
   static const _kBackupEndpoint = 'backup_endpoint';
   static const _kBackupToken = 'backup_token';
   static const _kLastBackupAt = 'last_backup_at';
+  static const _kAutoBackupCadence = 'auto_backup_cadence';
+  static const _kLastAutoBackupAt = 'last_auto_backup_at';
+  static const _kLastAutoBackupOk = 'last_auto_backup_ok';
+  static const _kLastAutoBackupNote = 'last_auto_backup_note';
 
   static Future<AppSettings> load() async =>
       AppSettings._(await SharedPreferences.getInstance());
@@ -211,6 +216,64 @@ class AppSettings extends ChangeNotifier {
     } else {
       _prefs.setInt(_kLastBackupAt, d.millisecondsSinceEpoch);
     }
+    notifyListeners();
+  }
+
+  // ------------------------------------------------- automatic backup
+
+  /// How often the app backs itself up on its own.
+  ///
+  /// Off until the collector asks for it: an app that starts uploading to a
+  /// server without being told to is an app that has decided something on the
+  /// collector's behalf.
+  BackupCadence get backupCadence =>
+      BackupCadence.fromCode(_prefs.getString(_kAutoBackupCadence));
+
+  set backupCadence(BackupCadence cadence) {
+    _prefs.setString(_kAutoBackupCadence, cadence.code);
+    notifyListeners();
+  }
+
+  /// When the automatic backup last ran, whether it succeeded or not.
+  DateTime? get lastAutoBackupAt {
+    final ms = _prefs.getInt(_kLastAutoBackupAt);
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  /// True when that run uploaded, false when it failed, null when it has never
+  /// run. Three states rather than two, because "never tried" and "tried and
+  /// failed" want different sentences in Settings.
+  bool? get lastAutoBackupOk {
+    final v = _prefs.getBool(_kLastAutoBackupOk);
+    return _prefs.containsKey(_kLastAutoBackupAt) ? (v ?? false) : null;
+  }
+
+  /// Why the last run failed, for a sentence the collector can act on.
+  String get lastAutoBackupNote => _prefs.getString(_kLastAutoBackupNote) ?? '';
+
+  /// Records the outcome of one automatic run.
+  ///
+  /// Written from the background isolate, which has its own copy of the
+  /// preferences; the app re-reads them on resume so the two do not drift.
+  void recordAutoBackup({required bool ok, String note = '', DateTime? at}) {
+    _prefs.setInt(
+      _kLastAutoBackupAt,
+      (at ?? DateTime.now()).millisecondsSinceEpoch,
+    );
+    _prefs.setBool(_kLastAutoBackupOk, ok);
+    if (note.isEmpty) {
+      _prefs.remove(_kLastAutoBackupNote);
+    } else {
+      _prefs.setString(_kLastAutoBackupNote, note);
+    }
+  }
+
+  /// Re-reads the preferences from disk.
+  ///
+  /// SharedPreferences caches per isolate, so anything the background backup
+  /// wrote is invisible to a running app until this is called.
+  Future<void> reload() async {
+    await _prefs.reload();
     notifyListeners();
   }
 

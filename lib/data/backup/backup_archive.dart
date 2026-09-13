@@ -69,6 +69,7 @@ class BackupArchive {
     'theme_mode',
     'condition_adjust',
     'auto_snapshot',
+    'auto_backup_cadence',
   ];
 
   final DateTime created;

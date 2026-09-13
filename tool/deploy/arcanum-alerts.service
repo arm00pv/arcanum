@@ -1,0 +1,23 @@
+[Unit]
+Description=Arcanum - deliver price alerts to the phone that set them
+Documentation=https://github.com/arm00pv/arcanum
+After=network-online.target
+Wants=network-online.target
+# Reads the newest backup the phone uploaded and pushes whatever fired. It is
+# a oneshot driven by arcanum-alerts.timer rather than a long-running process:
+# the work is a file read, at most a few price lookups and a couple of HTTP
+# posts, and there is nothing to keep alive between runs.
+
+[Service]
+Type=oneshot
+User=zixen
+Group=zixen
+WorkingDirectory=/home/zixen/arcanum
+ExecStart=/usr/bin/python3 /home/zixen/arcanum/check_alerts.py --backups-dir /home/zixen/arcanum/backups --state /home/zixen/arcanum/alerts.state.json --config /home/zixen/arcanum/notify.json --token-file /home/zixen/arcanum/backup.token --db /home/zixen/arcanum/data/prices.db --pokemon-db /home/zixen/arcanum/data/pokemon_prices.db --lorcana-db /home/zixen/arcanum/data/lorcana_prices.db --yugioh-db /home/zixen/arcanum/data/yugioh_prices.db
+StandardOutput=append:/home/zixen/arcanum/logs/alerts.log
+StandardError=append:/home/zixen/arcanum/logs/alerts.log
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -158,13 +158,27 @@ class AlertRepository {
       case AlertKind.percentUp:
         final base = alert.baseline;
         if (base == null || base <= 0) return false;
-        return (current / base - 1) * 100 >= alert.threshold;
+        return _percentUp(current, base) >= alert.threshold;
       case AlertKind.percentDown:
         final base = alert.baseline;
         if (base == null || base <= 0) return false;
-        return (base / current - 1) * 100 >= alert.threshold;
+        return _percentDown(current, base) >= alert.threshold;
     }
   }
+
+  /// How far a price has risen above its baseline, as a percentage.
+  ///
+  /// Written as a difference over the baseline rather than as a ratio minus
+  /// one. The two are the same arithmetic on paper, but in binary floating point
+  /// `(120 / 100 - 1) * 100` comes out as 19.999999999999996 - so a 20% alert
+  /// would quietly not fire on a price that had risen exactly 20%. The app and
+  /// the companion both use this form so the two cannot disagree.
+  static double _percentUp(double current, double base) =>
+      (current - base) / base * 100;
+
+  /// How far a price has fallen below its baseline, as a percentage.
+  static double _percentDown(double current, double base) =>
+      (base - current) / current * 100;
 
   static String _describe(PriceAlert alert, double? current) {
     if (current == null) return 'Price unavailable';
@@ -177,12 +191,12 @@ class AlertRepository {
             '${Fmt.money(alert.threshold)} target.';
       case AlertKind.percentUp:
         final base = alert.baseline ?? 0;
-        final pct = base > 0 ? (current / base - 1) * 100 : 0.0;
+        final pct = base > 0 ? _percentUp(current, base) : 0.0;
         return 'Up ${Fmt.percentPlain(pct)} since you set this alert '
             '(now ${Fmt.money(current)}, from ${Fmt.money(base)}).';
       case AlertKind.percentDown:
         final base = alert.baseline ?? 0;
-        final pct = base > 0 ? (base / current - 1) * 100 : 0.0;
+        final pct = base > 0 ? _percentDown(current, base) : 0.0;
         return 'Down ${Fmt.percentPlain(pct)} since you set this alert '
             '(now ${Fmt.money(current)}, from ${Fmt.money(base)}).';
     }

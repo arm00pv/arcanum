@@ -118,6 +118,42 @@ than filed against the wrong card.
 
 ---
 
+## Your data, and where it lives
+
+Local first, and honest about it. The SQLite database on the phone is the source
+of truth; there is no hosted account and nothing is uploaded anywhere you have
+not named. A backup is one gzipped JSON document written to **your own
+companion** — every game, every holding, your wants, your binders, your alerts
+and the price snapshots the app recorded itself. The catalogue is left out (it is
+re-downloadable, and carrying it would make the file mostly cache) and so are
+credentials, because a backup that quietly carries your tokens turns every copy
+of that file into a copy of them.
+
+**Automatic backup** — Off, daily, every three days or weekly. Arcanum asks
+Android's WorkManager to run it with the app closed *and* runs a catch-up backup
+the first time you open the app after a gap, because Android defers background
+work under Doze and battery saver without telling anybody. The app reports what
+actually happened rather than what was requested: when the last run was, whether
+it went through, and — if it did not — whether the server refused it or could not
+be reached, which are different problems with different answers.
+
+**Alerts while the app is closed** — Arcanum evaluates its own price alerts
+whenever it is open, which is exactly when a price alert is least useful. So the
+companion closes the gap from the other end: `tool/check_alerts.py` reads the
+alerts out of the newest backup, prices them against the history it already
+serves, and pushes the ones that fired to a notification service, driven by
+`arcanum-alerts.timer` every half hour.
+
+The rules are the app's own rules — the same four kinds, the same strict
+comparisons, the same baseline semantics — because two engines disagreeing about
+the same alert would be worse than one. The topic is derived from the backup
+token, so there is one secret rather than two and no way for the phone and the
+server to drift apart; the app shows the exact string to subscribe to. Set
+`"enabled": false` in `~/arcanum/notify.json` to stop delivery, or point
+`server` at your own ntfy to keep the notifications off a public relay.
+
+---
+
 ## The price engine
 
 Scryfall publishes only *current* prices — it has no price history at all. Real
@@ -185,7 +221,9 @@ lib/
   core/utils/        formatters.dart, app_settings.dart
   data/api/          scryfall_client.dart + scryfall_models.dart (rate-limited, retrying)
   data/catalog/      card_catalog.dart (the per-game interface), mtg_catalog, pokemon_catalog
-  data/db/           app_database.dart (v3 schema), catalog/collection/history/alert DAOs
+  data/backup/       backup_archive.dart, backup_service.dart, backup_schedule.dart,
+                     backup_scheduler.dart (WorkManager), backup_worker.dart, alert_topic.dart
+  data/db/           app_database.dart (v9 schema), catalog/collection/history/alert DAOs
   data/history/      price_history_source.dart (5 providers), price_history_service.dart
   data/repositories/ catalog, collection, alert repositories
   data/transfer/     csv.dart (RFC 4180), collection_transfer.dart (dialects),
@@ -198,7 +236,11 @@ lib/
 tool/
   slice_prices.py    MTGJSON -> compact SQLite price history
   poll_pokemon_prices.py  daily TCGdex price poller
-  sync_server.py     read-only HTTP service the app fetches from
+  sync_server.py     read-only HTTP service the app fetches from, plus the
+                     token-gated backup routes
+  check_alerts.py    reads alerts out of the newest backup and delivers the
+                     ones that fired
+  deploy/            the systemd units for all of the above
 ```
 
 ### Rate limiting

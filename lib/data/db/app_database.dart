@@ -32,7 +32,11 @@ class AppDatabase {
   /// v6 — a `wanted_cards` table, so a want survives closing the card.
   /// v7 — `decks` and `deck_cards`, so a deck is a thing the app knows about.
   /// v8 — `collection_entries.for_trade`, so a trade pile exists.
-  static const _version = 8;
+  /// v9 — alerts remember the name of the card they watch, so an alert is
+  ///      readable without the catalogue - in a backup, in a notification sent
+  ///      from the collector's own server, and on a phone that has never
+  ///      downloaded the set.
+  static const _version = 9;
 
   static AppDatabase? _instance;
 
@@ -58,10 +62,49 @@ class AppDatabase {
         if (from < 6) await createWantedCards(d);
         if (from < 7) await createDecks(d);
         if (from < 8) await addForTrade(d);
+        if (from < 9) await addAlertLabels(d);
       },
     );
     _instance = AppDatabase._(db);
     return _instance!;
+  }
+
+  /// Opens the same database for reading only, without touching the schema.
+  ///
+  /// The automatic backup runs in its own isolate and may run while the app is
+  /// open, so it must never migrate and must never write: read-only means it
+  /// cannot block the app behind a write lock, and cannot corrupt a database it
+  /// shares with a running app. It deliberately bypasses [_instance], because
+  /// sharing one connection across two isolates is exactly what sqflite warns
+  /// about.
+  static Future<AppDatabase> openReadOnly() async {
+    final dir = await getDatabasesPath();
+    final path = p.join(dir, _fileName);
+    Future<void> configure(Database d) async {
+      // The app may be mid-write when this fires. Waiting is better than
+      // failing: the archive is one SELECT per table and the lock clears.
+      await d.execute('PRAGMA busy_timeout = 8000');
+    }
+
+    try {
+      return AppDatabase._(
+        await openDatabase(
+          path,
+          readOnly: true,
+          singleInstance: false,
+          onConfigure: configure,
+        ),
+      );
+    } on DatabaseException {
+      // Android refuses a read-only handle in a few legitimate situations -
+      // a journal that needs replaying, a database the app is part-way through
+      // creating. The job only ever issues SELECTs, so a normal handle is safe
+      // here; it gives up the guarantee that this connection cannot write, and
+      // keeps the backup working, which is the trade worth making.
+      return AppDatabase._(
+        await openDatabase(path, singleInstance: false, onConfigure: configure),
+      );
+    }
   }
 
   /// A database backed by memory, for tests.
@@ -241,7 +284,12 @@ class AppDatabase {
         created_at   INTEGER NOT NULL,
         triggered_at INTEGER,
         baseline     REAL,
-        last_value   REAL
+        last_value   REAL,
+        -- Denormalised so an alert is readable where the catalogue is not:
+        -- in a backup, and in a notification sent from the collector's own
+        -- server. See addAlertLabels for the migration that added them.
+        card_name    TEXT,
+        set_code     TEXT
       )
     ''');
     batch.execute('CREATE INDEX idx_alerts_card ON alerts(game, card_id)');
@@ -334,6 +382,32 @@ class AppDatabase {
       'ALTER TABLE collection_entries '
       'ADD COLUMN for_trade INTEGER NOT NULL DEFAULT 0',
     );
+  }
+
+  /// v9: alerts learn the name of what they are watching.
+  ///
+  /// The card name was always looked up from the catalogue at display time,
+  /// which meant an alert was unreadable anywhere the catalogue was not - in a
+  /// backup, in a notification sent from the collector's own server, and on a
+  /// phone that had never downloaded the set. Existing alerts are filled in from
+  /// the catalogue where it can answer.
+  static Future<void> addAlertLabels(DatabaseExecutor d) async {
+    await d.execute('ALTER TABLE alerts ADD COLUMN card_name TEXT');
+    await d.execute('ALTER TABLE alerts ADD COLUMN set_code TEXT');
+    await d.execute('''
+      UPDATE alerts SET
+        card_name = (
+          SELECT cards.name FROM cards
+          WHERE cards.id = alerts.card_id AND cards.game = alerts.game
+          LIMIT 1
+        ),
+        set_code = (
+          SELECT cards.set_code FROM cards
+          WHERE cards.id = alerts.card_id AND cards.game = alerts.game
+          LIMIT 1
+        )
+      WHERE card_name IS NULL
+    ''');
   }
 
   /// v7: decks, and the cards in them.

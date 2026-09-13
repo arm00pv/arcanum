@@ -1,13 +1,18 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:arcanum/core/legal.dart';
+import 'package:arcanum/data/backup/alert_topic.dart';
 import 'package:arcanum/data/backup/backup_archive.dart';
+import 'package:arcanum/data/backup/backup_schedule.dart';
+import 'package:arcanum/data/backup/backup_scheduler.dart';
 import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/core/utils/formatters.dart';
@@ -229,6 +234,223 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  /// The schedule: how often the app backs itself up, and how the last run
+  /// went.
+  ///
+  /// The honesty here is the point. Android decides when background work
+  /// actually runs, and it defers it under Doze and battery saver without
+  /// telling anybody - so the section says when the last run was and whether it
+  /// worked, rather than claiming a schedule that is really a request.
+  Widget _automatic(
+    BuildContext context,
+    AppSettings settings, {
+    required bool ready,
+  }) {
+    final c = context.c;
+    final cadence = settings.backupCadence;
+    final bool? ok = settings.lastAutoBackupOk;
+    final DateTime? ranAt = settings.lastAutoBackupAt;
+    final now = DateTime.now();
+    final next = nextBackupAt(
+      last: settings.lastBackupAt,
+      cadence: cadence,
+      now: now,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text('Automatic backup', style: context.t.titleSmall),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            for (final option in BackupCadence.values)
+              ChoiceChip(
+                label: Text(option.label),
+                selected: option == cadence,
+                onSelected: ready ? (_) => _setCadence(option) : null,
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          ready
+              ? 'Arcanum asks Android to run the backup on this schedule even '
+                    'when the app is closed, and runs one itself the first time '
+                    'you open it after a gap. Android defers background work '
+                    'when the phone is idle or low on battery, so a run can '
+                    'arrive late - the line below is what actually happened.'
+              : 'Enter a server and token above, and Arcanum can then back '
+                    'itself up on a schedule.',
+          style: context.t.bodySmall?.copyWith(
+            color: c.textTertiary,
+            height: 1.45,
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                !cadence.isOn
+                    ? Icons.pause_circle_outline_rounded
+                    : (ok ?? true)
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.error_outline_rounded,
+                size: 16,
+                color: !cadence.isOn
+                    ? c.textTertiary
+                    : (ok ?? true)
+                    ? c.positive
+                    : c.warning,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    _autoStatus(cadence: cadence, ok: ok, ranAt: ranAt),
+                    style: context.t.bodySmall?.copyWith(
+                      color: ok == false && cadence.isOn
+                          ? c.warning
+                          : c.textSecondary,
+                    ),
+                  ),
+                  if (ok == false &&
+                      cadence.isOn &&
+                      settings.lastAutoBackupNote.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        settings.lastAutoBackupNote,
+                        style: context.t.labelSmall?.copyWith(
+                          color: c.textTertiary,
+                        ),
+                      ),
+                    ),
+                  if (cadence.isOn && next != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Next one due ${_until(next, now)}.',
+                        style: context.t.labelSmall?.copyWith(
+                          color: c.textTertiary,
+                        ),
+                      ),
+                    ),
+                  if (settings.backupToken.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 10),
+                    _alertTopic(context, settings),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// One sentence about the last automatic run.
+  static String _autoStatus({
+    required BackupCadence cadence,
+    required bool? ok,
+    required DateTime? ranAt,
+  }) {
+    if (!cadence.isOn) return 'Automatic backup is off.';
+    if (ranAt == null) return 'No automatic backup has run yet.';
+    final when = Fmt.ago(ranAt);
+    if (ok == true) return 'Last automatic backup $when.';
+    return 'Last automatic backup $when did not go through.';
+  }
+
+  /// The topic to subscribe to for alerts delivered while the app is closed.
+  ///
+  /// Shown because it is the one thing the collector has to type into a
+  /// notification app by hand, and a topic they cannot read is a feature they
+  /// cannot use. It is derived from the backup token, so it is not a second
+  /// secret to store - only to be read out once.
+  Widget _alertTopic(BuildContext context, AppSettings settings) {
+    final c = context.c;
+    final topic = alertTopicFor(settings.backupToken);
+    if (topic.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          'Price alerts while Arcanum is closed',
+          style: context.t.labelSmall?.copyWith(color: c.textSecondary),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: SelectableText(
+                topic,
+                maxLines: 1,
+                style: context.t.labelSmall?.copyWith(
+                  color: c.textTertiary,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Copy the topic',
+              visualDensity: VisualDensity.compact,
+              iconSize: 16,
+              icon: Icon(Icons.copy_rounded, color: c.textTertiary),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: topic));
+                if (context.mounted) {
+                  _snack('Topic copied. Paste it into your notification app.');
+                }
+              },
+            ),
+          ],
+        ),
+        Text(
+          'Your companion checks the alerts in each backup and sends the ones '
+          'that fired to this topic. Subscribing needs the ntfy app; the topic '
+          'is the only thing protecting what is published, which is why it is '
+          'derived from the token rather than something memorable.',
+          style: context.t.labelSmall?.copyWith(
+            color: c.textTertiary,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// How long until a time, in the words a person would use.
+  ///
+  /// A due-now backup is described rather than timed out, because Android
+  /// decides the moment and the app should not pretend otherwise.
+  static String _until(DateTime when, DateTime now) {
+    final gap = when.difference(now);
+    if (gap.inMinutes <= 1) return 'as soon as Android allows';
+    if (gap.inHours < 24) {
+      final hours = gap.inHours;
+      return 'in $hours hour${hours == 1 ? '' : 's'}';
+    }
+    final days = gap.inHours ~/ 24;
+    return 'in $days day${days == 1 ? '' : 's'}';
+  }
+
+  /// Applies a new cadence and re-schedules Android's copy of it.
+  void _setCadence(BackupCadence cadence) {
+    final settings = ref.read(settingsProvider);
+    setState(() => settings.backupCadence = cadence);
+    unawaited(BackupScheduler.apply(cadence));
+  }
+
   // ---------------------------------------------------------------- backup
 
   /// The backup section: what it does, where it goes, and the two buttons.
@@ -372,6 +594,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 20),
+          Divider(height: 1, color: c.hairline),
+          const SizedBox(height: 18),
+          _automatic(context, settings, ready: ready),
         ],
       ),
     );

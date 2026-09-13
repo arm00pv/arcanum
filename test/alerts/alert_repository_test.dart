@@ -205,4 +205,44 @@ void main() {
     expect(percent.progress(12.5), closeTo(0.5, 0.001));
     expect(percent.describe(), 'Price rises by 50%');
   });
+
+  test('a percentage alert fires exactly on its threshold', () async {
+    // The arithmetic is a difference over the baseline for a reason: the ratio
+    // form gives (120 / 100 - 1) * 100 as 19.999999999999996, so a 20% alert
+    // would quietly not fire on a price that had risen exactly 20%.
+    await repo.create(
+      card: pricedCard(nonfoil: 100),
+      kind: AlertKind.percentUp,
+      threshold: 20,
+    );
+    await catalog.upsertCards(CardGame.mtg, [pricedCard(nonfoil: 120)]);
+    expect(await repo.evaluate(), hasLength(1));
+
+    await alerts.clear();
+    await repo.create(
+      card: pricedCard(nonfoil: 100),
+      kind: AlertKind.percentDown,
+      threshold: 20,
+    );
+    await catalog.upsertCards(CardGame.mtg, [pricedCard(nonfoil: 80)]);
+    final down = await repo.evaluate();
+    expect(down, hasLength(1));
+    expect(down.first.message, contains('Down 25'));
+  });
+
+  test('an alert keeps the name of what it watches', () async {
+    // The catalogue is what the app normally reads a name from, and it is not
+    // in a backup. An alert has to be readable without it, or a notification
+    // sent from the companion can only say a card id.
+    await repo.create(card: pricedCard(), kind: AlertKind.above, threshold: 20);
+
+    final stored = (await repo.all(CardGame.mtg)).single;
+    expect(stored.cardName, 'Test Card');
+    expect(stored.setCode, 'tst');
+
+    // Read back through the row mapping, not the in-memory instance.
+    final again = (await alerts.all(CardGame.mtg)).single;
+    expect(again.cardName, 'Test Card');
+    expect(again.setCode, 'tst');
+  });
 }

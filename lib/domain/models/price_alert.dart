@@ -114,9 +114,12 @@ class PriceAlert {
     }
     final base = baseline;
     if (base == null || base <= 0 || threshold <= 0) return null;
+    // Deliberately the difference form, matching AlertRepository's evaluator:
+    // a meter that says 99% while the rule has already fired would be the app
+    // contradicting itself.
     final change = kind == AlertKind.percentUp
-        ? (current / base - 1) * 100
-        : (base / current - 1) * 100;
+        ? (current - base) / base * 100
+        : (base - current) / current * 100;
     return (change / threshold).clamp(0.0, 1.0);
   }
 
@@ -168,6 +171,11 @@ class PriceAlert {
     'triggered_at': triggeredAt?.millisecondsSinceEpoch,
     'baseline': baseline,
     'last_value': lastValue,
+    // Denormalised on purpose: an alert has to be readable where the catalogue
+    // is not - in a backup, and in a notification sent from the collector's own
+    // server, which never sees the catalogue at all.
+    'card_name': cardName.isEmpty ? null : cardName,
+    'set_code': setCode.isEmpty ? null : setCode,
   };
 
   factory PriceAlert.fromRow(Map<String, Object?> r) => PriceAlert(
@@ -185,6 +193,8 @@ class PriceAlert {
         : DateTime.fromMillisecondsSinceEpoch(r['triggered_at'] as int),
     baseline: (r['baseline'] as num?)?.toDouble(),
     lastValue: (r['last_value'] as num?)?.toDouble(),
+    cardName: r['card_name'] as String? ?? '',
+    setCode: r['set_code'] as String? ?? '',
   );
 }
 

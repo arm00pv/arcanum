@@ -1,0 +1,16 @@
+[Unit]
+Description=Arcanum - check for fired price alerts every half hour
+Documentation=https://github.com/arm00pv/arcanum
+
+[Timer]
+# Twice an hour. The phone uploads a backup daily at most, so almost every run
+# finds the same archive and does nothing - which costs a file read and is
+# cheaper than the machinery to notice a change.
+OnCalendar=*:0/30
+# If the machine was off, run once on the way back up rather than skipping.
+Persistent=true
+# A small spread so this never lands in the same second as the pollers.
+RandomizedDelaySec=180
+
+[Install]
+WantedBy=timers.target

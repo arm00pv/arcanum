@@ -1,0 +1,7 @@
+{
+  "_comment": "Where Arcanum's price alerts are delivered. enabled=false stops the delivery entirely and leaves the script printing what it would have sent. topic is derived from ~/arcanum/backup.token when left empty, so the topic is a secret this setup already has rather than a new one to invent; set it explicitly to match a topic you subscribed to by hand. Point server at your own ntfy to keep the notifications off a public relay.",
+  "enabled": true,
+  "server": "https://ntfy.sh",
+  "topic": "",
+  "priority": 3
+}

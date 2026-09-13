@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:arcanum/app.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
+import 'package:arcanum/data/backup/backup_scheduler.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/providers.dart';
 
@@ -25,6 +26,11 @@ Future<void> main() async {
   final database = await AppDatabase.open();
   final settings = await AppSettings.load();
   final bootstrap = Bootstrap.create(database: database, settings: settings);
+
+  // Android's scheduler is told what the collector chose before the first frame
+  // is drawn, so a backup promised days ago is already queued if it is due.
+  await BackupScheduler.start();
+  await BackupScheduler.apply(settings.backupCadence);
 
   runApp(
     ProviderScope(
