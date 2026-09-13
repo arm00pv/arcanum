@@ -23,6 +23,7 @@ import 'package:arcanum/data/repositories/collection_repository.dart';
 import 'package:arcanum/data/repositories/deck_repository.dart';
 import 'package:arcanum/domain/decks/deck.dart';
 import 'package:arcanum/domain/decks/deck_format.dart';
+import 'package:arcanum/domain/decks/deck_suggestions.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/price_alert.dart';
@@ -594,6 +595,29 @@ final deckProvider = FutureProvider.family<DeckContents?, int>((
   final owned = await ref.watch(ownedQuantityProvider(deck.deck.game).future);
   return repository.contents(deckId, owned: owned);
 });
+
+/// Cards the collector owns that would fit one deck, best first.
+///
+/// Recomputed whenever the deck changes, so adding a suggestion takes it off
+/// the list - which is the honest answer to 'what else could go in here'.
+final deckSuggestionsProvider =
+    FutureProvider.family<List<DeckSuggestion>, int>((ref, deckId) async {
+      ref.watch(deckRevisionProvider);
+      final contents = await ref.watch(deckProvider(deckId).future);
+      if (contents == null) return const <DeckSuggestion>[];
+      final game = contents.deck.game;
+      final owned = await ref.watch(ownedCardsProvider(game).future);
+      final quantities = await ref.watch(ownedQuantityProvider(game).future);
+      final bans = await ref.watch(
+        banListProvider(contents.deck.formatId).future,
+      );
+      return suggestForDeck(
+        contents: contents,
+        ownedCards: owned,
+        ownedQuantities: quantities,
+        bannedNames: bans?.names ?? const <String>{},
+      );
+    });
 
 /// How many decks hold one printing, for the card screen.
 final cardDeckCountProvider = FutureProvider.family<int, CardRef>((

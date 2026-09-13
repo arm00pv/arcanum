@@ -5,11 +5,14 @@ import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/core/theme/mana.dart';
 import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/decks/deck.dart';
+import 'package:arcanum/domain/decks/deck_analysis.dart';
 import 'package:arcanum/domain/decks/deck_check.dart';
 import 'package:arcanum/domain/decks/deck_format.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/features/card/card_detail_screen.dart';
+import 'package:arcanum/features/decks/deck_analysis_card.dart';
 import 'package:arcanum/features/decks/deck_card_picker.dart';
+import 'package:arcanum/features/decks/deck_suggestions_screen.dart';
 import 'package:arcanum/features/decks/deck_form.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
@@ -31,6 +34,20 @@ class DeckDetailScreen extends ConsumerStatefulWidget {
 class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen> {
   final _scrollController = ScrollController();
   double _scrollOffset = 0;
+
+  // Reading a deck walks every card's rules text through a set of patterns.
+  // This screen rebuilds on every scroll frame, so the reading is kept against
+  // the contents it was made from rather than repeated while the finger moves.
+  DeckContents? _readFrom;
+  DeckAnalysis? _reading;
+
+  DeckAnalysis _readingOf(DeckContents contents) {
+    if (!identical(_readFrom, contents)) {
+      _readFrom = contents;
+      _reading = analyseDeck(contents);
+    }
+    return _reading!;
+  }
 
   @override
   void initState() {
@@ -132,6 +149,10 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen> {
                                 child: Text('Name and format'),
                               ),
                               PopupMenuItem<String>(
+                                value: 'suggest',
+                                child: Text('Suggest from my collection'),
+                              ),
+                              PopupMenuItem<String>(
                                 value: 'want',
                                 child: Text('Want what is missing'),
                               ),
@@ -164,6 +185,13 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen> {
                       if (check != null) ...[
                         const SizedBox(height: 12),
                         _Legality(result: check),
+                      ],
+                      if (value.entries.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        DeckAnalysisCard(
+                          analysis: _readingOf(value),
+                          onSuggest: () => _suggest(context),
+                        ),
                       ],
                       for (final board in DeckBoard.values)
                         if (_shows(value, board)) ...[
@@ -225,6 +253,8 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen> {
     switch (choice) {
       case 'edit':
         await editDeck(context, ref, contents.deck);
+      case 'suggest':
+        _suggest(context);
       case 'want':
         final owned = ref.read(ownedQuantityProvider(contents.deck.game)).value;
         final missing = <String>[
@@ -259,6 +289,13 @@ class _DeckDetailScreenState extends ConsumerState<DeckDetailScreen> {
         if (gone && context.mounted) Navigator.of(context).maybePop();
     }
   }
+
+  /// Opens the list of cards the collector owns that would fit this deck.
+  void _suggest(BuildContext context) => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => DeckSuggestionsScreen(deckId: widget.deckId),
+    ),
+  );
 
   static Future<bool> _confirm(
     BuildContext context,

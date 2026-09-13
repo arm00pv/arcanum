@@ -34,6 +34,10 @@ class _DeckCardPickerState extends ConsumerState<DeckCardPicker> {
   String _query = '';
   DeckBoard _board = DeckBoard.main;
 
+  /// When true the picker offers only printings the collector already holds,
+  /// which is how a deck gets built out of a collection rather than bought.
+  bool _ownedOnly = false;
+
   @override
   void dispose() {
     _controller.dispose();
@@ -43,11 +47,20 @@ class _DeckCardPickerState extends ConsumerState<DeckCardPicker> {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final search = ref.watch(
-      searchProvider((game: widget.game, query: _query)),
-    );
     final deck = ref.watch(deckProvider(widget.deckId)).value;
     final format = deck?.deck.format;
+    final ownedQuantities =
+        ref.watch(ownedQuantityProvider(widget.game)).value ??
+        const <String, int>{};
+
+    // With the filter on, the catalogue search is bypassed entirely: what the
+    // collector owns is a known list, and browsing it beats guessing at names.
+    // It is also the only source that can answer 'what of mine fits here'.
+    final AsyncValue<List<TcgCard>> results = _ownedOnly
+        ? ref
+              .watch(ownedCardsProvider(widget.game))
+              .whenData((Map<String, TcgCard> cards) => _mine(cards))
+        : ref.watch(searchProvider((game: widget.game, query: _query)));
 
     // A format without a sideboard has no business offering one, and a deck
     // that is not a commander deck has nothing to put there.
@@ -56,7 +69,7 @@ class _DeckCardPickerState extends ConsumerState<DeckCardPicker> {
       if (format?.hasCommander ?? false) DeckBoard.commander,
       if (format?.hasSideboard ?? false) DeckBoard.side,
     ];
-    final short = _query.trim().length < 2;
+    final short = !_ownedOnly && _query.trim().length < 2;
 
     return Scaffold(
       body: Stack(
@@ -101,7 +114,9 @@ class _DeckCardPickerState extends ConsumerState<DeckCardPicker> {
                     autofocus: true,
                     onChanged: (String v) => setState(() => _query = v),
                     decoration: InputDecoration(
-                      hintText: 'Search ${widget.game.shortLabel} cards',
+                      hintText: _ownedOnly
+                          ? 'Search what you own'
+                          : 'Search ${widget.game.shortLabel} cards',
                       prefixIcon: const Icon(Icons.search_rounded, size: 20),
                       suffixIcon: _query.isEmpty
                           ? null
@@ -116,10 +131,20 @@ class _DeckCardPickerState extends ConsumerState<DeckCardPicker> {
                   ),
                 ),
               ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: PillToggle(
+                    options: const <String>['All cards', 'Only mine'],
+                    selected: _ownedOnly ? 1 : 0,
+                    onChanged: (int i) => setState(() => _ownedOnly = i == 1),
+                  ),
+                ),
+              ),
               if (boards.length > 1)
                 SliverToBoxAdapter(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                     child: PillToggle(
                       options: <String>[
                         for (final board in boards) board.label,
@@ -130,18 +155,29 @@ class _DeckCardPickerState extends ConsumerState<DeckCardPicker> {
                   ),
                 ),
               SliverAsyncView<List<TcgCard>>(
-                value: search,
+                value: results,
                 loadingHeight: 300,
-                onRetry: () => ref.invalidate(
-                  searchProvider((game: widget.game, query: _query)),
-                ),
+                onRetry: () => _ownedOnly
+                    ? ref.invalidate(ownedCardsProvider(widget.game))
+                    : ref.invalidate(
+                        searchProvider((game: widget.game, query: _query)),
+                      ),
                 isEmpty: (List<TcgCard> cards) => cards.isEmpty,
                 emptyIcon: Icons.search_rounded,
-                emptyTitle: short ? 'Search the catalogue' : 'Nothing found',
-                emptyMessage: short
-                    ? 'Two letters or more. Results come from what is '
-                          'already downloaded, plus a live lookup.'
-                    : 'Try part of the card name.',
+                emptyTitle: _ownedOnly
+                    ? (_query.isEmpty
+                          ? 'Nothing owned yet'
+                          : 'None of yours match')
+                    : (short ? 'Search the catalogue' : 'Nothing found'),
+                emptyMessage: _ownedOnly
+                    ? (_query.isEmpty
+                          ? 'Add cards to your collection and they show up '
+                                'here to build with.'
+                          : 'Try part of the name of a card you own.')
+                    : (short
+                          ? 'Two letters or more. Results come from what is '
+                                'already downloaded, plus a live lookup.'
+                          : 'Try part of the card name.'),
                 builder: (List<TcgCard> cards) => SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 120),
                   sliver: SliverList.builder(
@@ -151,6 +187,7 @@ class _DeckCardPickerState extends ConsumerState<DeckCardPicker> {
                       child: _Result(
                         card: cards[i],
                         inDeck: _inDeck(deck, cards[i].id),
+                        owned: ownedQuantities[cards[i].id] ?? 0,
                         onAdd: () => _add(cards[i]),
                       ),
                     ),
@@ -162,6 +199,20 @@ class _DeckCardPickerState extends ConsumerState<DeckCardPicker> {
         ],
       ),
     );
+  }
+
+  /// The cards the collector owns whose name matches what has been typed.
+  ///
+  /// An empty box lists everything owned, because the point of the filter is to
+  /// leaf through a collection rather than to run a query against it.
+  List<TcgCard> _mine(Map<String, TcgCard> cards) {
+    final needle = _query.trim().toLowerCase();
+    final mine = <TcgCard>[
+      for (final card in cards.values)
+        if (needle.isEmpty || card.name.toLowerCase().contains(needle)) card,
+    ];
+    mine.sort((TcgCard a, TcgCard b) => a.name.compareTo(b.name));
+    return mine;
   }
 
   /// How many copies of this printing the deck already holds, on any board.
@@ -196,18 +247,26 @@ class _Result extends StatelessWidget {
   const _Result({
     required this.card,
     required this.inDeck,
+    required this.owned,
     required this.onAdd,
   });
 
   final TcgCard card;
   final int inDeck;
+
+  /// Copies the collector holds, so a card can be placed against the stack it
+  /// would come out of.
+  final int owned;
+
   final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
     final price = card.prices.from;
-    final where = '${card.setCode.toUpperCase()} #${card.collectorNumber}';
+    final where = owned > 0
+        ? '${card.setCode.toUpperCase()} #${card.collectorNumber}  ·  you own $owned'
+        : '${card.setCode.toUpperCase()} #${card.collectorNumber}';
 
     return GlassCard(
       padding: EdgeInsets.zero,

@@ -75,6 +75,33 @@ data, adjusted for finish and (optionally) condition. The Vault shows total
 value, cost basis, unrealised P/L, allocation by colour/rarity/set, and a
 Herfindahl concentration index.
 
+**Decks** — Build a deck for any of the four games, in any of that game's
+formats, and see as you build whether it is legal, what it is worth and what you
+still have to buy. Formats are data rather than code: size, copy limit,
+singleton, sideboard, colour identity and a ban-list query are a line each, so a
+new format is a line rather than a subclass. Legality says "not checked" rather
+than showing a green tick it has not earned — Yu-Gi-Oh!'s Forbidden list and the
+single ACE SPEC a Pokémon deck may hold are named as unchecked in the app.
+
+**Deck intelligence** — The app reads a deck, not just stores it. Lands come from
+the type line, the mana curve from the mana value, and the deck's *roles* — ramp,
+card draw, removal, board wipes, counterspells, protection, tutors — from the
+words the cards actually print. Nothing is looked up in a hand-written list of
+card names, so nothing goes stale with the next set. The reading is also a
+reading: where a game's wording is unknown, or too little of the deck has rules
+text, the panel says so instead of drawing a shape out of the cards it happened
+to understand.
+
+**Building from what you own** — the card picker has an *Only mine* filter that
+turns it from a catalogue search into your own boxes, and **Suggest** ranks the
+cards you already hold for the deck in front of you. Every suggestion carries the
+numbers behind it: *"Removal — this deck reads as 2 of about 8"*, *"Goblin — 14
+cards here share the type"*, *"EDHREC rank #412"*. What the deck is short of
+outranks what is merely popular, because the deck in front of you is better
+evidence than the average deck of the same colours. Cards its format forbids,
+cards outside the commander's colour identity, and copies you have already
+committed are never offered.
+
 **Interoperability** — Import and export the collection as CSV. Export writes a
 file shaped for **Moxfield**, **Archidekt**, a plain spreadsheet, or Arcanum's own
 lossless format, which additionally carries cost basis, purchase date, finish,
