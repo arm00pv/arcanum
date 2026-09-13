@@ -242,7 +242,13 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
                     child: PillToggle(
-                      options: const ['Newest', 'Oldest', 'A-Z', 'Largest'],
+                      options: const [
+                        'Newest',
+                        'Oldest',
+                        'A-Z',
+                        'Largest',
+                        'Closest',
+                      ],
                       selected: _sort.index,
                       onChanged: (i) =>
                           setState(() => _sort = SetSort.values[i]),
@@ -258,7 +264,7 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
                   emptyMessage:
                       'Pull down to download the catalogue from ${game.dataSource}.',
                   builder: (sets) {
-                    final filtered = _applyFilters(sets);
+                    final filtered = _applyFilters(sets, completions);
                     if (filtered.isEmpty) {
                       return const SliverToBoxAdapter(
                         child: Padding(
@@ -296,7 +302,10 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
     );
   }
 
-  List<TcgSet> _applyFilters(List<TcgSet> sets) {
+  List<TcgSet> _applyFilters(
+    List<TcgSet> sets,
+    Map<String, SetCompletion> completions,
+  ) {
     final q = _query.trim().toLowerCase();
     var out = sets.where((s) => !s.digital).toList();
     if (_typeFilter != null) {
@@ -330,6 +339,16 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
         );
       case SetSort.size:
         out.sort((a, b) => b.cardCount.compareTo(a.cardCount));
+      case SetSort.progress:
+        // Sets with nothing collected sort last rather than first: a wall of
+        // 0% is not a progress report, and the point of this order is to put
+        // the achievable sets at the top.
+        double fraction(TcgSet s) => completions[s.code]?.fraction ?? 0;
+        out.sort((a, b) {
+          final byFraction = fraction(b).compareTo(fraction(a));
+          if (byFraction != 0) return byFraction;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
     }
     return out;
   }

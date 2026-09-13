@@ -79,22 +79,22 @@ class SetCompletionStrip extends ConsumerWidget {
           ),
           if (!complete) ...[
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Wanting the rest adds the cheapest version of each missing '
-                    'card to your ${game.shortLabel} wants list.',
-                    style: context.t.bodySmall?.copyWith(color: c.textTertiary),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton.tonalIcon(
-                  onPressed: () => _wantTheRest(context, ref),
-                  icon: const Icon(Icons.bookmark_add_outlined, size: 18),
-                  label: Text('Want the $missing'),
-                ),
-              ],
+            // The button goes under the copy rather than beside it: two
+            // lines of explanation in half the width is five lines, and the
+            // button that follows is squeezed to a stub.
+            Text(
+              'Every card you are missing goes on your ${game.shortLabel} '
+              'wants list, at the cheapest version of each.',
+              style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.tonalIcon(
+                onPressed: () => _wantTheRest(context, ref),
+                icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+                label: Text('Want the $missing'),
+              ),
             ),
           ],
         ],

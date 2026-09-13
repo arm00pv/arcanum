@@ -232,6 +232,17 @@ void main() {
 
       expect(added, 2);
       expect(await dao.count(CardGame.mtg), 3);
+      // The new ones come back in the order they were given, so a set added in
+      // binder order reads in binder order. Stated as a relation rather than a
+      // whole list because the already-wanted one may share their millisecond,
+      // and where it lands then is a tie-break rather than something promised.
+      final ids = await dao.ids(CardGame.mtg);
+      expect(ids, containsAll(<String>['a', 'b', 'c']));
+      expect(
+        ids.indexOf('a'),
+        lessThan(ids.indexOf('c')),
+        reason: 'a was given to addAll before c',
+      );
       await db.close();
     });
 

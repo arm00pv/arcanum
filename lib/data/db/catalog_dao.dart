@@ -19,6 +19,13 @@ enum SetSort {
 
   /// Largest sets first.
   size,
+
+  /// Furthest along first, so the sets worth finishing are the ones on screen.
+  ///
+  /// Only meaningful with a completion figure alongside, which is why the
+  /// ordering itself happens in the screen rather than in SQL: the counts come
+  /// from a table this query does not join.
+  progress,
 }
 
 /// Persistence for the card catalogue (sets and printings).
@@ -126,6 +133,10 @@ class CatalogDao {
       SetSort.oldest => 'released_at ASC NULLS LAST, name ASC',
       SetSort.name => 'name COLLATE NOCASE ASC',
       SetSort.size => 'card_count DESC',
+      // The database cannot order by completion - the counts live in the
+      // collection, not in this table - so it falls back to the default order
+      // and the screen re-sorts what comes back.
+      SetSort.progress => 'released_at DESC NULLS LAST, name ASC',
     };
 
     final rows = await _db.query(

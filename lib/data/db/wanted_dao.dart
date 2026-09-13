@@ -34,17 +34,25 @@ class WantedDao {
   ///
   /// A set can be missing a few hundred cards, and a few hundred individual
   /// inserts would each be their own transaction and their own disk flush.
+  ///
+  /// Each row is stamped one millisecond apart, counting down, so the list
+  /// still reads most-recently-wanted first while a set added in one go comes
+  /// back in the order it was given - which is binder order. Stamping them all
+  /// with the same instant left the order to the card ids, and Scryfall ids are
+  /// UUIDs, so wanting a whole set produced a list in no order at all.
   Future<int> addAll(CardGame game, Iterable<String> cardIds) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     var added = 0;
+    var step = 0;
     await _db.transaction((txn) async {
       final batch = txn.batch();
       for (final id in cardIds) {
         batch.insert('wanted_cards', <String, Object?>{
           'game': game.id,
           'card_id': id,
-          'created_at': now,
+          'created_at': now - step,
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        step += 1;
       }
       final results = await batch.commit();
       for (final r in results) {
