@@ -27,7 +27,9 @@ class AppDatabase {
   ///      percentage alerts have something stable to measure against.
   /// v4 — Lorcana set codes are folded to lowercase (see
   ///      [normaliseLorcanaCodes]).
-  static const _version = 4;
+  /// v5 — Lorcana names carrying a whole-subtitle quote artefact are rewritten
+  ///      (see [unwrapQuotedSubtitles]).
+  static const _version = 5;
 
   static AppDatabase? _instance;
 
@@ -49,6 +51,7 @@ class AppDatabase {
         if (from < 2) await _migrateV1ToV2(d);
         if (from < 3) await _migrateV2ToV3(d);
         if (from < 4) await normaliseLorcanaCodes(d);
+        if (from < 5) await unwrapQuotedSubtitles(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -255,6 +258,29 @@ class AppDatabase {
     await d.execute(
       "UPDATE OR REPLACE cards SET set_code = lower(set_code) "
       "WHERE game = 'lorcana'",
+    );
+  }
+
+  /// v5: removes a pair of quotes Lorcast wrapped around a whole subtitle.
+  ///
+  /// Twenty printings are stored as `Ariel – "Spectacular Singer"`, an artefact
+  /// of how those sets were entered rather than anything printed on the card.
+  /// Names are cleaned as they are downloaded; this rewrites the rows already on
+  /// disk, which would otherwise keep their quotes until the set happened to be
+  /// downloaded again.
+  ///
+  /// The match is deliberately narrow. `Flotsam – Ursula's "Baby"` also holds
+  /// two quotes and also ends in one, so the artefact is identified by its
+  /// shape: two quotes in the name, a quote opening the subtitle, and a quote
+  /// closing the name.
+  static Future<void> unwrapQuotedSubtitles(DatabaseExecutor d) async {
+    await d.execute(
+      'UPDATE cards SET name = '
+      "  replace(substr(name, 1, length(name) - 1), ' – \"', ' – ') "
+      "WHERE game = 'lorcana' "
+      "  AND name LIKE '% – \"%' "
+      "  AND name LIKE '%\"' "
+      "  AND length(name) - length(replace(name, '\"', '')) = 2",
     );
   }
 

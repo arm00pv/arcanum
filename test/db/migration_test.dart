@@ -308,7 +308,18 @@ void main() {
     await v2.close();
   });
 
-  group('v3 -> v4, Lorcana set codes', () {
+  /// A Lorcana printing in the Format Coconut set, named as given.
+  TcgCard lorcana(String id, String name) => TcgCard(
+        game: CardGame.lorcana,
+        id: id,
+        setCode: 'coconut',
+        setName: 'Format Coconut',
+        name: name,
+        collectorNumber: '1',
+        rarity: 'Promo',
+      );
+
+  group('Lorcana data fixes (v4 and v5)', () {
     /// A database at the current schema, which is shape-identical to v3: the
     /// step changes rows, not columns.
     Future<AppDatabase> openV4() async {
@@ -403,6 +414,56 @@ void main() {
       await AppDatabase.normaliseLorcanaCodes(db.db);
 
       expect((await dao.sets(CardGame.mtg)).single.code, 'BLB');
+      await db.close();
+    });
+
+    test('unwraps a subtitle the provider quoted whole', () async {
+      final db = await AppDatabase.openInMemory();
+      final dao = CatalogDao(db.db);
+
+      await dao.upsertCards(CardGame.lorcana, <TcgCard>[
+        lorcana('crd_coco', 'Ariel – "Spectacular Singer"'),
+        // Quotes printed inside a subtitle: two of them, and the name ends in
+        // one, so only the shape tells this apart from the artefact.
+        lorcana('crd_flotsam', 'Flotsam – Ursula\'s "Baby"'),
+        // Nothing quoted at all.
+        lorcana('crd_elsa', 'Elsa – Snow Queen'),
+      ]);
+
+      await AppDatabase.unwrapQuotedSubtitles(db.db);
+
+      final names = {
+        for (final c in await dao.cardsInSet(CardGame.lorcana, 'coconut'))
+          c.id: c.name,
+      };
+      expect(names['crd_coco'], 'Ariel – Spectacular Singer');
+      expect(names['crd_flotsam'], 'Flotsam – Ursula\'s "Baby"');
+      expect(names['crd_elsa'], 'Elsa – Snow Queen');
+      await db.close();
+    });
+
+    test('leaves other games alone', () async {
+      final db = await AppDatabase.openInMemory();
+      final dao = CatalogDao(db.db);
+
+      await dao.upsertCards(CardGame.mtg, <TcgCard>[
+        const TcgCard(
+          game: CardGame.mtg,
+          id: 'mtg-1',
+          setCode: 'blb',
+          setName: 'Bloomburrow',
+          name: 'Bello – "Bard" of the Boughs',
+          collectorNumber: '1',
+          rarity: 'rare',
+        ),
+      ]);
+
+      await AppDatabase.unwrapQuotedSubtitles(db.db);
+
+      expect(
+        (await dao.cardById(CardGame.mtg, 'mtg-1'))!.name,
+        'Bello – "Bard" of the Boughs',
+      );
       await db.close();
     });
 
