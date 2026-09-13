@@ -14,6 +14,9 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 /// live prices **and** the TCGplayer product id, which is the join key needed to
 /// pull real price history from JustTCG.
 ///
+/// The id, collector number and name the set list gives for one card.
+typedef _CardStub = ({String id, String localId, String name});
+
 /// The shape of the API drives the design here: the set list is one cheap call,
 /// but a set's card list carries only names and image URLs, so rarity, types and
 /// prices require one call per card. That is a one-time cost per set — the
@@ -42,6 +45,15 @@ class PokemonCatalog implements CardCatalog {
 
   /// Retries per request before giving up on a single card.
   static const _maxRetries = 3;
+
+  /// Upper bound on the detail calls one search will make.
+  ///
+  /// The search endpoint answers with ids and names only, so every hit worth
+  /// showing costs another request. 60 keeps a search to a handful of round
+  /// trips at [_concurrency] while covering far more than the first screen of
+  /// results; a name like "Pikachu" matches over two hundred printings, and the
+  /// user is choosing between the first few dozen of them, not the last.
+  static const _maxSearchResults = 60;
 
   final Dio _dio;
 
@@ -137,14 +149,37 @@ class PokemonCatalog implements CardCatalog {
     );
   }
 
-  /// Fetches a set's metadata and its card list in a single request.
-  Future<(TcgSet?, List<({String id, String localId, String name})>)> _setDetail(
+  /// Fetches a set's metadata, its series and its card list in one request.
+  ///
+  /// The series slug is carried back out because TCGdex's asset CDN addresses
+  /// art as `en/<serie>/<set>/<number>/high.webp`. A card whose own detail call
+  /// fails has no `image` field to copy, and a URL built from the set id alone
+  /// - `en/<set>/<number>/high.webp` - answers 404, so without the slug those
+  /// cards could never be given working art.
+  Future<({TcgSet? set, List<_CardStub> cards, String? serie})> _setDetail(
     String setId,
   ) async {
-    final res = await _retry(() => _dio.get<dynamic>('/sets/$setId'));
+    final Response<dynamic> res;
+    try {
+      res = await _retry(() => _dio.get<dynamic>('/sets/$setId'));
+    } on DioException catch (e) {
+      // An unknown set is an empty set, not a failure: the caller asked for
+      // something TCGdex does not hold, and the screen should say there is
+      // nothing rather than that something went wrong. Anything else is a real
+      // error and is typed like every other catalogue error, so the UI can
+      // report it in the same words whichever game it came from.
+      if (e.response?.statusCode == 404) {
+        return (set: null, cards: const <_CardStub>[], serie: null);
+      }
+      throw CatalogException(
+        e.message ?? 'Could not reach TCGdex',
+        statusCode: e.response?.statusCode,
+        source: sourceName,
+      );
+    }
     final data = res.data;
     if (data is! Map) {
-      return (null, <({String id, String localId, String name})>[]);
+      return (set: null, cards: const <_CardStub>[], serie: null);
     }
 
     final stub = TcgSet(
@@ -156,7 +191,10 @@ class PokemonCatalog implements CardCatalog {
     );
     final set = _setFromJson(stub, data);
 
-    final cards = <({String id, String localId, String name})>[];
+    final serie = data['serie'];
+    final serieId = serie is Map ? serie['id']?.toString() : null;
+
+    final cards = <_CardStub>[];
     final rawCards = data['cards'];
     if (rawCards is List) {
       for (final c in rawCards) {
@@ -170,7 +208,7 @@ class PokemonCatalog implements CardCatalog {
         ));
       }
     }
-    return (set, cards);
+    return (set: set, cards: cards, serie: serieId);
   }
 
   // ------------------------------------------------------------------ cards
@@ -180,7 +218,9 @@ class PokemonCatalog implements CardCatalog {
     String setCode, {
     void Function(int done, int total)? onProgress,
   }) async {
-    final (set, stubs) = await _setDetail(setCode.toLowerCase());
+    final detail = await _setDetail(setCode.toLowerCase());
+    final set = detail.set;
+    final stubs = detail.cards;
     if (stubs.isEmpty) return const [];
 
     final results = List<TcgCard?>.filled(stubs.length, null);
@@ -196,7 +236,13 @@ class PokemonCatalog implements CardCatalog {
           final res = await _retry(() => _dio.get<dynamic>('/cards/${stubs[i].id}'));
           final data = res.data;
           if (data is Map) {
-            results[i] = _cardFromJson(set, data, stubs[i].localId, stubs[i].name);
+            results[i] = _cardFromJson(
+              set,
+              data,
+              stubs[i].localId,
+              stubs[i].name,
+              serie: detail.serie,
+            );
           }
         } catch (_) {
           // A single missing card must not sink the whole set.
@@ -221,7 +267,11 @@ class PokemonCatalog implements CardCatalog {
               name: stubs[i].name,
               collectorNumber: stubs[i].localId,
               rarity: 'unknown',
-              imageUris: _images(stubs[i].id, setCode.toLowerCase()),
+              imageUris: _images(
+                stubs[i].id,
+                setCode.toLowerCase(),
+                serie: detail.serie,
+              ),
               oracleId: TcgCard.normaliseName(stubs[i].name),
             ),
     ];
@@ -249,6 +299,7 @@ class PokemonCatalog implements CardCatalog {
 
   @override
   Future<List<TcgCard>> search(String query, {int limit = 100}) async {
+    final List<dynamic> hits;
     try {
       final res = await _retry(() => _dio.get<dynamic>(
             '/cards',
@@ -259,20 +310,41 @@ class PokemonCatalog implements CardCatalog {
           ));
       final data = res.data;
       if (data is! List) return const [];
-      // The search endpoint returns only id/name/image, so details are fetched
-      // for the first page of hits to make the results actually useful.
-      final out = <TcgCard>[];
-      for (final item in data.take(24)) {
-        if (item is! Map) continue;
-        final id = item['id']?.toString();
-        if (id == null) continue;
-        final full = await fetchCardById(id);
-        if (full != null) out.add(full);
-      }
-      return out;
+      hits = data;
     } on DioException {
       return const [];
     }
+
+    // The search endpoint returns id, name and a thumbnail - enough to count
+    // the matches but not to show them with a rarity and a price - so each hit
+    // gets its own detail call. Those calls fan out across the same workers the
+    // set download uses rather than running one after another, which is the
+    // difference between a search that answers in one round trip and one that
+    // answers in thirty.
+    final ids = <String>[
+      for (final item in hits)
+        if (item is Map && item['id'] != null) item['id'].toString(),
+    ].take(limit.clamp(1, _maxSearchResults)).toList();
+    if (ids.isEmpty) return const [];
+
+    final results = List<TcgCard?>.filled(ids.length, null);
+    final queue = List<int>.generate(ids.length, (i) => i);
+    Future<void> worker() async {
+      while (true) {
+        if (queue.isEmpty) return;
+        final i = queue.removeAt(0);
+        try {
+          results[i] = await fetchCardById(ids[i]);
+        } catch (_) {
+          // One unresolvable hit must not sink the whole search.
+        }
+      }
+    }
+
+    await Future.wait(List.generate(_concurrency, (_) => worker()));
+    // Order is the provider's relevance order, not the order the workers
+    // happened to finish in.
+    return [for (final card in results) ?card];
   }
 
   @override
@@ -304,6 +376,11 @@ class PokemonCatalog implements CardCatalog {
 
   /// Builds the image URL set. TCGdex serves extension-less base URLs that need
   /// a size suffix.
+  ///
+  /// The series segment is not optional decoration: `en/base1/4/high.webp` is a
+  /// 404 and `en/base/base1/4/high.webp` is the card. A URL is only built this
+  /// way as a last resort, when the response carried no `image` of its own, and
+  /// callers that know the series are expected to pass it.
   static Map<String, String> _images(String cardId, String setId, {String? serie}) {
     final base = serie == null
         ? '$_assets/$setId/${cardId.split('-').last}'
@@ -321,6 +398,7 @@ class PokemonCatalog implements CardCatalog {
     String localId,
     String name, {
     String? setId,
+    String? serie,
   }) {
     final id = data['id']?.toString() ?? '';
     final resolvedSetId = setId ?? set?.id ?? (id.contains('-') ? id.split('-').first : '');
@@ -333,7 +411,7 @@ class PokemonCatalog implements CardCatalog {
         'normal': '$image/high.webp',
         'large': '$image/high.png',
       } else
-        ..._images(id, resolvedSetId),
+        ..._images(id, resolvedSetId, serie: serie),
     };
 
     final pricing = data['pricing'];
