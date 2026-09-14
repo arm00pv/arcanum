@@ -41,33 +41,73 @@ Backups, for the collector whose collection exists only on the phone:
   GET  /v1/backup/status
       {"ok": true, "enabled": true, "backups": N, "latest": "<ISO8601 or null>", "bytes": N, "devices": [...]}
 
-Every backup route demands an X-Arcanum-Token header matching the token in
---backup-token (~/arcanum/backup.token by default), which is read on each
-request so it can be rotated without a restart. The routes above answer to
-anyone, as they always have; these three must not, because a stranger who found
-the URL could otherwise read a collection - what the collector owns and what
-they paid for it - or overwrite the only backup of it. With no token installed
-there is no write path at all: every backup route answers 503 and stores
-nothing. The newest 14 archives are kept, so an upload adds history rather than
-replacing it.
+Every backup route demands an X-Arcanum-Token header matching a credential this
+server accepts, read on each request so it can be rotated or revoked without a
+restart. The routes above answer to anyone, as they always have; these three
+must not, because a stranger who found the URL could otherwise read a
+collection - what the collector owns and what they paid for it - or overwrite
+the only backup of it. With no credential installed there is no write path at
+all: every backup route answers 503 and stores nothing. The newest 14 archives
+are kept, so an upload adds history rather than replacing it.
+
+Identity, for the phone that has never been here:
+
+  POST /v1/auth/start    body: {"email": "..."}
+      {"ok": true, "sent": true, "expires": <unix>} and a six-digit code by
+      email, or {"ok": true, "sent": false} and nothing at all. An address that
+      is not invited gets the same answer as one that is, unless the caller
+      already holds a credential - the answer to "is this address allowed here"
+      is not a question a stranger should be able to ask.
+  POST /v1/auth/verify   body: {"email": "...", "code": "123456", "device": "label"}
+      {"ok": true, "token": "...", "device": "label"}. The token is returned
+      once and stored only as a digest, and the code is spent by the answering
+      of it.
+  GET  /v1/auth/devices
+      {"ok": true, "owner": ..., "invited": [...], "devices": [{label, created,
+       last_seen, current}], "email": true|false}
+  POST /v1/auth/revoke   body: {"device": "label"}
+      {"ok": true, "removed": true}. The root token is not a device and cannot
+      be revoked this way, so a server can never be locked out of itself.
+
+Email, once a credential is held:
+
+  GET  /v1/email/vault   ... POST, body: {"to": "..."} (defaults to the owner)
+      mails a link that opens the vault page, backed by a device of its own
+      named "vault-link" with a week to live.
+  POST /v1/email/backup
+      mails the newest archive as an attachment, exactly as it was uploaded.
+
+A vault link is a device token, and a device token opens everything the root
+token opens - the vault page included. One mechanism, one list to revoke from.
+
+Setting the server up:
+
+    python sync_server.py --set-owner you@example.com
+    python sync_server.py --invite someone@example.com
+    python sync_server.py --devices
 
 Run:
-    python sync_server.py --port 8787 --db tool/prices/prices.db
+    python sync_server.py --port 8787 --db tool/prices/prices.db \
+        --public-url https://example.com/arcanum --mail-from "Arcanum <arcanum@example.com>"
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import gzip
+import hashlib
 import hmac
 import json
 import os
+import secrets
 import shutil
 import socket
 import sqlite3
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -79,6 +119,10 @@ LORCANA_DB_PATH = ""
 YUGIOH_DB_PATH = ""
 BACKUP_TOKEN_PATH = ""
 BACKUPS_DIR = ""
+IDENTITY_PATH = ""
+RESEND_KEY_PATH = ""
+MAIL_FROM = "Arcanum <onboarding@resend.dev>"
+PUBLIC_URL = ""
 _LOCK = threading.Lock()
 _CONNS = {}
 
@@ -93,6 +137,26 @@ KEEP_BACKUPS = 14
 MAX_BACKUP_BYTES = 64 * 1024 * 1024
 DRAIN_LIMIT = 64 * 1024
 DRAIN_TIMEOUT = 0.5
+
+# Identity and email. The app has no password and no account, and this is what
+# stands in for both: a six-digit code mailed to an address the server already
+# knows, traded once for a token of the device's own.
+IDENTITY_VERSION = 1
+CODE_TTL = 10 * 60           # a code is good for ten minutes
+CODE_TRIES = 5               # and for five guesses
+CODE_COOLDOWN = 60           # one email a minute
+CODE_PER_HOUR = 5            # and five an hour
+LINK_TTL = 7 * 24 * 3600     # an emailed vault link lasts a week
+MAX_JSON_BYTES = 64 * 1024
+MAX_ATTACH_BYTES = 12 * 1024 * 1024
+MAIL_TIMEOUT = 20
+RESEND_ENDPOINT = "https://api.resend.com/emails"
+# Resend answers through Cloudflare, which refuses a request that looks like a
+# script: the default urllib agent is banned outright (error code 1010) and the
+# refusal arrives as one line of text rather than as JSON. Naming ourselves is
+# the whole fix, and it is also what lets Resend tell us apart from a stranger.
+MAIL_AGENT = "Arcanum-companion/1.0 (+https://github.com/arm00pv/arcanum)"
+_SENT = {}                   # address -> [unix seconds], deliberately in memory
 
 
 def conn(path=None):
@@ -278,6 +342,398 @@ def token_matches(supplied, expected):
     difference in timing is a way to learn a token without ever seeing it.
     """
     return hmac.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8"))
+
+
+# Identity: who may use this server, and how a phone that has never been here
+# gets a token of its own.
+#
+# Arcanum has no account and no password, and this is what it has instead. The
+# collector types the address that owns this server into a new phone, the server
+# mails a six-digit code, and the app trades that code for a device token. No
+# secret crosses the wire in a form worth stealing: the code is short-lived and
+# single-use, the token is returned exactly once and stored only as a digest,
+# and the address is the only identity Arcanum ever holds.
+#
+# An address that is not invited gets no code - and, from a caller who holds no
+# credential, not even the news that it is not invited. That second half matters
+# because this server answers on a URL strangers can find: "is this address
+# allowed here" is not a question they should be able to ask, while the
+# collector debugging their own server is told the truth.
+#
+# One small document holds all of it - the owner, the invited addresses, the
+# device tokens and the outstanding codes - because one document written
+# atomically is easier to reason about than four files that can disagree.
+
+
+def token_digest(token):
+    """What is stored for a token: the digest, never the token itself.
+
+    A copy of the identity file is then not a copy of everyone's credentials,
+    and neither is a backup of it.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def new_token():
+    """A fresh device token: the same shape as the root token, from the same CSPRNG."""
+    return secrets.token_urlsafe(32)
+
+
+def empty_identity():
+    """An identity document with nobody in it."""
+    return {"version": IDENTITY_VERSION, "owner": "", "invited": [],
+            "devices": [], "codes": []}
+
+
+def identity():
+    """Reads the identity document, or an empty one when there is none.
+
+    Unreadable counts as empty rather than as an error: a server whose identity
+    file has been deleted is one the root token still opens, which is the safe
+    way round to fail.
+    """
+    if not IDENTITY_PATH:
+        return empty_identity()
+    try:
+        with open(IDENTITY_PATH, "r", encoding="utf-8") as handle:
+            raw = json.load(handle)
+    except (OSError, ValueError):
+        return empty_identity()
+    if not isinstance(raw, dict):
+        return empty_identity()
+    doc = empty_identity()
+    doc["owner"] = str(raw.get("owner") or "").strip().lower()
+    doc["invited"] = [str(address).strip().lower()
+                      for address in (raw.get("invited") or [])
+                      if str(address).strip()]
+    doc["devices"] = [entry for entry in (raw.get("devices") or [])
+                      if isinstance(entry, dict)]
+    doc["codes"] = [entry for entry in (raw.get("codes") or [])
+                    if isinstance(entry, dict)]
+    return doc
+
+
+def save_identity(doc):
+    """Writes the identity document whole and atomically, or leaves it alone.
+
+    A half-written identity file would be a server that has forgotten who may
+    use it, so the new copy is flushed to a temporary name and moved into place
+    in one step.
+    """
+    if not IDENTITY_PATH:
+        return False
+    folder = os.path.dirname(IDENTITY_PATH)
+    try:
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+        tmp = IDENTITY_PATH + ".new"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(doc, handle, indent=1, sort_keys=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, IDENTITY_PATH)
+    except OSError:
+        return False
+    return True
+
+
+def invited_addresses(doc):
+    """Every address this server will send a code to, the owner first."""
+    found = []
+    if doc.get("owner"):
+        found.append(doc["owner"])
+    for address in doc.get("invited") or []:
+        if address not in found:
+            found.append(address)
+    return found
+
+
+def is_invited(doc, address):
+    """Whether an address may ask for a code."""
+    return address.strip().lower() in invited_addresses(doc)
+
+
+def devices_of(doc):
+    """The devices holding a token, in the order they were added."""
+    return list(doc.get("devices") or [])
+
+
+def authorized(supplied):
+    """Whether a request carries a credential this server accepts.
+
+    Two kinds count, and both are read on every request. The root token in the
+    token file is the credential typed into the app by hand, and it keeps
+    working - it is what makes a deleted identity file a working server rather
+    than a locked one. A device token is the other kind: minted from an emailed
+    code, stored only as a digest, and revocable one device at a time.
+    """
+    if not supplied:
+        return False
+    root = installed_token()
+    if root is not None and token_matches(supplied, root):
+        return True
+    digest = token_digest(supplied)
+    now = int(time.time())
+    for device in devices_of(identity()):
+        stored = str(device.get("hash") or "")
+        if not stored or not hmac.compare_digest(digest, stored):
+            continue
+        expires = int(device.get("expires") or 0)
+        # A device with no expiry is one somebody signed in on; a device with
+        # one is a link that was mailed, and a link that has run out is not a
+        # credential any more than one that was revoked.
+        return expires == 0 or expires > now
+    return False
+
+
+def touch_device(supplied):
+    """Notes that a device token was used, so the list can say when it last was.
+
+    Written at most once every five minutes per token: a note that is only ever
+    read by a person is not worth a file write on every request.
+    """
+    digest = token_digest(supplied)
+    doc = identity()
+    now = int(time.time())
+    changed = False
+    for device in doc["devices"]:
+        if hmac.compare_digest(digest, str(device.get("hash") or "")):
+            if now - int(device.get("last_seen") or 0) > 300:
+                device["last_seen"] = now
+                changed = True
+            break
+    if changed:
+        save_identity(doc)
+
+
+def add_device(label, ttl=0):
+    """Mints a device token and returns it, exactly once.
+
+    The label is the phone's own name, so the server's list of credentials reads
+    as a list of devices. Minting again under a label that already exists
+    replaces it, which is what makes "sign in again on the same phone" leave one
+    row behind rather than two.
+    """
+    token = new_token()
+    now = int(time.time())
+    doc = identity()
+    doc["devices"] = [entry for entry in doc["devices"]
+                      if str(entry.get("label") or "") != label]
+    doc["devices"].append({"label": label, "hash": token_digest(token),
+                           "created": now, "last_seen": now,
+                           "expires": (now + ttl) if ttl else 0})
+    save_identity(doc)
+    return token
+
+
+def drop_device(label):
+    """Removes one device's token. Returns whether there was one to remove."""
+    doc = identity()
+    before = len(doc["devices"])
+    doc["devices"] = [entry for entry in doc["devices"]
+                      if str(entry.get("label") or "") != label]
+    if len(doc["devices"]) == before:
+        return False
+    save_identity(doc)
+    return True
+
+
+def mail_allowed(address):
+    """Whether another code may go to this address right now, and how long to wait.
+
+    Two limits, because they stop different things: a minute between codes stops
+    somebody tapping the button ten times, and five an hour stops a stranger
+    using this server to post mail at an address that never asked for it.
+    """
+    now = time.time()
+    with _LOCK:
+        sent = [stamp for stamp in _SENT.get(address, []) if now - stamp < 3600]
+        _SENT[address] = sent
+        if sent and now - sent[-1] < CODE_COOLDOWN:
+            return False, int(CODE_COOLDOWN - (now - sent[-1])) + 1
+        if len(sent) >= CODE_PER_HOUR:
+            return False, int(3600 - (now - sent[0])) + 1
+        return True, 0
+
+
+def note_mail(address):
+    """Records that a code actually went out."""
+    with _LOCK:
+        _SENT.setdefault(address, []).append(time.time())
+
+
+def mint_code(address):
+    """Stores a fresh code for an address and returns the code itself.
+
+    Only the digest is stored, so a copy of the identity file is not a copy of
+    everybody's sign-in code. Any code still outstanding for the same address is
+    dropped: two live codes would be one more than the collector can hold in
+    their head.
+    """
+    code = "%06d" % secrets.randbelow(1000000)
+    now = int(time.time())
+    doc = identity()
+    doc["codes"] = [entry for entry in doc["codes"]
+                    if str(entry.get("email") or "") != address
+                    or int(entry.get("expires") or 0) <= now]
+    doc["codes"].append({"email": address, "hash": token_digest(code),
+                         "expires": now + CODE_TTL, "tries": 0, "at": now})
+    save_identity(doc)
+    return code
+
+
+def redeem_code(address, code):
+    """Trades a code for the right to mint a token. Returns (ok, reason).
+
+    The code is spent the moment it is answered correctly - one that stayed
+    valid after use would be a password with extra steps - and it dies after a
+    handful of wrong guesses rather than being guessed at until it opens.
+    """
+    now = int(time.time())
+    doc = identity()
+    kept = []
+    found = None
+    for entry in doc["codes"]:
+        if str(entry.get("email") or "") != address:
+            kept.append(entry)
+            continue
+        if int(entry.get("expires") or 0) <= now:
+            continue
+        if int(entry.get("tries") or 0) >= CODE_TRIES:
+            continue
+        found = entry
+    if found is None:
+        doc["codes"] = kept
+        save_identity(doc)
+        return False, "that code has expired - ask for a new one"
+    if not hmac.compare_digest(token_digest(code), str(found.get("hash") or "")):
+        found["tries"] = int(found.get("tries") or 0) + 1
+        kept.append(found)
+        doc["codes"] = kept
+        save_identity(doc)
+        if found["tries"] >= CODE_TRIES:
+            return False, "too many wrong codes - ask for a new one"
+        return False, "that code is not right"
+    doc["codes"] = kept
+    save_identity(doc)
+    return True, ""
+
+
+def resend_key():
+    """The Resend API key, read on every send so it can be rotated."""
+    if not RESEND_KEY_PATH:
+        return ""
+    try:
+        with open(RESEND_KEY_PATH, "r", encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
+
+
+def send_mail(to, subject, text, attachments=None):
+    """Sends one email through Resend, and says what happened.
+
+    Returns {"ok": True, "id": ...} or {"ok": False, "error": ...}. Resend's own
+    words are passed through rather than summarised, because the two failures a
+    collector actually meets - a sending domain that is not verified, and a
+    From address that domain does not cover - are only actionable as the
+    sentence Resend wrote about them.
+    """
+    key = resend_key()
+    if not key:
+        return {"ok": False, "error": "no mail key is installed on this server"}
+    payload = {"from": MAIL_FROM, "to": [to], "subject": subject, "text": text}
+    if attachments:
+        payload["attachments"] = attachments
+    request = urllib.request.Request(
+        RESEND_ENDPOINT,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Authorization": "Bearer " + key,
+                 "Content-Type": "application/json",
+                 "Accept": "application/json",
+                 "User-Agent": MAIL_AGENT},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=MAIL_TIMEOUT) as response:
+            body = json.loads(response.read().decode("utf-8") or "{}")
+        return {"ok": True, "id": str(body.get("id") or "")}
+    except urllib.error.HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", "replace")[:300]
+        except Exception:
+            body = ""
+        detail = ""
+        try:
+            detail = str(json.loads(body).get("message") or "")
+        except Exception:
+            detail = ""
+        # Anything at all is passed on rather than swallowed: a refusal that is
+        # not JSON is still the sentence that says what went wrong, and an empty
+        # answer would send the collector looking in the wrong place.
+        return {"ok": False, "status": exc.code,
+                "error": detail or body.strip() or ("Resend answered %d" % exc.code)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+# The one seam a test needs: everything above sends by calling this name, so a
+# test can replace it and then read the mail this server thinks it sent.
+MAIL_SENDER = send_mail
+
+
+def sign_in_mail(code):
+    """The body of the sign-in code."""
+    return ("Arcanum sign-in code\n"
+            "\n"
+            "    %s\n"
+            "\n"
+            "Type it into Arcanum on the new phone, under Settings, Backup, "
+            "Account. It works for ten minutes, and once.\n"
+            "\n"
+            "If you did not ask for this, nothing has happened: the code cannot "
+            "be used without being read, and no phone was added.\n" % code)
+
+
+def vault_link_mail(link, days):
+    """The body of the emailed vault link."""
+    return ("Arcanum: your vault, in a browser\n"
+            "\n"
+            "%s\n"
+            "\n"
+            "That link opens the newest copy of your collection as a page: what "
+            "you own, what it is worth at the last prices this phone recorded, "
+            "and the sealed shelf. It reads the copy on the server and cannot "
+            "change anything.\n"
+            "\n"
+            "It is a credential, and it lasts %d days. If it leaks, open "
+            "Settings, Backup, Account in the app and revoke the device called "
+            "\"vault-link\".\n" % (link, days))
+
+
+def backup_mail(name, counts):
+    """The body of an emailed archive."""
+    return ("Arcanum: a copy of your collection\n"
+            "\n"
+            "Attached is %s - the archive the app uploaded, exactly as it "
+            "uploaded it: holdings, purchase prices, binders, wants, alerts and "
+            "the price snapshots this phone recorded.\n"
+            "\n"
+            "%s\n"
+            "\n"
+            "It can be restored from Settings, Backup, Restore on any phone "
+            "running Arcanum.\n" % (name, counts))
+
+
+def code_expiry():
+    """When a code minted now stops working."""
+    return int(time.time()) + CODE_TTL
+
+
+def public_url():
+    """Where this server is reachable from outside, for links that go in email."""
+    return PUBLIC_URL.rstrip("/")
 
 
 def device_slug(raw):
@@ -1080,6 +1536,17 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self._send(200, backup_status(), cache="no-store")
                 return
+            if path == "/v1/auth/devices":
+                if not self._backup_gate():
+                    return
+                supplied = self.headers.get("X-Arcanum-Token") or ""
+                self._send(200, {"ok": True,
+                                 "owner": identity().get("owner", ""),
+                                 "invited": invited_addresses(identity()),
+                                 "devices": self._devices_payload(supplied),
+                                 "email": bool(resend_key())},
+                           cache="no-store")
+                return
             if path == "/v1/backup/latest":
                 if not self._backup_gate():
                     return
@@ -1142,16 +1609,17 @@ class Handler(BaseHTTPRequestHandler):
                    close=not drain_body(self.connection, self.rfile, length))
 
     def _vault_gate(self):
-        """Refuses the vault page unless the request carries the token.
+        """Refuses the vault page unless the request carries a credential.
 
         The page shows the whole collection - what is owned, what it cost, where
-        it is kept - so it is behind the same token as the backups themselves.
-        The token may arrive as a query parameter because that is the only way a
-        browser can carry it into a page; the trade is that it lands in the
-        browser's history, which is why the page itself never prints it.
+        it is kept - so it is behind the same credentials as the backups
+        themselves, and a device token opens it exactly as the root token does:
+        the emailed link mints one thing, and there is one way in. A credential
+        may arrive as a query parameter because that is the only way a browser
+        can carry one into a page; the trade is that it lands in the browser's
+        history, which is why the page itself never prints it.
         """
-        token = installed_token()
-        if token is None:
+        if not self._credentials_exist():
             self._send(503, {"ok": False, "enabled": False,
                              "error": "no token installed"}, cache="no-store")
             return False
@@ -1160,31 +1628,265 @@ class Handler(BaseHTTPRequestHandler):
             self.headers.get("X-Arcanum-Token")
             or (query.get("token") or [""])[0]
         )
-        if not token_matches(supplied, token):
+        if not authorized(supplied):
             self._send(401, {"ok": False, "error": "unauthorized"},
                        cache="no-store")
             return False
+        touch_device(supplied)
         return True
 
-    def _backup_gate(self, length=0):
-        """Refuses the request unless it carries the token that is installed.
+    def _credentials_exist(self):
+        """Whether anything can open this server at all.
 
-        Returns True when the request may go on. The two refusals say the least
-        they can: with no token file there is no write path to protect and the
-        answer is 503, and with one installed a request that does not carry it
-        is told only that - never whether the file is there, what it holds, or
-        how close a guess came.
+        The root token, typed into the app by hand, or a device token minted
+        from an emailed code. With neither, there is no write path to protect
+        and the honest answer is 503 rather than 401.
         """
-        token = installed_token()
-        if token is None:
+        return installed_token() is not None or bool(devices_of(identity()))
+
+    def _backup_gate(self, length=0):
+        """Refuses a request unless it carries a credential this server accepts.
+
+        The two refusals say the least they can: with no credential anywhere
+        there is no write path to protect and the answer is 503, and a request
+        that does not carry one is told only that - never whether a token file
+        is there, what it holds, or how close a guess came.
+        """
+        if not self._credentials_exist():
             self._refuse(503, {"ok": False, "enabled": False,
                                "error": "backups disabled"}, length)
             return False
         supplied = self.headers.get("X-Arcanum-Token") or ""
-        if not token_matches(supplied, token):
+        if not authorized(supplied):
             self._refuse(401, {"ok": False, "error": "unauthorized"}, length)
             return False
+        touch_device(supplied)
         return True
+
+    def _holds_credential(self):
+        """Whether this request already carries a credential, without refusing it.
+
+        Used to decide how much an answer may say. A stranger asking whether an
+        address is invited learns nothing; the collector, who already holds a
+        token, is told exactly what happened to their own request.
+        """
+        return authorized(self.headers.get("X-Arcanum-Token") or "")
+
+    def _json_body(self, length):
+        """Reads a small JSON object body, or None when it is not one."""
+        if length <= 0 or length > MAX_JSON_BYTES:
+            return None
+        try:
+            raw = self.rfile.read(length)
+        except OSError:
+            return None
+        try:
+            value = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return None
+        return value if isinstance(value, dict) else None
+
+    def _address_of(self, body):
+        """The address a request is about: the one it names, or the owner's."""
+        named = str(body.get("to") or body.get("email") or "").strip().lower()
+        if named:
+            return named
+        known = invited_addresses(identity())
+        return known[0] if known else ""
+
+    def _devices_payload(self, supplied=""):
+        """The devices holding a token, as the app draws them."""
+        digest = token_digest(supplied) if supplied else ""
+        out = []
+        for entry in devices_of(identity()):
+            stored = str(entry.get("hash") or "")
+            out.append({
+                "label": str(entry.get("label") or "phone"),
+                "created": int(entry.get("created") or 0),
+                "last_seen": int(entry.get("last_seen") or 0),
+                "expires": int(entry.get("expires") or 0),
+                "current": bool(digest) and hmac.compare_digest(digest, stored),
+            })
+        return out
+
+    def _auth_start(self, length):
+        """Mails a sign-in code, and tells a stranger nothing they can use.
+
+        An address that is not invited gets the same 200 as one that is, and so
+        does an address that asked a moment ago. Only a caller who already holds
+        a credential - the collector, on the phone they are signed in on - is
+        told which of those happened.
+        """
+        if resend_key() == "":
+            self._refuse(503, {"ok": False,
+                               "error": "email is not set up on this server"},
+                         length)
+            return
+        body = self._json_body(length)
+        if body is None:
+            self._refuse(400, {"ok": False, "error": "expected a JSON body"},
+                         length)
+            return
+        address = str(body.get("email") or "").strip().lower()
+        known = self._holds_credential()
+        if "@" not in address or "." not in address.split("@")[-1]:
+            self._refuse(400, {"ok": False,
+                               "error": "that is not an email address"}, length)
+            return
+        doc = identity()
+        if not is_invited(doc, address):
+            payload = {"ok": True, "sent": False}
+            if known:
+                payload["error"] = "that address is not invited to this server"
+                payload["invited"] = invited_addresses(doc)
+            self._send(200, payload, cache="no-store")
+            return
+        allowed, wait = mail_allowed(address)
+        if not allowed:
+            payload = {"ok": True, "sent": False, "retry_in": wait}
+            if known:
+                payload["error"] = "a code was sent a moment ago"
+            self._send(200, payload, cache="no-store")
+            return
+        code = mint_code(address)
+        result = MAIL_SENDER(address, "Arcanum: your sign-in code",
+                             sign_in_mail(code))
+        if not result.get("ok"):
+            payload = {"ok": True, "sent": False,
+                       "error": str(result.get("error") or "the mail could not be sent")}
+            self._send(200, payload, cache="no-store")
+            return
+        note_mail(address)
+        payload = {"ok": True, "sent": True, "expires": code_expiry(),
+                   "to": address}
+        if known:
+            payload["id"] = result.get("id", "")
+        self._send(200, payload, cache="no-store")
+
+    def _auth_verify(self, length):
+        """Trades a code for this device's own token, returned exactly once."""
+        body = self._json_body(length)
+        if body is None:
+            self._refuse(400, {"ok": False, "error": "expected a JSON body"},
+                         length)
+            return
+        address = str(body.get("email") or "").strip().lower()
+        code = str(body.get("code") or "").strip().replace(" ", "")
+        label = device_slug(body.get("device") or "") or "phone"
+        if not code:
+            self._refuse(400, {"ok": False, "error": "no code was sent"}, length)
+            return
+        ok, reason = redeem_code(address, code)
+        if not ok:
+            self._refuse(401, {"ok": False, "error": reason}, length)
+            return
+        token = add_device(label)
+        self._send(200, {"ok": True, "token": token, "device": label,
+                         "devices": self._devices_payload(token)},
+                   cache="no-store")
+
+    def _auth_revoke(self, length):
+        """Takes one device's token away."""
+        if not self._backup_gate(length):
+            return
+        body = self._json_body(length) or {}
+        label = device_slug(body.get("device") or "")
+        if not label:
+            self._refuse(400, {"ok": False, "error": "no device named"}, length)
+            return
+        supplied = self.headers.get("X-Arcanum-Token") or ""
+        removed = drop_device(label)
+        self._send(200, {"ok": True, "removed": removed,
+                         "devices": self._devices_payload(supplied)},
+                   cache="no-store")
+
+    def _email_route(self, path, length):
+        """Emails the vault link, or the newest archive, to an invited address.
+
+        Both are credentials or collections leaving the server by mail, so both
+        demand a credential to ask for. The vault link mints a device of its own
+        called "vault-link" with a week to live, which is what makes a link that
+        leaks a button to press rather than a token to rotate by hand.
+        """
+        if not self._backup_gate(length):
+            return
+        if resend_key() == "":
+            self._refuse(503, {"ok": False,
+                               "error": "email is not set up on this server"},
+                         length)
+            return
+        body = self._json_body(length) or {}
+        address = self._address_of(body)
+        doc = identity()
+        if not address:
+            self._refuse(400, {"ok": False, "error": "no address to send to"},
+                         length)
+            return
+        if not is_invited(doc, address):
+            # The caller holds a credential, so this is the collector asking
+            # about their own server and the answer may name what is invited.
+            self._refuse(400, {"ok": False,
+                               "error": "that address is not invited",
+                               "invited": invited_addresses(doc)}, length)
+            return
+
+        if path == "/v1/email/vault":
+            base = public_url()
+            if not base:
+                self._refuse(503, {"ok": False,
+                                   "error": "this server has no public URL "
+                                            "configured, so it cannot build a link"},
+                             length)
+                return
+            token = add_device("vault-link", ttl=LINK_TTL)
+            result = MAIL_SENDER(address, "Arcanum: your vault link",
+                                 vault_link_mail("%s/vault?token=%s" % (base, token),
+                                                 LINK_TTL // 86400))
+            self._send_mail_result(result, address, length)
+            return
+
+        found = _latest_archive()
+        if found is None:
+            self._refuse(404, {"ok": False, "error": "no backup to send"}, length)
+            return
+        _archive, name = found
+        try:
+            size = os.path.getsize(os.path.join(BACKUPS_DIR, name))
+        except OSError:
+            size = 0
+        if size > MAX_ATTACH_BYTES:
+            self._refuse(413, {"ok": False, "error": "that archive is too large "
+                                                     "to attach", "bytes": size},
+                         length)
+            return
+        try:
+            with open(os.path.join(BACKUPS_DIR, name), "rb") as handle:
+                encoded = base64.b64encode(handle.read()).decode("ascii")
+        except OSError as exc:
+            self._refuse(500, {"ok": False, "error": str(exc)}, length)
+            return
+        counts = ""
+        try:
+            found_archive, _n = found
+            counts = "It holds %s rows across %d sections." % (
+                "{:,}".format(sum(len(rows) for rows in found_archive.get("tables", {}).values())),
+                len(found_archive.get("tables", {})))
+        except Exception:
+            counts = ""
+        result = MAIL_SENDER(address, "Arcanum: your backup",
+                             backup_mail(name, counts),
+                             attachments=[{"filename": name, "content": encoded}])
+        self._send_mail_result(result, address, length)
+
+    def _send_mail_result(self, result, address, length):
+        """Answers what the mailer said, in the mailer's own words."""
+        if not result.get("ok"):
+            self._refuse(502, {"ok": False, "to": address,
+                               "error": str(result.get("error") or "not sent")},
+                         length)
+            return
+        self._send(200, {"ok": True, "sent": True, "to": address,
+                         "id": result.get("id", "")}, cache="no-store")
 
     def do_POST(self):
         path = unquote(urlparse(self.path).path)
@@ -1193,6 +1895,18 @@ class Handler(BaseHTTPRequestHandler):
                 length = int(self.headers.get("Content-Length") or "")
             except ValueError:
                 length = -1
+            if path == "/v1/auth/start":
+                self._auth_start(length)
+                return
+            if path == "/v1/auth/verify":
+                self._auth_verify(length)
+                return
+            if path == "/v1/auth/revoke":
+                self._auth_revoke(length)
+                return
+            if path in ("/v1/email/vault", "/v1/email/backup"):
+                self._email_route(path, length)
+                return
             if path != "/v1/backup":
                 self._refuse(404, {"error": "not found", "path": path}, length)
                 return
@@ -1297,6 +2011,7 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     global DB_PATH, POKEMON_DB_PATH, LORCANA_DB_PATH, YUGIOH_DB_PATH
     global BACKUP_TOKEN_PATH, BACKUPS_DIR, SEALED_DIR, _STATS
+    global IDENTITY_PATH, RESEND_KEY_PATH, MAIL_FROM, PUBLIC_URL
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser()
     default_db = os.path.join(here, "prices", "prices.db")
@@ -1334,7 +2049,81 @@ def main():
         default=os.path.join(os.path.expanduser("~"), "arcanum", "data", "sealed"),
         help="where set product lists and their prices are cached",
     )
+    ap.add_argument(
+        "--identity",
+        default=os.path.join(os.path.expanduser("~"), "arcanum", "identity.json"),
+        help="who may use this server: the owner address, invited addresses, "
+             "the device tokens and the codes outstanding",
+    )
+    ap.add_argument(
+        "--resend-key",
+        default=os.path.join(os.path.expanduser("~"), "arcanum", "resend.token"),
+        help="file holding the Resend API key that sign-in codes are sent with; "
+             "while it is missing the sign-in routes answer 503",
+    )
+    ap.add_argument(
+        "--mail-from",
+        default=os.environ.get("ARCANUM_MAIL_FROM", "Arcanum <onboarding@resend.dev>"),
+        help="the From line of every email this server sends; Resend only "
+             "accepts a domain that is verified in its dashboard",
+    )
+    ap.add_argument(
+        "--public-url",
+        default=os.environ.get("ARCANUM_PUBLIC_URL", ""),
+        help="where this server is reachable from outside, used to build the "
+             "vault link that is emailed; without it that route answers 503",
+    )
+    ap.add_argument(
+        "--set-owner",
+        default="",
+        help="store this address as the owner of the server and exit, which is "
+             "the one address a sign-in code can be sent to at all",
+    )
+    ap.add_argument(
+        "--invite",
+        default="",
+        help="add an address to the invited list and exit",
+    )
+    ap.add_argument(
+        "--devices",
+        action="store_true",
+        help="list the devices holding a token and exit",
+    )
     args = ap.parse_args()
+
+    # Identity does not need a price database, so the commands that set it up
+    # run before the database is looked for: a server is given an owner once,
+    # long before it is asked to serve anything.
+    IDENTITY_PATH = args.identity
+    RESEND_KEY_PATH = args.resend_key
+
+    # The administrative commands. They exist because the first thing a server
+    # needs is an owner, and asking somebody to hand-write JSON to get one is
+    # how a feature ends up unused.
+    if args.set_owner or args.invite:
+        doc = identity()
+        if args.set_owner:
+            doc["owner"] = args.set_owner.strip().lower()
+        if args.invite and args.invite.strip().lower() not in doc["invited"]:
+            doc["invited"].append(args.invite.strip().lower())
+        if not save_identity(doc):
+            print("could not write " + IDENTITY_PATH, file=sys.stderr)
+            return 1
+        print("owner:   " + (doc["owner"] or "(none)"))
+        print("invited: " + (", ".join(doc["invited"]) or "(none)"))
+        return 0
+    if args.devices:
+        doc = identity()
+        print("owner:   " + (doc["owner"] or "(none)"))
+        print("invited: " + (", ".join(doc["invited"]) or "(none)"))
+        for entry in devices_of(doc):
+            print("  {:<16} added {}  last seen {}".format(
+                str(entry.get("label") or "phone"),
+                datetime.fromtimestamp(int(entry.get("created") or 0),
+                                       timezone.utc).isoformat(),
+                datetime.fromtimestamp(int(entry.get("last_seen") or 0),
+                                       timezone.utc).isoformat()))
+        return 0
 
     if not os.path.exists(args.db):
         print("database not found: " + args.db, file=sys.stderr)
@@ -1349,7 +2138,12 @@ def main():
     BACKUPS_DIR = args.backups_dir
     BACKUP_TOKEN_PATH = args.backup_token
     SEALED_DIR = args.sealed_dir
+    IDENTITY_PATH = args.identity
+    RESEND_KEY_PATH = args.resend_key
+    MAIL_FROM = args.mail_from
+    PUBLIC_URL = args.public_url
     _STATS = None
+
     s = stats()
     print("Arcanum Sync serving {:,} printings / {:,} points ({} days) on http://{}:{}".format(
         s["printings"], s["points"], s["days"], args.host, args.port))
@@ -1365,12 +2159,22 @@ def main():
             print("  (no {} database yet - run {} to build one)".format(game, poller))
     print("  sealed product: cached in {} ({} categories)".format(
         args.sealed_dir, len(TCGCSV_CATEGORIES)))
-    if installed_token() is None:
+    if installed_token() is None and not devices_of(identity()):
         print("  backups disabled: no token in {} (backup routes answer 503)".format(
             args.backup_token))
     else:
         print("  backups enabled: keeping the newest {} archives in {}".format(
             KEEP_BACKUPS, args.backups_dir))
+    doc = identity()
+    print("  identity: {} (owner {}, {} invited, {} devices)".format(
+        args.identity, doc["owner"] or "unset", len(doc["invited"]),
+        len(doc["devices"])))
+    if not resend_key():
+        print("  email disabled: no Resend key in {} (sign-in answers 503)".format(
+            args.resend_key))
+    else:
+        print("  email enabled: sending as {} ({} vault links)".format(
+            args.mail_from, "with a public URL" if public_url() else "no public URL set"))
     ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
     return 0
 

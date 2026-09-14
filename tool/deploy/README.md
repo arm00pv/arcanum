@@ -27,6 +27,11 @@ Paths on the host:
       data/prices.db                  Magic, ~1.8 GB
       data/pokemon_prices.db          Pokemon, sampled daily
       data/mtgjson/                   the two MTGJSON artifacts, ~380 MB
+      identity.json                   who may use this server: the owner address,
+                                      invited addresses, device tokens (hashed)
+                                      and the codes outstanding
+      resend.token                    the Resend API key sign-in codes are sent
+                                      with, mode 600
       logs/                           one log per unit
 
 ## Pieces
@@ -43,6 +48,43 @@ The listening address is the docker bridge gateway on purpose. The host has a
 public address and no host firewall, so binding every interface would publish
 the database to the internet in cleartext; bound this way only the Caddy
 container can reach it, and everything public arrives over TLS.
+
+## Signing in without a password
+
+The app has no account and no password, and it does not need one: the companion
+holds exactly one collection, so "who are you" is a question with a short answer.
+A new phone asks for a code, the server mails it, and the code buys a token for
+that device.
+
+    python sync_server.py --set-owner info@marquezhv.com     # the one address that counts
+    python sync_server.py --invite someone@example.com       # anyone else allowed in
+    python sync_server.py --devices                          # what holds a token now
+
+The root token in `backup.token` keeps working and is not a device: it cannot be
+revoked through the app, which is what stops a server being locked out of itself.
+A device token opens everything the root token opens, the vault page included,
+which is why an emailed vault link is just another device with a week to live.
+
+Email goes out through Resend. **The sending domain is not verified yet**, so
+codes can only reach `info@marquezhv.com` — the address that owns the Resend
+account. To mail any address, add these three records to the `marquezhv.com`
+zone (its nameservers are `ns1/ns2.hosting.businessidentity.llc`, which is not
+where this repository lives), then press Verify in the Resend dashboard:
+
+| Type | Name | Value |
+| --- | --- | --- |
+| TXT | `resend._domainkey` | the `p=MIGfMA0...` key from the Resend domain page |
+| MX  | `send` | `feedback-smtp.us-east-1.amazonses.com` (priority 10) |
+| TXT | `send` | `v=spf1 include:amazonses.com ~all` |
+
+Until that happens the service runs with Resend's shared test sender. Once the
+domain verifies, uncommenting the `ARCANUM_MAIL_FROM` line in
+`arcanum-sync.service` and restarting is the whole change.
+
+Two things about Resend are worth knowing before debugging it: it answers through
+Cloudflare, which refuses requests that look like a script (so the companion
+names itself, and a bare `urllib` gets `error code: 1010`), and the refusal that
+matters — an unverified domain — arrives as JSON with a `message` that says so.
 
 ## Why three of the four games are sampled rather than backfilled
 

@@ -14,7 +14,13 @@ Type=simple
 User=zixen
 Group=zixen
 WorkingDirectory=/home/zixen/arcanum
-ExecStart=/usr/bin/python3 /home/zixen/arcanum/sync_server.py --host 172.19.0.1 --port 8787 --db /home/zixen/arcanum/data/prices.db --pokemon-db /home/zixen/arcanum/data/pokemon_prices.db --lorcana-db /home/zixen/arcanum/data/lorcana_prices.db --yugioh-db /home/zixen/arcanum/data/yugioh_prices.db --backup-token /home/zixen/arcanum/backup.token --backups-dir /home/zixen/arcanum/backups
+# --public-url is what the emailed vault link is built from; without it that
+# route refuses rather than mailing a link nobody can open. The From line is
+# left at Resend's shared test sender until arcanum@marquezhv.com's domain is
+# verified in the Resend dashboard, at which point uncommenting the line below
+# is the whole change.
+ExecStart=/usr/bin/python3 /home/zixen/arcanum/sync_server.py --host 172.19.0.1 --port 8787 --db /home/zixen/arcanum/data/prices.db --pokemon-db /home/zixen/arcanum/data/pokemon_prices.db --lorcana-db /home/zixen/arcanum/data/lorcana_prices.db --yugioh-db /home/zixen/arcanum/data/yugioh_prices.db --backup-token /home/zixen/arcanum/backup.token --backups-dir /home/zixen/arcanum/backups --identity /home/zixen/arcanum/identity.json --resend-key /home/zixen/arcanum/resend.token --public-url https://zapp.sytes.net/arcanum
+# Environment=ARCANUM_MAIL_FROM=Arcanum <arcanum@marquezhv.com>
 Restart=always
 RestartSec=5
 StandardOutput=append:/home/zixen/arcanum/logs/sync.log
