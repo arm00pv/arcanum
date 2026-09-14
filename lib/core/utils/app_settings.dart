@@ -78,6 +78,7 @@ class AppSettings extends ChangeNotifier {
   static const _kBackupEndpoint = 'backup_endpoint';
   static const _kBackupToken = 'backup_token';
   static const _kLockEnabled = 'lock_enabled';
+  static const _kDeviceLabel = 'device_label';
   static const _kLastBackupAt = 'last_backup_at';
   static const _kAutoBackupCadence = 'auto_backup_cadence';
   static const _kLastAutoBackupAt = 'last_auto_backup_at';
@@ -391,6 +392,28 @@ class AppSettings extends ChangeNotifier {
 
   set lockEnabled(bool v) {
     _prefs.setBool(_kLockEnabled, v);
+    notifyListeners();
+  }
+
+  /// What this device calls itself in a backup's filename.
+  ///
+  /// Two devices uploading under the same name is the one thing that makes a
+  /// second phone invisible: the server would keep both archives and the app
+  /// could not tell which of them was its own. The default is generated once,
+  /// from the clock and a random draw, and stays put afterwards.
+  String get deviceLabel {
+    final String stored = (_prefs.getString(_kDeviceLabel) ?? '').trim();
+    if (stored.isNotEmpty) return stored;
+    final int seed = DateTime.now().microsecondsSinceEpoch;
+    final String tail = '${seed.toRadixString(36)}0000'.substring(0, 4);
+    final String generated = 'arcanum-$tail';
+    _prefs.setString(_kDeviceLabel, generated);
+    return generated;
+  }
+
+  set deviceLabel(String v) {
+    final String clean = v.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '');
+    _prefs.setString(_kDeviceLabel, clean.isEmpty ? 'arcanum' : clean);
     notifyListeners();
   }
 

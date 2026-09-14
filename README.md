@@ -114,7 +114,42 @@ It never guesses silently. A row whose printing had to be inferred from the name
 alone is flagged for review, and a row that matches nothing is reported rather
 than filed against the wrong card.
 
-**Analysis** — A real quantitative engine, computed entirely on the phone.
+**Scanning** — Point the camera at a card and Arcanum reads the set code, the
+collector number and the name off the picture, then checks them against the
+catalogue it already holds: a set and a number it believes outright, a name on
+its own it asks about rather than decides. What it read is shown before anything
+is saved, because a scanner that files silently is a scanner that files a reprint
+as the original. All four games, and no network — the reader is ML Kit's bundled
+Latin model.
+
+**Sealed product** — Booster boxes, packs, bundles and precons, counted and
+valued like anything else, with real TCGplayer market prices read through your
+own companion. A box is not a card, so it is its own table and its own section of
+the valuation report rather than thirty-six packs folded into a card count.
+
+**A lock that is your phone's own** — Fingerprint, face or screen lock, off by
+default, covering the whole app and asking again after a minute in the background.
+Arcanum has no password of its own. The backup token and the price-history key
+live in the Android Keystore, not in the app's preferences.
+
+**Other devices** — The companion records which device wrote each backup, so a
+second phone is visible rather than invisible: Arcanum shows what merging the
+other copy would add before it adds it, and merging never removes anything,
+never lowers a count and never overwrites what you paid.
+
+**The vault in a browser** — The same companion serves a read-only page of the
+newest backup at `/vault`, behind the same token: cards, printings, value at the
+last prices the app recorded, the portfolio curve, the dearest stacks and the
+sealed shelf. No JavaScript, no account, nothing that can change anything.
+
+**Analysis** — A real quantitative engine, computed entirely on the phone, and
+**checked**. The Forecast accuracy page rewinds the trend reading and the forecast
+over the price history this phone recorded and scores them against what actually
+happened, beside two baselines that know nothing: standing still, and always
+calling the commonest move. On this collection the reading has been right about
+direction 41% of the time against 38% for always calling it flat and 33% for
+guessing blind, and the forecast's typical miss has been worse than assuming no
+movement — which is what the page says, in those words.
 
 ---
 

@@ -359,16 +359,68 @@ def discard(path):
         pass
 
 
+def device_of(name):
+    """The device an archive came from, read out of its name.
+
+    Empty when the upload carried no device label - an older build, or a client
+    that did not say - which is its own honest answer: the archive exists and
+    the server cannot say which phone wrote it.
+    """
+    body = name[len(BACKUP_PREFIX):-len(BACKUP_SUFFIX)]
+    stamp_end = BACKUP_STAMP_WIDTH
+    if len(body) <= stamp_end:
+        return ""
+    tail = body[stamp_end:]
+    if tail.startswith("-"):
+        tail = tail[1:]
+    if tail[:1].isdigit() or tail.startswith("."):
+        # Only ",2" and similar: no device label was sent.
+        return ""
+    parts = tail.split(".")
+    return parts[0] if parts else ""
+
+
+def device_summary(names):
+    """One row per device that has written to this server, newest first.
+
+    This is what makes two phones possible: the app can see that a second device
+    has uploaded something newer than its own last upload, and say so, without
+    any of the two devices ever talking to each other.
+    """
+    seen = {}
+    for name in names:
+        label = device_of(name) or "unnamed"
+        when = archive_time(name)
+        try:
+            size = os.path.getsize(os.path.join(BACKUPS_DIR, name))
+        except OSError:
+            size = 0
+        row = seen.get(label)
+        if row is None:
+            seen[label] = {"device": label, "backups": 1, "bytes": size,
+                           "latest": when.isoformat() if when else None}
+            continue
+        row["backups"] += 1
+        row["bytes"] = size
+        if when is not None:
+            row["latest"] = when.isoformat()
+    rows = list(seen.values())
+    rows.sort(key=lambda r: r.get("latest") or "", reverse=True)
+    return rows
+
+
 def backup_status():
     """What the app shows about the backups it has made.
 
     "bytes" is the size of the newest archive - the same figure an upload
     reports for what it just stored - and "latest" is when it was uploaded,
-    read back out of its name.
+    read back out of its name. "devices" lists every device that has written
+    here, which is how the app learns that another phone has something newer.
     """
     names = backup_files()
     if not names:
-        return {"ok": True, "enabled": True, "backups": 0, "latest": None, "bytes": 0}
+        return {"ok": True, "enabled": True, "backups": 0, "latest": None,
+                "bytes": 0, "devices": []}
     newest = names[-1]
     try:
         size = os.path.getsize(os.path.join(BACKUPS_DIR, newest))
@@ -381,6 +433,7 @@ def backup_status():
         "backups": len(names),
         "latest": when.isoformat() if when else None,
         "bytes": size,
+        "devices": device_summary(names),
     }
 
 

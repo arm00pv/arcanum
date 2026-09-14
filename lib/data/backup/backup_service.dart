@@ -5,8 +5,45 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 
 import 'package:arcanum/core/utils/app_settings.dart';
+import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/data/backup/backup_archive.dart';
 import 'package:arcanum/data/db/app_database.dart';
+import 'package:arcanum/domain/sync/merge.dart';
+
+/// One device that has written to the companion.
+class BackupDevice {
+  /// Creates a device row.
+  const BackupDevice({
+    required this.label,
+    required this.latest,
+    required this.backups,
+    required this.bytes,
+  });
+
+  /// What the device called itself when it uploaded.
+  final String label;
+
+  /// When it last did.
+  final DateTime? latest;
+
+  /// How many archives it has on the server.
+  final int backups;
+
+  /// The size of its newest one.
+  final int bytes;
+
+  static BackupDevice? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final String label = (raw['device'] ?? '').toString();
+    if (label.isEmpty) return null;
+    return BackupDevice(
+      label: label,
+      latest: DateTime.tryParse(raw['latest']?.toString() ?? '')?.toLocal(),
+      backups: (raw['backups'] as num?)?.toInt() ?? 0,
+      bytes: (raw['bytes'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
 
 /// What the companion says about the backups it holds.
 class BackupStatus {
@@ -15,6 +52,7 @@ class BackupStatus {
     required this.count,
     required this.latest,
     required this.bytes,
+    this.devices = const <BackupDevice>[],
   });
 
   /// False when the server has no token file, which is its safe default: the
@@ -23,6 +61,12 @@ class BackupStatus {
   final int count;
   final DateTime? latest;
   final int bytes;
+
+  /// Every device that has written here, newest first.
+  ///
+  /// This is what makes a second phone visible: without it the app can only say
+  /// that a backup exists, never that it came from somewhere else.
+  final List<BackupDevice> devices;
 
   static const unknown = BackupStatus(
     enabled: false,
@@ -33,12 +77,72 @@ class BackupStatus {
 
   static BackupStatus fromJson(Object? raw) {
     if (raw is! Map) return unknown;
+    final List<BackupDevice> devices = <BackupDevice>[
+      for (final Object? row
+          in (raw['devices'] as List<Object?>?) ?? const <Object?>[])
+        if (BackupDevice.fromJson(row) case final BackupDevice device) device,
+    ];
     return BackupStatus(
       enabled: raw['enabled'] == true,
       count: (raw['backups'] as num?)?.toInt() ?? 0,
       latest: DateTime.tryParse(raw['latest']?.toString() ?? '')?.toLocal(),
       bytes: (raw['bytes'] as num?)?.toInt() ?? 0,
+      devices: devices,
     );
+  }
+
+  /// Whether some device other than [mine] has written here.
+  bool hasOtherDevice(String mine) =>
+      devices.any((BackupDevice d) => d.label != mine);
+}
+
+/// What one merge added, for the sentence the collector reads afterwards.
+class MergeReport {
+  /// Creates a report.
+  const MergeReport({
+    required this.addedRows,
+    required this.raisedRows,
+    required this.pricePoints,
+    required this.snapshots,
+  });
+
+  /// Rows this phone did not have.
+  final int addedRows;
+
+  /// Holdings whose count went up.
+  final int raisedRows;
+
+  /// Price points the other device had recorded and this one had not.
+  final int pricePoints;
+
+  /// Portfolio days added to the chart.
+  final int snapshots;
+
+  /// Nothing changed at all, which is worth saying out loud rather than
+  /// reporting a successful merge of zero things.
+  bool get nothingChanged =>
+      addedRows == 0 && raisedRows == 0 && pricePoints == 0 && snapshots == 0;
+
+  /// The sentence Settings shows after one.
+  String get summary {
+    if (nothingChanged) {
+      return 'Both devices already agree; nothing needed adding.';
+    }
+    final List<String> parts = <String>[
+      if (addedRows > 0)
+        '${Fmt.count(addedRows)} '
+            '${addedRows == 1 ? "holding" : "holdings"} added',
+      if (raisedRows > 0)
+        '${Fmt.count(raisedRows)} '
+            '${raisedRows == 1 ? "count" : "counts"} raised',
+      if (pricePoints > 0)
+        '${Fmt.count(pricePoints)} price '
+            '${pricePoints == 1 ? "point" : "points"} added',
+      if (snapshots > 0)
+        '${Fmt.count(snapshots)} portfolio '
+            '${snapshots == 1 ? "day" : "days"} added',
+    ];
+    return '${parts.join(', ')}. Nothing was removed.';
   }
 }
 
@@ -307,5 +411,156 @@ class BackupService {
     for (final entry in archive.settings.entries) {
       await _settings.writeRawPreference(entry.key, entry.value);
     }
+  }
+
+  /// Works out what another device's newest copy would add.
+  ///
+  /// Builds this phone's own archive, downloads the server's newest one and
+  /// hands both to [planMerge]. Nothing is written: the plan is what the
+  /// collector is shown before they agree to anything.
+  Future<(MergePlan, BackupArchive)> planSync({
+    required String appVersion,
+  }) async {
+    final BackupArchive local = await build(appVersion: appVersion);
+    final BackupArchive remote = await downloadLatest();
+    return (planMerge(local, remote), remote);
+  }
+
+  /// Adds what another device has, and takes nothing away.
+  ///
+  /// The counterpart to [restore], and deliberately not the same thing. A
+  /// restore replaces a collection, which is right on a new phone and wrong when
+  /// the other copy belongs to a second device that has been used in parallel.
+  /// A merge is additive by construction: no row is deleted, no quantity goes
+  /// down, and no purchase price the collector recorded is overwritten. Two
+  /// devices each holding half a collection end up with the whole of it.
+  ///
+  /// All or nothing, in one transaction, for the same reason a restore is: a
+  /// merge that stopped half way would leave a collection that is neither of the
+  /// two it came from.
+  Future<MergeReport> merge(BackupArchive archive) async {
+    var added = 0;
+    var raised = 0;
+    var history = 0;
+    var snapshots = 0;
+    final int now = DateTime.now().millisecondsSinceEpoch;
+
+    await _db.transaction((txn) async {
+      for (final String table in const <String>[
+        'collection_entries',
+        'sealed_products',
+        'wanted_cards',
+        'alerts',
+      ]) {
+        final List<Map<String, Object?>> incoming =
+            archive.tables[table] ?? const <Map<String, Object?>>[];
+        if (incoming.isEmpty) continue;
+        final Map<String, Map<String, Object?>> mine =
+            <String, Map<String, Object?>>{
+              for (final Map<String, Object?> row in await txn.query(table))
+                rowKeyOf(table, row): row,
+            };
+        for (final Map<String, Object?> row in incoming) {
+          final Map<String, Object?>? have = mine[rowKeyOf(table, row)];
+          if (have == null) {
+            await txn.insert(
+              table,
+              row,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+            added++;
+            continue;
+          }
+          final int theirs = _quantityIn(row);
+          final int ours = _quantityIn(have);
+          if (theirs <= ours) continue;
+          // Only the count moves, and only upwards. The binder, the note, the
+          // purchase price and the created-at stamp on this phone are the
+          // collector's own record of the thing, and a second device's silence
+          // about them is not a reason to replace them.
+          await txn.update(
+            table,
+            <String, Object?>{
+              'quantity': theirs,
+              if (table == 'collection_entries') ...<String, Object?>{
+                'updated_at': now,
+                if (have['purchase_price'] == null &&
+                    row['purchase_price'] != null)
+                  'purchase_price': row['purchase_price'],
+                if (have['purchase_date'] == null &&
+                    row['purchase_date'] != null)
+                  'purchase_date': row['purchase_date'],
+                if (have['for_trade'] != 1 && row['for_trade'] == 1)
+                  'for_trade': 1,
+              },
+            },
+            where: 'id = ?',
+            whereArgs: <Object?>[have['id']],
+          );
+          raised++;
+        }
+      }
+
+      // Price history is the one thing nothing can reconstruct, so every point
+      // the other device recorded is kept. A day this phone already has is left
+      // exactly as it is.
+      //
+      // What is missing is worked out by reading the stored keys first rather
+      // than by counting insert return values: price_history is a WITHOUT ROWID
+      // table, and sqflite reports 0 for every insert into one of those whether
+      // it stored the row or not. That difference is a merge which says it added
+      // eight hundred price points against one which added them and said
+      // nothing.
+      history += await _addMissing(
+        txn,
+        'price_history',
+        archive.tables['price_history'] ?? const <Map<String, Object?>>[],
+      );
+      snapshots += await _addMissing(
+        txn,
+        'portfolio_snapshots',
+        archive.tables['portfolio_snapshots'] ?? const <Map<String, Object?>>[],
+      );
+    });
+
+    return MergeReport(
+      addedRows: added,
+      raisedRows: raised,
+      pricePoints: history,
+      snapshots: snapshots,
+    );
+  }
+
+  /// Inserts the rows of [table] whose identity is not already stored, and
+  /// answers how many that was.
+  ///
+  /// Rows that are already there are left exactly as they are, which for a
+  /// price point means the day this phone recorded keeps the price this phone
+  /// recorded rather than the other device's version of it.
+  static Future<int> _addMissing(
+    DatabaseExecutor txn,
+    String table,
+    List<Map<String, Object?>> incoming,
+  ) async {
+    if (incoming.isEmpty) return 0;
+    final Set<String> stored = <String>{
+      for (final Map<String, Object?> row in await txn.query(table))
+        rowKeyOf(table, row),
+    };
+    var added = 0;
+    for (final Map<String, Object?> row in incoming) {
+      final String key = rowKeyOf(table, row);
+      if (stored.contains(key)) continue;
+      await txn.insert(table, row, conflictAlgorithm: ConflictAlgorithm.ignore);
+      stored.add(key);
+      added++;
+    }
+    return added;
+  }
+
+  static int _quantityIn(Map<String, Object?> row) {
+    final Object? value = row['quantity'];
+    if (value is num) return value.toInt();
+    return int.tryParse('${value ?? ''}') ?? 1;
   }
 }

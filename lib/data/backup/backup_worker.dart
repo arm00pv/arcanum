@@ -119,7 +119,10 @@ Future<bool> runBackupWith({
 
   try {
     final archive = await service.build(appVersion: await _appVersion());
-    final result = await service.upload(archive, deviceLabel: 'phone');
+    final result = await service.upload(
+      archive,
+      deviceLabel: settings.deviceLabel,
+    );
     settings.recordAutoBackup(ok: true);
     debugPrint('[backup] uploaded ${result.bytes} bytes, ${result.kept} kept');
     return true;

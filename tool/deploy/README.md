@@ -76,6 +76,31 @@ Then `https://zapp.sytes.net/arcanum/v1/health` answers with the counters, and
 the app's default endpoint is that URL. Because it is HTTPS, the app needs no
 cleartext exception for it.
 
+### Routes
+
+| Route | What it answers | Who may ask |
+| --- | --- | --- |
+| `/v1/health` | printings, points, days, per game | anyone |
+| `/v1/history/<cardId>.json` | one printing's price series | anyone |
+| `/v1/sealed?game=&set=` | sealed product and prices for one set | anyone |
+| `/v1/backup` (POST) | stores an archive | the token |
+| `/v1/backup/latest` | newest archive, as gzip | the token |
+| `/v1/backup/status` | counts, and which device wrote what | the token |
+| `/vault` | the vault as a read-only HTML page | the token |
+
+Sealed prices come from TCGplayer's own product dumps, mirrored as JSON by
+`tcgcsv.com`: the server fetches one set's product list and prices when the app
+asks for that set, caches both for half a day, and filters singles out
+structurally — a single carries a rarity and a collector number, a box carries
+neither — rather than by guessing from a name. Cached under
+`~/arcanum/data/sealed`.
+
+The vault page reads the newest archive and prints it: totals, the portfolio
+curve as inline SVG, a table per set, the dearest stacks and the sealed shelf.
+It takes the token as a query parameter as well as a header, because a browser
+navigating to a URL cannot send a header — which does put it in the browser's
+history, so treat the URL as the secret it is.
+
 ## Rebuilding by hand
 
     nohup ~/arcanum/rebuild_mtg_history.sh > ~/arcanum/logs/mtg_rebuild.log 2>&1 &

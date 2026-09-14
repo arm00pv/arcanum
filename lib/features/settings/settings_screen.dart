@@ -19,6 +19,7 @@ import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/data/update/update_service.dart';
 import 'package:arcanum/features/report/forecast_audit_screen.dart';
+import 'package:arcanum/features/settings/sync_screen.dart';
 import 'package:arcanum/features/report/valuation_report_screen.dart';
 import 'package:arcanum/features/transfer/transfer_screen.dart';
 import 'package:arcanum/providers.dart';
@@ -767,6 +768,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 10),
+          // A backup is a copy of this device; this is how a second one joins
+          // it. Kept as its own screen because the interesting part is the plan
+          // that has to be read before anything is written.
+          Row(
+            children: <Widget>[
+              OutlinedButton.icon(
+                onPressed: ready
+                    ? () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SyncScreen(),
+                        ),
+                      )
+                    : null,
+                icon: const Icon(Icons.devices_rounded, size: 18),
+                label: const Text('Other devices'),
+              ),
+            ],
+          ),
           const SizedBox(height: 14),
           Row(
             children: <Widget>[
@@ -790,6 +810,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          // The same copy, read without the app. Worth saying out loud: the
+          // collector's own server can show them their vault in a browser, and
+          // nothing in the phone has to be open for that to work.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(Icons.public_rounded, size: 16, color: c.textTertiary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  ready
+                      ? 'The newest backup is also a page: open '
+                            '${_vaultUrl(settings)} in a browser, with your '
+                            'token on the end, to read the vault without the '
+                            'app. Your token is the only key it wants.'
+                      : 'Once a server and a token are set, the newest backup '
+                            'is also a read-only page you can open in a browser.',
+                  style: context.t.labelSmall?.copyWith(
+                    color: c.textTertiary,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 20),
           Divider(height: 1, color: c.hairline),
           const SizedBox(height: 18),
@@ -799,13 +845,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  /// Where the read-only vault page lives, given the configured server.
+  ///
+  /// Trailing slashes are dropped rather than trusted: the endpoint is typed by
+  /// hand and a doubled slash is a 404 nobody can explain.
+  static String _vaultUrl(AppSettings settings) {
+    final String root = settings.backupEndpoint.trim().replaceAll(
+      RegExp(r'/+$'),
+      '',
+    );
+    return '$root/vault?token=...';
+  }
+
   /// Builds the archive and uploads it.
   Future<void> _backUpNow() async {
     setState(() => _busy = _BackupAction.upload);
     try {
       final service = ref.read(backupServiceProvider);
       final archive = await service.build(appVersion: _version);
-      final result = await service.upload(archive, deviceLabel: 'phone');
+      final result = await service.upload(
+        archive,
+        deviceLabel: ref.read(settingsProvider).deviceLabel,
+      );
       if (!mounted) return;
       _snack(
         'Backed up ${Fmt.count(archive.totalRows)} rows '
