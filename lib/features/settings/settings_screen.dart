@@ -18,6 +18,7 @@ import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/data/update/update_service.dart';
+import 'package:arcanum/features/report/valuation_report_screen.dart';
 import 'package:arcanum/features/transfer/transfer_screen.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/common.dart';
@@ -216,6 +217,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _gameHeader(context, game),
           const SizedBox(height: 12),
           _collection(context, settings, game),
+          SectionHeader(
+            title: 'Report',
+            subtitle: 'A PDF of what the ${game.shortLabel} vault is worth',
+          ),
+          _report(context, game),
           const SectionHeader(
             title: 'Backup',
             subtitle:
@@ -460,6 +466,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   /// App-wide rather than per game, because the archive holds every game's
   /// holdings in one file - restoring one game would mean restoring a database
   /// that no longer matches the file.
+  /// The valuation report: what it is for, and the way in.
+  ///
+  /// It lives here rather than in the collection menu because it is not
+  /// something a collector does while browsing: it is something they do when
+  /// somebody asks them what the collection is worth.
+  Widget _report(BuildContext context, CardGame game) {
+    final c = context.c;
+    return _group(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('Valuation report', style: context.t.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'Every stack you hold, what the market asks for it, and what the '
+            'figures cannot see - as a PDF you can keep, print, or hand to '
+            'whoever insures the collection.',
+            style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+          ),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ValuationReportScreen(),
+              ),
+            ),
+            icon: const Icon(Icons.description_outlined, size: 18),
+            label: const Text('Build a report'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _backup(BuildContext context, AppSettings settings) {
     final c = context.c;
     final bool ready =

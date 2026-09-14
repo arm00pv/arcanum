@@ -1,7 +1,7 @@
 name: arcanum
 description: "Arcanum - a precision Magic: The Gathering collection vault with on-device price analytics."
 publish_to: 'none'
-version: 1.13.0+23
+version: 1.14.0+24
 
 environment:
   sdk: ^3.13.1
@@ -32,6 +32,7 @@ dependencies:
   workmanager: ^0.10.10
   camera: ^0.12.1
   google_mlkit_text_recognition: ^0.17.1
+  pdf: ^3.13.0
 
 dev_dependencies:
   flutter_test:

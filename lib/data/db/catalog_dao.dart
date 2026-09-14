@@ -546,6 +546,21 @@ class CatalogDao {
     return t == null ? null : DateTime.fromMillisecondsSinceEpoch(t);
   }
 
+  /// When any price for a game was last refreshed.
+  ///
+  /// A valuation is only as fresh as the prices behind it, and a report that
+  /// wants to print a date has to ask for the newest one it has rather than
+  /// assume today.
+  Future<DateTime?> latestPricesAt(CardGame game) async {
+    final rows = await _db.rawQuery(
+      'SELECT MAX(prices_updated_at) AS t FROM cards WHERE game = ?',
+      [game.id],
+    );
+    if (rows.isEmpty) return null;
+    final t = (rows.first['t'] as num?)?.toInt();
+    return t == null ? null : DateTime.fromMillisecondsSinceEpoch(t);
+  }
+
   /// Removes every cached row for a game, used to reclaim space.
   Future<void> clearGame(CardGame game) async {
     final batch = _db.batch();

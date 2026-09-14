@@ -407,6 +407,14 @@ final ownedQuantityProvider = FutureProvider.family<Map<String, int>, CardGame>(
   },
 );
 
+/// When the catalogue's prices for a game were last refreshed.
+///
+/// Null until prices have been fetched at least once, which a report says
+/// rather than pretending the figures are current.
+final pricesAsOfProvider = FutureProvider.family<DateTime?, CardGame>(
+  (ref, game) => ref.watch(bootstrapProvider).catalogDao.latestPricesAt(game),
+);
+
 /// How many physical cards the user owns from each set, keyed by set code.
 final ownedBySetProvider = FutureProvider.family<Map<String, int>, CardGame>((
   ref,
