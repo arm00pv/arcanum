@@ -25,6 +25,7 @@ class BackupArchive {
     required this.appVersion,
     required this.tables,
     required this.settings,
+    this.cardIndex = const <String, List<Object?>>{},
   });
 
   /// Identifies the format so a file that is not one of ours is refused.
@@ -43,6 +44,7 @@ class BackupArchive {
     'decks',
     'deck_cards',
     'wanted_cards',
+    'sealed_products',
     'alerts',
     'portfolio_snapshots',
     'price_history',
@@ -81,6 +83,16 @@ class BackupArchive {
   /// Preference keys and their stored values.
   final Map<String, Object?> settings;
 
+  /// A compact index of the printings the collector holds: card id to
+  /// [name, set code, collector number].
+  ///
+  /// The catalogue itself is deliberately not in a backup - it is a cache, it is
+  /// large, and it can be downloaded again. But without this, a copy of a
+  /// collection is a list of Scryfall UUIDs, which is useless to anything that
+  /// does not also hold that cache: the web view the collector's own server
+  /// serves, and a restore onto a phone that has not downloaded a single set yet.
+  final Map<String, List<Object?>> cardIndex;
+
   /// How many rows of each table the archive holds.
   Map<String, int> get counts => {
     for (final entry in tables.entries) entry.key: entry.value.length,
@@ -97,6 +109,7 @@ class BackupArchive {
     'counts': counts,
     'tables': tables,
     'settings': settings,
+    if (cardIndex.isNotEmpty) 'cards_index': cardIndex,
   };
 
   /// Reads an archive, or explains why the document is not one.
@@ -148,11 +161,26 @@ class BackupArchive {
     final created = DateTime.tryParse(raw['created']?.toString() ?? '')
         ?.toUtc();
 
+    // An archive from a build that did not write an index is still a valid
+    // archive: the index is a convenience for readers without a catalogue, and
+    // a restore never needs it.
+    final rawIndex = raw['cards_index'];
+    final cardIndex = <String, List<Object?>>{};
+    if (rawIndex is Map) {
+      for (final entry in rawIndex.entries) {
+        final value = entry.value;
+        if (value is List) {
+          cardIndex[entry.key.toString()] = <Object?>[...value];
+        }
+      }
+    }
+
     return BackupArchive(
       created: created ?? DateTime.now().toUtc(),
       appVersion: raw['app']?.toString() ?? 'unknown',
       tables: tables,
       settings: settings,
+      cardIndex: cardIndex,
     );
   }
 

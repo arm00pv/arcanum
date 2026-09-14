@@ -156,7 +156,47 @@ class BackupService {
       appVersion: appVersion,
       tables: tables,
       settings: settings,
+      cardIndex: await _cardIndex(tables),
     );
+  }
+
+  /// Names and set codes for the printings the collection actually holds.
+  ///
+  /// Chunked, because a collection can hold more printings than SQLite will take
+  /// in one IN clause and a backup that quietly dropped the tail would be worse
+  /// than one that carried no index at all.
+  Future<Map<String, List<Object?>>> _cardIndex(
+    Map<String, List<Map<String, Object?>>> tables,
+  ) async {
+    final List<Map<String, Object?>> rows =
+        tables['collection_entries'] ?? const <Map<String, Object?>>[];
+    final Set<String> ids = <String>{
+      for (final row in rows)
+        if (row['card_id'] is String) row['card_id']! as String,
+    };
+    if (ids.isEmpty) return const <String, List<Object?>>{};
+    final List<String> list = ids.toList();
+    final index = <String, List<Object?>>{};
+    for (var i = 0; i < list.length; i += 400) {
+      final chunk = list.sublist(
+        i,
+        i + 400 > list.length ? list.length : i + 400,
+      );
+      final marks = List.filled(chunk.length, '?').join(',');
+      final found = await _db.rawQuery(
+        'SELECT id, name, set_code, collector_number FROM cards '
+        'WHERE id IN ($marks)',
+        chunk,
+      );
+      for (final row in found) {
+        index[row['id'] as String] = <Object?>[
+          row['name'],
+          row['set_code'],
+          row['collector_number'],
+        ];
+      }
+    }
+    return index;
   }
 
   /// Uploads one archive to the collector's companion.

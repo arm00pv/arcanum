@@ -191,6 +191,19 @@ Future<void> seed(AppDatabase db, AppSettings settings) async {
     'price': 12.9,
     'source': 'companion',
   });
+  // And a box on the shelf, which is the collector's own data like the rest.
+  await db.db.insert('sealed_products', <String, Object?>{
+    'game': 'mtg',
+    'set_code': 'BLB',
+    'set_name': 'Bloomburrow',
+    'name': 'Bloomburrow Play Booster Display',
+    'category': 'box',
+    'quantity': 1,
+    'unit_cost': 150.0,
+    'unit_value': 199.35,
+    'location': 'Top shelf',
+    'created_at': now,
+  });
   settings.justTcgKey = 'third-party-secret';
 }
 
@@ -218,6 +231,71 @@ void main() {
         expect(archive.counts['alerts'], 1);
         expect(archive.counts['portfolio_snapshots'], 1);
         expect(archive.appVersion, '1.6.0');
+        await db.close();
+      },
+    );
+
+    test('carries a readable index of the printings held', () async {
+      final (db, settings) = await fresh();
+      await seed(db, settings);
+      await db.db.insert('cards', <String, Object?>{
+        'id': 'card-1',
+        'game': 'mtg',
+        'set_code': 'xln',
+        'name': 'Revel in Riches',
+        'collector_number': '117',
+        'collector_sort': 117,
+      });
+      final archive = await BackupService(
+        database: db,
+        settings: settings,
+      ).build(appVersion: 'test');
+
+      expect(archive.cardIndex['card-1'], <Object?>[
+        'Revel in Riches',
+        'xln',
+        '117',
+      ]);
+      // And it travels: the index is what makes a copy of a collection readable
+      // by something that holds no catalogue of its own - the collector's own
+      // server, or a phone that has not downloaded a set yet.
+      final round = BackupArchive.decode(archive.encode());
+      expect(round.cardIndex['card-1'], <Object?>[
+        'Revel in Riches',
+        'xln',
+        '117',
+      ]);
+      await db.close();
+    });
+
+    test('an archive written before the index existed still reads', () {
+      final archive = BackupArchive.fromJson(<String, Object?>{
+        'format': BackupArchive.format,
+        'version': 1,
+        'created': DateTime.utc(2026, 9, 13).toIso8601String(),
+        'app': '1.15.0',
+        'tables': <String, Object?>{'collection_entries': <Object?>[]},
+        'settings': <String, Object?>{},
+      });
+      expect(archive.cardIndex, isEmpty);
+      expect(archive.tables.containsKey('collection_entries'), isTrue);
+    });
+
+    test(
+      'carries the sealed shelf, so a restore does not lose the boxes',
+      () async {
+        final (db, settings) = await fresh();
+        await seed(db, settings);
+        final archive = await BackupService(
+          database: db,
+          settings: settings,
+        ).build(appVersion: 'test');
+
+        final rows = archive.tables['sealed_products'];
+        expect(rows, isNotNull);
+        expect(rows!.length, 1);
+        expect(rows.first['name'], 'Bloomburrow Play Booster Display');
+        expect(rows.first['unit_value'], 199.35);
         await db.close();
       },
     );

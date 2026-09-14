@@ -54,6 +54,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+import gzip
 import hmac
 import json
 import os
@@ -592,6 +593,343 @@ def sealed_for(game, set_code):
     }
 
 
+
+# ------------------------------------------------------------------ vault page
+
+GAME_LABELS = {
+    "mtg": "Magic: The Gathering",
+    "pokemon": "Pokemon",
+    "lorcana": "Disney Lorcana",
+    "yugioh": "Yu-Gi-Oh!",
+}
+
+
+def _escape(text):
+    """Minimal HTML escaping: everything in this page came from a card name."""
+    return (
+        str(text if text is not None else "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def _money(value):
+    try:
+        return ("$" "{:,.2f}").format(float(value))
+    except (TypeError, ValueError):
+        return "--"
+
+
+def _latest_archive():
+    """The newest stored archive, decoded, or None."""
+    names = backup_files()
+    if not names:
+        return None
+    path = os.path.join(BACKUPS_DIR, names[-1])
+    try:
+        with gzip.open(path, "rb") as handle:
+            return json.loads(handle.read().decode("utf-8")), names[-1]
+    except (OSError, ValueError):
+        return None
+
+
+def _index_of(archive):
+    """card id to (name, set code, number), however the archive stored it."""
+    raw = archive.get("cards_index") or {}
+    out = {}
+    if isinstance(raw, dict):
+        for card_id, value in raw.items():
+            if isinstance(value, list) and value:
+                out[str(card_id)] = tuple(value)
+    return out
+
+
+def _last_prices(rows):
+    """(game, card id) to the newest price the app itself recorded."""
+    out = {}
+    for row in rows:
+        key = (str(row.get("game") or "mtg"), str(row.get("card_id") or ""))
+        date = str(row.get("date") or "")
+        price = row.get("price")
+        if not isinstance(price, (int, float)):
+            continue
+        if key not in out or date > out[key][0]:
+            out[key] = (date, float(price))
+    return out
+
+
+def _sparkline(points, width=260, height=48):
+    """A tiny inline SVG of the portfolio curve. No script, no library."""
+    if len(points) < 2:
+        return ""
+    values = [value for _, value in points]
+    low, high = min(values), max(values)
+    span = (high - low) or 1.0
+    step = width / (len(points) - 1)
+    coords = []
+    for i, value in enumerate(values):
+        y = height - 4 - (value - low) / span * (height - 8)
+        coords.append("%.1f,%.1f" % (i * step, y))
+    return (
+        '<svg class="spark" viewBox="0 0 %d %d" preserveAspectRatio="none">'
+        '<polyline points="%s" fill="none" stroke="#8b7bf7" stroke-width="2"/>'
+        "</svg>" % (width, height, " ".join(coords))
+    )
+
+
+def _rows_of(tables, name):
+    rows = tables.get(name) or []
+    return rows if isinstance(rows, list) else []
+
+
+def vault_html(archive, name):
+    """The whole page: one string, no template engine, no dependencies."""
+    tables = archive.get("tables") or {}
+    if not isinstance(tables, dict):
+        tables = {}
+    entries = _rows_of(tables, "collection_entries")
+    sealed = _rows_of(tables, "sealed_products")
+    snapshots = _rows_of(tables, "portfolio_snapshots")
+    history = _rows_of(tables, "price_history")
+    index = _index_of(archive)
+    prices = _last_prices(history)
+
+    games = {}
+    for key, rows in (("entries", entries), ("sealed", sealed),
+                      ("snapshots", snapshots)):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            game = str(row.get("game") or "mtg")
+            bucket = games.setdefault(
+                game, {"entries": [], "sealed": [], "snapshots": []})
+            bucket[key].append(row)
+
+    parts = []
+    parts.append(
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        "<title>Arcanum vault</title><style>"
+        ":root{color-scheme:dark}"
+        "body{margin:0;padding:28px 20px 60px;background:#0b0b12;color:#e8e8f0;"
+        "font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}"
+        ".wrap{max-width:900px;margin:0 auto}"
+        "h1{font-size:26px;margin:0 0 2px}h2{font-size:18px;margin:34px 0 10px}"
+        ".quiet{color:#8f8fa3;font-size:13px}"
+        ".card{background:#16161f;border:1px solid #26263a;border-radius:16px;"
+        "padding:16px 18px;margin:14px 0}"
+        ".row{display:flex;justify-content:space-between;gap:16px;padding:4px 0;"
+        "border-bottom:1px solid #1e1e2c}.row:last-child{border-bottom:none}"
+        ".big{font-size:24px;font-weight:600}"
+        "table{width:100%;border-collapse:collapse;font-size:14px}"
+        "th,td{text-align:left;padding:6px 4px;border-bottom:1px solid #1e1e2c}"
+        "th{color:#8f8fa3;font-weight:500}td.n,th.n{text-align:right}"
+        ".spark{width:100%;height:48px;display:block;margin-top:8px}"
+        "</style></head><body><div class=\"wrap\">"
+    )
+    parts.append("<h1>Arcanum vault</h1>")
+    parts.append(
+        '<p class="quiet">A read-only view of the newest backup this server '
+        "holds: <strong>%s</strong>, uploaded by Arcanum %s on %s. Nothing here "
+        "is live - it is what the phone last sent.</p>"
+        % (_escape(name), _escape(archive.get("app")),
+           _escape(archive.get("created")))
+    )
+
+    if not games:
+        parts.append('<div class="card">This backup holds no collection.</div>')
+
+    for game in sorted(games):
+        data = games[game]
+        label = GAME_LABELS.get(game, game)
+        parts.append("<h2>%s</h2>" % _escape(label))
+
+        total_cards = sum(int(row.get("quantity") or 0) for row in data["entries"])
+        unique = len({str(row.get("card_id")) for row in data["entries"]})
+        value = 0.0
+        priced = 0
+        for row in data["entries"]:
+            found = prices.get((game, str(row.get("card_id") or "")))
+            if not found:
+                continue
+            value += found[1] * int(row.get("quantity") or 0)
+            priced += 1
+
+        sealed_items = sum(int(row.get("quantity") or 0) for row in data["sealed"])
+        sealed_value = 0.0
+        sealed_cost = 0.0
+        for row in data["sealed"]:
+            quantity = int(row.get("quantity") or 0)
+            if isinstance(row.get("unit_value"), (int, float)):
+                sealed_value += float(row["unit_value"]) * quantity
+            if isinstance(row.get("unit_cost"), (int, float)):
+                sealed_cost += float(row["unit_cost"]) * quantity
+
+        points = []
+        for row in sorted(data["snapshots"], key=lambda r: str(r.get("date") or "")):
+            if isinstance(row.get("total_value"), (int, float)):
+                points.append((str(row.get("date")), float(row["total_value"])))
+
+        parts.append('<div class="card">')
+        parts.append(
+            '<div class="row"><span>Cards held</span><span class="big">%s</span>'
+            "</div>" % "{:,}".format(total_cards)
+        )
+        parts.append(
+            '<div class="row"><span>Distinct printings</span>'
+            '<span class="big">%s</span></div>' % "{:,}".format(unique)
+        )
+        parts.append(
+            '<div class="row"><span>Value at the last prices the app recorded'
+            '</span><span class="big">%s</span></div>' % _money(value)
+        )
+        if priced < len(data["entries"]):
+            parts.append(
+                '<div class="row"><span class="quiet">Priced from %s of %s '
+                "holdings</span><span></span></div>"
+                % ("{:,}".format(priced), "{:,}".format(len(data["entries"])))
+            )
+        if data["sealed"]:
+            parts.append(
+                '<div class="row"><span>Sealed product</span>'
+                '<span class="big">%s (%s items)</span></div>'
+                % (_money(sealed_value), "{:,}".format(sealed_items))
+            )
+            if sealed_cost:
+                parts.append(
+                    '<div class="row"><span class="quiet">Sealed, what it cost'
+                    '</span><span class="quiet">%s</span></div>'
+                    % _money(sealed_cost)
+                )
+            parts.append(
+                '<div class="row"><span>Cards and sealed together</span>'
+                '<span class="big">%s</span></div>' % _money(value + sealed_value)
+            )
+        if points:
+            parts.append(
+                '<div class="row"><span class="quiet">Portfolio snapshots, %s to '
+                '%s</span><span class="quiet">%s</span></div>'
+                % (_escape(points[0][0]), _escape(points[-1][0]),
+                   _money(points[-1][1]))
+            )
+            parts.append(_sparkline(points))
+        parts.append("</div>")
+
+        rows = []
+        by_set = {}
+        for row in data["entries"]:
+            card = index.get(str(row.get("card_id") or ""))
+            code = (card[1] if card and len(card) > 1 else "") or ""
+            found = prices.get((game, str(row.get("card_id") or "")))
+            unit = found[1] if found else None
+            quantity = int(row.get("quantity") or 0)
+            bucket = by_set.setdefault(
+                code or "(unknown set)", {"cards": 0, "unique": set(), "value": 0.0})
+            bucket["cards"] += quantity
+            bucket["unique"].add(str(row.get("card_id")))
+            if unit:
+                bucket["value"] += unit * quantity
+            rows.append({
+                "name": (card[0] if card else str(row.get("card_id"))),
+                "set": (card[1] if card and len(card) > 1 else ""),
+                "number": (card[2] if card and len(card) > 2 else ""),
+                "quantity": quantity,
+                "finish": row.get("finish"),
+                "condition": row.get("condition"),
+                "binder": row.get("binder"),
+                "unit": unit,
+                "value": (unit * quantity) if unit else 0.0,
+            })
+
+        if data["entries"]:
+            parts.append('<h2>By set</h2><div class="card"><table>')
+            parts.append(
+                "<tr><th>Set</th><th class=n>Cards</th><th class=n>Printings</th>"
+                "<th class=n>Value</th></tr>"
+            )
+            for code, bucket in sorted(
+                by_set.items(), key=lambda kv: kv[1]["value"], reverse=True
+            ):
+                shown = code if code == "(unknown set)" else code.upper()
+                parts.append(
+                    "<tr><td>%s</td><td class=n>%s</td><td class=n>%s</td>"
+                    "<td class=n>%s</td></tr>"
+                    % (_escape(shown), "{:,}".format(bucket["cards"]),
+                       "{:,}".format(len(bucket["unique"])),
+                       _money(bucket["value"]))
+                )
+            parts.append("</table></div>")
+
+        rows.sort(key=lambda r: r["value"], reverse=True)
+        if rows:
+            parts.append('<h2>The dearest stacks</h2><div class="card"><table>')
+            parts.append(
+                "<tr><th>Card</th><th>Where</th><th class=n>Qty</th>"
+                "<th class=n>Each</th><th class=n>Value</th></tr>"
+            )
+            for row in rows[:50]:
+                where = " ".join(
+                    part for part in
+                    (row["set"], row["number"], row["binder"] or "") if part
+                )
+                detail = " ".join(
+                    part for part in (row["finish"], row["condition"]) if part
+                )
+                parts.append(
+                    "<tr><td>%s<div class=\"quiet\">%s</div></td><td>%s</td>"
+                    "<td class=n>%s</td><td class=n>%s</td><td class=n>%s</td></tr>"
+                    % (_escape(row["name"]), _escape(detail), _escape(where),
+                       "{:,}".format(row["quantity"]),
+                       _money(row["unit"]) if row["unit"] else "--",
+                       _money(row["value"]) if row["unit"] else "--")
+                )
+            parts.append("</table>")
+            if len(rows) > 50:
+                parts.append(
+                    '<p class="quiet">and %s more holdings.</p>'
+                    % "{:,}".format(len(rows) - 50)
+                )
+            parts.append("</div>")
+
+        if data["sealed"]:
+            parts.append('<h2>Sealed product</h2><div class="card"><table>')
+            parts.append(
+                "<tr><th>Product</th><th>Where</th><th class=n>Qty</th>"
+                "<th class=n>Each</th><th class=n>Value</th></tr>"
+            )
+            for row in sorted(
+                data["sealed"],
+                key=lambda r: (r.get("unit_value") or 0) * int(r.get("quantity") or 0),
+                reverse=True,
+            ):
+                quantity = int(row.get("quantity") or 0)
+                unit = row.get("unit_value")
+                detail = " ".join(
+                    part for part in
+                    (row.get("set_name"), row.get("category")) if part
+                )
+                parts.append(
+                    "<tr><td>%s<div class=\"quiet\">%s</div></td><td>%s</td>"
+                    "<td class=n>%s</td><td class=n>%s</td><td class=n>%s</td></tr>"
+                    % (_escape(row.get("name")), _escape(detail),
+                       _escape(row.get("location") or ""),
+                       "{:,}".format(quantity),
+                       _money(unit) if unit else "--",
+                       _money(unit * quantity) if unit else "--")
+                )
+            parts.append("</table></div>")
+
+    parts.append(
+        '<p class="quiet">Arcanum holds this collection on one phone and sends '
+        "it nowhere except here. This page reads the copy on this server, needs "
+        "no account, and cannot change anything.</p>"
+    )
+    parts.append("</div></body></html>")
+    return "".join(parts)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ArcanumSync/1.0"
     protocol_version = "HTTP/1.1"
@@ -629,6 +967,25 @@ class Handler(BaseHTTPRequestHandler):
                     self._send(404, {"error": "no history", "id": sid})
                     return
                 self._send(200, data)
+                return
+            if path in ("/vault", "/v1/vault"):
+                # Read from the query string as well as the header: a browser
+                # navigating to a URL cannot send a header, and the token is the
+                # only lock this server has.
+                if not self._vault_gate():
+                    return
+                found = _latest_archive()
+                if found is None:
+                    self._send(404, {"error": "no backup"}, cache="no-store")
+                    return
+                archive, name = found
+                body = vault_html(archive, name).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
                 return
             if path == "/v1/sealed":
                 query = parse_qs(urlparse(self.path).query)
@@ -688,6 +1045,31 @@ class Handler(BaseHTTPRequestHandler):
         """Answers a request whose body this server is not going to store."""
         self._send(code, payload, cache="no-store",
                    close=not drain_body(self.connection, self.rfile, length))
+
+    def _vault_gate(self):
+        """Refuses the vault page unless the request carries the token.
+
+        The page shows the whole collection - what is owned, what it cost, where
+        it is kept - so it is behind the same token as the backups themselves.
+        The token may arrive as a query parameter because that is the only way a
+        browser can carry it into a page; the trade is that it lands in the
+        browser's history, which is why the page itself never prints it.
+        """
+        token = installed_token()
+        if token is None:
+            self._send(503, {"ok": False, "enabled": False,
+                             "error": "no token installed"}, cache="no-store")
+            return False
+        query = parse_qs(urlparse(self.path).query)
+        supplied = (
+            self.headers.get("X-Arcanum-Token")
+            or (query.get("token") or [""])[0]
+        )
+        if not token_matches(supplied, token):
+            self._send(401, {"ok": False, "error": "unauthorized"},
+                       cache="no-store")
+            return False
+        return True
 
     def _backup_gate(self, length=0):
         """Refuses the request unless it carries the token that is installed.
