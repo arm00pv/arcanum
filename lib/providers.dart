@@ -147,6 +147,8 @@ class Bootstrap {
           CardGame.onePiece: TcgcsvCatalog.onePiece(),
           CardGame.starWarsUnlimited: TcgcsvCatalog.starWarsUnlimited(),
           CardGame.digimon: TcgcsvCatalog.digimon(),
+          CardGame.dragonBall: TcgcsvCatalog.dragonBall(),
+          CardGame.gundam: TcgcsvCatalog.gundam(),
         };
 
     final catalogRepository = CatalogRepository(

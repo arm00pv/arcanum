@@ -217,7 +217,13 @@ CardScan readCardText(
   return switch (game) {
     CardGame.mtg => _readMtg(cleaned, known),
     CardGame.yugioh => _readYugioh(cleaned),
-    CardGame.onePiece || CardGame.digimon => _readBandai(cleaned),
+    // Four games print one hyphenated code for the set and the position in
+    // it: One Piece 'OP01-002', Digimon 'BT26-052', Fusion World 'FB11-073'
+    // and Gundam 'ST11-001'.
+    CardGame.onePiece ||
+    CardGame.digimon ||
+    CardGame.dragonBall ||
+    CardGame.gundam => _readBandai(cleaned),
     CardGame.pokemon ||
     CardGame.lorcana ||
     CardGame.starWarsUnlimited => _readNumbered(cleaned),

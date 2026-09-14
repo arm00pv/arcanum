@@ -85,6 +85,30 @@ class TcgcsvCatalog implements CardCatalog {
     dio: dio,
   );
 
+  /// The Dragon Ball Super Card Game: Fusion World, TCGplayer category 80.
+  ///
+  /// Fusion World states a card's colour in its Color field - one of five, and
+  /// two on a Leader - and the colour is a deckbuilding rule rather than a
+  /// label: a deck may only hold cards that share a colour with its Leader.
+  factory TcgcsvCatalog.dragonBall({Dio? dio}) => TcgcsvCatalog._(
+    game: CardGame.dragonBall,
+    categoryId: 80,
+    colourFields: const <String>['Color'],
+    dio: dio,
+  );
+
+  /// The Gundam Card Game, TCGplayer category 86.
+  ///
+  /// Gundam states colour the same way and plays it the same way: a card is one
+  /// of five colours, a deck may use two of them, and the colour decides what
+  /// the deck is allowed to play.
+  factory TcgcsvCatalog.gundam({Dio? dio}) => TcgcsvCatalog._(
+    game: CardGame.gundam,
+    categoryId: 86,
+    colourFields: const <String>['Color'],
+    dio: dio,
+  );
+
   static const String _base = 'https://tcgcsv.com/tcgplayer';
 
   /// How the mirror asks to be identified.
@@ -536,6 +560,17 @@ class TcgcsvCatalog implements CardCatalog {
           'PlayCost',
           'DigimonForm',
           'DigimonAttribute',
+          // Fusion World states a combo power as well as a battle power, and
+          // Gundam states attack and hit points, a level, the zone a unit
+          // deploys to and the pilot that links to it.
+          'Combo Power',
+          'Attack Points',
+          'Hit Points',
+          'Character Traits',
+          'Trait',
+          'Level',
+          'Zone',
+          'Link Condition',
         ])
           if (_string(extended[field]) case final String value) field: value,
       },
@@ -646,11 +681,21 @@ class TcgcsvCatalog implements CardCatalog {
       if (type.isNotEmpty) type,
       if (_listed(extended, 'Subtypes') case final String sub) sub,
       if (_listed(extended, 'Traits') case final String traits) traits,
+      // Fusion World calls a card's traits its Character Traits and Gundam
+      // calls them a Trait; both print them under the card type on the card,
+      // which is where the type line puts them.
+      if (_listed(extended, 'Character Traits') case final String traits)
+        traits,
+      if (_listed(extended, 'Trait') case final String trait) trait,
       if (_string(extended['DigimonForm']) case final String form) form,
       // Digimon prints the species - Dragon, Machine, Holy Beast - in the same
       // block as the form, and it is what a player searches for.
       if (_string(extended['DigimonType']) case final String kind) kind,
       if (_string(extended['LevelLv']) case final String level) 'Level $level',
+      // A Gundam unit states the level it can be deployed at, which Digimon's
+      // LevelLv is the same idea as, and the zone it may be deployed to.
+      if (_string(extended['Level']) case final String level) 'Level $level',
+      if (_listed(extended, 'Zone') case final String zone) zone,
       if (_string(extended['Arena Type']) case final String arena) arena,
     ];
     final line = parts.join(' - ');

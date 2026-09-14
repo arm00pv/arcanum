@@ -1129,7 +1129,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final bool isTcgplayerOnly =
         game == CardGame.onePiece ||
         game == CardGame.starWarsUnlimited ||
-        game == CardGame.digimon;
+        game == CardGame.digimon ||
+        game == CardGame.dragonBall ||
+        game == CardGame.gundam;
     final bool configured = settings.hasHistoryProvider(game);
     // Every game can now be probed, because the companion answers for all four:
     // Magic from the MTGJSON slice, and the rest from their daily samplers. A
@@ -1182,11 +1184,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'TCGplayer publishes what a card is worth today and nothing '
               'else: the file Arcanum reads is rebuilt once a day and keeps no '
               'history at all, and no free archive of this game exists to stand '
-              'in for one. So this game has one source, and it is yours - the '
-              'app records the price of everything you own once a day, so a '
-              'trend appears after a couple of weeks and grows from there. '
-              'The companion endpoint below is the one every game except Magic '
-              'shares, and it does not sample this game yet.',
+              'in for one. What history it has therefore comes from what you '
+              'point at it - a JustTCG key, when one is set below, which carries '
+              'a daily series for these games, and the app\'s own daily '
+              'snapshot of everything you own, which grows into a trend after a '
+              'couple of weeks. The companion endpoint is shared by every game '
+              'except Magic, and it does not sample this game yet.',
               style: context.t.bodySmall?.copyWith(
                 color: c.textSecondary,
                 height: 1.45,
@@ -1298,6 +1301,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 helperText: isMtg
                     ? 'The free tier is rate limited, so long backfills take a '
                           'while. Leave empty to rely on snapshots only.'
+                    : isTcgplayerOnly
+                    ? 'Optional, and the only source of live history for this '
+                          'game: the free tier allows 100 requests a day. Leave '
+                          'empty to rely on snapshots only.'
                     : 'The free tier allows 100 requests a day and is the only '
                           'source of live Pokémon history. Leave empty to rely on '
                           'snapshots and the 2024 TCGdex archive.',
@@ -1870,6 +1877,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 10),
           Text(
             Legal.lorcanaNotice,
+            style: context.t.bodySmall?.copyWith(
+              color: c.textTertiary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            Legal.konamiNotice,
+            style: context.t.bodySmall?.copyWith(
+              color: c.textTertiary,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            Legal.bandaiNotice,
             style: context.t.bodySmall?.copyWith(
               color: c.textTertiary,
               height: 1.4,

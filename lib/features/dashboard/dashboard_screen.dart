@@ -266,7 +266,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 /// Yu-Gi-Oh! by monster attribute and Lorcana by ink, so one shared title would
 /// be a lie for most of them. The games that do bucket by colour say so.
 String _categorySectionTitle(CardGame game) => switch (game) {
-  CardGame.mtg || CardGame.onePiece || CardGame.digimon => 'By colour',
+  CardGame.mtg ||
+  CardGame.onePiece ||
+  CardGame.digimon ||
+  CardGame.dragonBall ||
+  CardGame.gundam => 'By colour',
   CardGame.pokemon => 'By energy type',
   CardGame.yugioh => 'By attribute',
   CardGame.lorcana => 'By ink',
@@ -284,7 +288,10 @@ String _categorySectionSubtitle(CardGame game) => switch (game) {
   CardGame.lorcana => 'Market value by ink',
   // One Piece and Digimon cards are printed in one colour, or two when the
   // card is a dual-colour Leader or a splash; the pair lands in the first.
-  CardGame.onePiece || CardGame.digimon => 'Market value by colour',
+  CardGame.onePiece ||
+  CardGame.digimon ||
+  CardGame.dragonBall ||
+  CardGame.gundam => 'Market value by colour',
   // A card carries an aspect and, often, an alignment from the same field;
   // the aspect is the colour pie, so that is what the chart counts.
   CardGame.starWarsUnlimited => 'Market value by aspect',

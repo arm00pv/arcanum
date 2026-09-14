@@ -14,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('the roster', () {
-    test('covers the seven games, and their ids never change', () {
+    test('covers the nine games, and their ids never change', () {
       // The id is written into SQLite rows and SharedPreferences, so renaming
       // one would orphan a collection rather than migrate it.
       expect(CardGame.values.map((g) => g.id), <String>[
@@ -25,6 +25,8 @@ void main() {
         'onepiece',
         'swu',
         'digimon',
+        'dragonball',
+        'gundam',
       ]);
     });
 
@@ -225,6 +227,25 @@ void main() {
       );
     });
 
+    test('the two newest games bucket by the colour the card prints', () {
+      // Both are built along their colours - a Fusion World deck may only hold
+      // cards that share a colour with its Leader, and a Gundam deck may use two
+      // of the five - so the chart has to be a chart of the colour pie rather
+      // than one of Unknown.
+      expect(CardGame.dragonBall.colourCategories, hasLength(6));
+      expect(CardGame.gundam.colourCategories, hasLength(6));
+      expect(CardGame.dragonBall.bucketFor('Black'), DragonBallColor.black);
+      expect(CardGame.gundam.bucketFor('Purple'), GundamColor.purple);
+      // The stored form is the letter, the provider's form is the word, and
+      // both resolve to the same bucket.
+      expect(CardGame.gundam.bucketFor('W'), GundamColor.white);
+      expect(CardGame.dragonBall.bucketFor('R'), DragonBallColor.red);
+      // A printing the provider leaves blank is counted in the catch-all rather
+      // than guessed into a colour the card has not got.
+      expect(CardGame.dragonBall.bucketFor(''), DragonBallColor.noColour);
+      expect(CardGame.gundam.bucketFor('nonsense'), GundamColor.noColour);
+    });
+
     test('a stored symbol round-trips back to the same bucket', () {
       // Charts read the symbol off each card and resolve it back, so every
       // category must survive that trip.
@@ -249,6 +270,8 @@ void main() {
         CardGame.onePiece,
         CardGame.starWarsUnlimited,
         CardGame.digimon,
+        CardGame.dragonBall,
+        CardGame.gundam,
       ]) {
         expect(game.finishes, <CardFinish>[
           CardFinish.nonfoil,
@@ -265,6 +288,8 @@ void main() {
         CardGame.onePiece,
         CardGame.starWarsUnlimited,
         CardGame.digimon,
+        CardGame.dragonBall,
+        CardGame.gundam,
       ]) {
         expect(game.conditions, <CardCondition>[
           CardCondition.nearMint,

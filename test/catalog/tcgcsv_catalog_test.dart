@@ -1,5 +1,5 @@
 // Tests for the tcgcsv catalogue adapter, which serves One Piece, Star Wars:
-// Unlimited and Digimon.
+// Unlimited, Digimon, Dragon Ball Super: Fusion World and Gundam.
 //
 //   flutter test test/catalog/tcgcsv_catalog_test.dart
 //
@@ -207,6 +207,68 @@ const String releaseEventProductsJson = '''
 ]}
 ''';
 
+/// Fusion World's group list: the shop spells the set 'FB-11' and the card
+/// prints 'FB11-073'.
+const String dragonBallGroupsJson = '''
+{"results":[
+  {"groupId":24716,"name":"Brightness of Hope","abbreviation":"FB-11",
+   "isSupplemental":false,"publishedOn":"2026-08-28T00:00:00"}
+]}
+''';
+
+/// A Fusion World Leader: the number the card prints, the colour that gates the
+/// deck it goes in, and a trait field the other games do not have.
+const String dragonBallProductsJson = '''
+{"results":[
+  {"productId":701195,"name":"Shallot/Giblet // Shallet",
+   "cleanName":"Shallot Giblet Shallet",
+   "imageUrl":"https://tcgplayer-cdn.tcgplayer.com/product/701195_200w.jpg",
+   "categoryId":80,"groupId":24716,
+   "extendedData":[
+     {"name":"Rarity","value":"Leader"},
+     {"name":"Number","value":"FB11-073"},
+     {"name":"Description","value":"[Auto] When this card is placed in your Leader Area."},
+     {"name":"Color","value":"Yellow"},
+     {"name":"CardType","value":"Leader"},
+     {"name":"Cost","value":"0"},
+     {"name":"Power","value":"15000/20000"},
+     {"name":"Character Traits","value":"Saiyan;God"}]}
+]}
+''';
+
+/// Gundam's group list, spelled 'ST-11' by the shop and printed 'ST11-001'.
+const String gundamGroupsJson = '''
+{"results":[
+  {"groupId":24800,"name":"Starter Deck 11: Aquatic Assault",
+   "abbreviation":"ST-11","isSupplemental":false,
+   "publishedOn":"2026-05-15T00:00:00"}
+]}
+''';
+
+/// A Gundam unit: two colours, a level, a zone it may be deployed to, a pilot
+/// that links to it and a rarity code carrying a treatment's plus signs.
+const String gundamProductsJson = '''
+{"results":[
+  {"productId":716364,"name":"Char's Z'Gok",
+   "cleanName":"Char s Z Gok",
+   "imageUrl":"https://tcgplayer-cdn.tcgplayer.com/product/716364_200w.jpg",
+   "categoryId":86,"groupId":24800,
+   "extendedData":[
+     {"name":"Rarity","value":"LR++"},
+     {"name":"Number","value":"ST11-001"},
+     {"name":"Description","value":"[During Pair] While 2 or more other friendly (Marine) Units are in play."},
+     {"name":"Level","value":"4"},
+     {"name":"Cost","value":"3"},
+     {"name":"CardType","value":"Unit"},
+     {"name":"Color","value":"Blue;Green"},
+     {"name":"Trait","value":"(Zeon) (Marine)"},
+     {"name":"Link Condition","value":"[Char Aznable]"},
+     {"name":"Attack Points","value":"3"},
+     {"name":"Hit Points","value":"3"},
+     {"name":"Zone","value":"Earth;Space"}]}
+]}
+''';
+
 /// Serves canned payloads in place of the network.
 class _FakeTcgcsv implements HttpClientAdapter {
   _FakeTcgcsv(this._respond, this.requests);
@@ -268,6 +330,8 @@ TcgcsvCatalog catalogWith({
   return switch (game) {
     CardGame.starWarsUnlimited => TcgcsvCatalog.starWarsUnlimited(dio: dio),
     CardGame.digimon => TcgcsvCatalog.digimon(dio: dio),
+    CardGame.dragonBall => TcgcsvCatalog.dragonBall(dio: dio),
+    CardGame.gundam => TcgcsvCatalog.gundam(dio: dio),
     _ => TcgcsvCatalog.onePiece(dio: dio),
   };
 }
@@ -580,6 +644,101 @@ void main() {
       // The release event printing has no rarity ladder to sit on, so it is
       // bucketed as the special printing it is rather than as Unknown.
       expect(CardRarity.fromCode(cards.first.rarity), CardRarity.special);
+    });
+  });
+
+  group('dragon ball cards', () {
+    test('are read from the game\'s own category and colour field', () async {
+      final requests = <Uri>[];
+      final catalog = TcgcsvCatalog.dragonBall(
+        dio: Dio(BaseOptions(baseUrl: 'https://tcgcsv.com/tcgplayer'))
+          ..httpClientAdapter = _FakeTcgcsv((Uri uri) {
+            if (uri.path.endsWith('/groups')) return dragonBallGroupsJson;
+            if (uri.path.endsWith('/products')) return dragonBallProductsJson;
+            if (uri.path.endsWith('/prices')) return '{"results":[]}';
+            return null;
+          }, requests),
+      );
+
+      final cards = await catalog.fetchCardsInSet('fb11');
+      final card = cards.single;
+
+      expect(card.game, CardGame.dragonBall);
+      expect(card.collectorNumber, '073');
+      expect(card.extras['printedNumber'], 'FB11-073');
+      // Fusion World calls a card's traits its Character Traits and prints them
+      // under the card type, which is where the type line puts them.
+      expect(card.typeLine, 'Leader - Saiyan / God');
+      expect(card.colors, <String>['Yellow']);
+      expect(card.cmc, 0);
+      expect(card.extras['Power'], '15000/20000');
+      // The category id is what addresses the game at the mirror, and it is the
+      // one thing a new game can get wrong without anything else failing.
+      expect(
+        requests.map((Uri u) => u.path).where((String p) => p.contains('/80/')),
+        isNotEmpty,
+      );
+      // A Leader is the card a deck is named after rather than a rung on the
+      // rarity ladder, and it grades where One Piece's Leader grades.
+      expect(CardRarity.fromCode(card.rarity), CardRarity.mythic);
+    });
+  });
+
+  group('gundam cards', () {
+    test(
+      'carry the number the card prints and the fields the game uses',
+      () async {
+        final requests = <Uri>[];
+        final catalog = TcgcsvCatalog.gundam(
+          dio: Dio(BaseOptions(baseUrl: 'https://tcgcsv.com/tcgplayer'))
+            ..httpClientAdapter = _FakeTcgcsv((Uri uri) {
+              if (uri.path.endsWith('/groups')) return gundamGroupsJson;
+              if (uri.path.endsWith('/products')) return gundamProductsJson;
+              if (uri.path.endsWith('/prices')) return '{"results":[]}';
+              return null;
+            }, requests),
+        );
+
+        final cards = await catalog.fetchCardsInSet('st11');
+        final card = cards.single;
+
+        expect(card.game, CardGame.gundam);
+        expect(card.collectorNumber, '001');
+        expect(card.extras['printedNumber'], 'ST11-001');
+        // A unit states its trait, the level it may be deployed at and the zone
+        // it deploys to, and all three are what a player searches for.
+        expect(
+          card.typeLine,
+          'Unit - (Zeon) (Marine) - Level 4 - Earth / Space',
+        );
+        expect(card.colors, <String>['Blue', 'Green']);
+        // A deck may use two colours and is built around the first the card
+        // prints, which is what the bucket has to be stable against.
+        expect(CardGame.gundam.dominantBucket(card.colors), GundamColor.blue);
+        expect(card.cmc, 3);
+        expect(card.extras['Attack Points'], '3');
+        expect(card.extras['Hit Points'], '3');
+        expect(card.extras['Link Condition'], '[Char Aznable]');
+        expect(
+          requests
+              .map((Uri u) => u.path)
+              .where((String p) => p.contains('/86/')),
+          isNotEmpty,
+        );
+      },
+    );
+
+    test('a plus on a rarity code is a treatment, not a rung', () {
+      // Gundam ships C+, U+, R+, LR+ and LR++: the plus marks the parallel or
+      // foil treatment, which the shop prices as a printing of its own, and the
+      // ladder the card sits on is the one under the signs.
+      expect(CardRarity.fromCode('C+'), CardRarity.common);
+      expect(CardRarity.fromCode('U+'), CardRarity.uncommon);
+      expect(CardRarity.fromCode('R+'), CardRarity.rare);
+      expect(CardRarity.fromCode('LR+'), CardRarity.mythic);
+      expect(CardRarity.fromCode('LR++'), CardRarity.mythic);
+      expect(CardRarity.fromCode('Legend Rare'), CardRarity.mythic);
+      expect(CardRarity.fromCode('Leader'), CardRarity.mythic);
     });
   });
 

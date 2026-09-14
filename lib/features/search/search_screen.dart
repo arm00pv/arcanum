@@ -275,7 +275,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   CardGame.lorcana ||
                   CardGame.onePiece ||
                   CardGame.starWarsUnlimited ||
-                  CardGame.digimon => 'Card name, set or card text',
+                  CardGame.digimon ||
+                  CardGame.dragonBall ||
+                  CardGame.gundam => 'Card name, set or card text',
                 },
                 prefixIcon: Icon(
                   Icons.search_rounded,
@@ -335,6 +337,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           CardGame.onePiece => 'Search every One Piece set',
           CardGame.starWarsUnlimited => 'Search every Star Wars: Unlimited set',
           CardGame.digimon => 'Search every Digimon set',
+          CardGame.dragonBall => 'Search every Dragon Ball set',
+          CardGame.gundam => 'Search every Gundam set',
         },
         message:
             'Type at least two characters - card names, set names and '
@@ -388,6 +392,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     'Partial names work: "luke" finds every Luke Skywalker.',
                   CardGame.digimon =>
                     'Partial names work: "agumon" finds every Agumon.',
+                  CardGame.dragonBall =>
+                    'Partial names work: "goku" finds every Goku, and the '
+                        'number - FB11-073 - narrows it to one.',
+                  CardGame.gundam =>
+                    'Partial names work: "zaku" finds every Zaku.',
                 },
               ),
               _SearchTip(
@@ -407,6 +416,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         'browse it.',
                   CardGame.digimon =>
                     'Search a set name such as "Timeless Bonds" to browse it.',
+                  CardGame.dragonBall =>
+                    'Search a set name such as "Brightness of Hope" to browse '
+                        'it.',
+                  CardGame.gundam =>
+                    'Search a set name such as "Blazing Fist" to browse it.',
                 },
               ),
               _SearchTip(
@@ -434,6 +448,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   CardGame.digimon =>
                     'Card text is searched, so "Blocker" finds the cards that '
                         'have it.',
+                  CardGame.dragonBall =>
+                    'Card text is searched, so "Blocker" finds the cards that '
+                        'have it.',
+                  CardGame.gundam =>
+                    'Card text is searched, so "Deploy" finds the units that '
+                        'have it.',
                 },
               ),
               _SearchTip(
@@ -459,7 +479,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// search covers the sets that have been opened, and the screen says so
   /// rather than promising a query of the whole game it cannot make.
   static String _searchScope(CardGame game) => switch (game) {
-    CardGame.onePiece || CardGame.starWarsUnlimited || CardGame.digimon =>
+    CardGame.onePiece ||
+    CardGame.starWarsUnlimited ||
+    CardGame.digimon ||
+    CardGame.dragonBall ||
+    CardGame.gundam =>
       'Arcanum answers from the ${game.shortLabel} cards already on this '
           'phone. ${game.dataSource} publishes no search index for this game, '
           'so open a set from Sets and its cards become searchable.',
@@ -479,7 +503,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     CardGame.lorcana ||
     CardGame.onePiece ||
     CardGame.starWarsUnlimited ||
-    CardGame.digimon => 'card text',
+    CardGame.digimon ||
+    CardGame.dragonBall ||
+    CardGame.gundam => 'card text',
   };
 
   // ----------------------------------------------------------------- results

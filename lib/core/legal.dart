@@ -1,12 +1,16 @@
 /// Attribution and policy notices the app is required to display.
 ///
-/// Both publishers license third-party apps to use their card data under
-/// revocable, non-commercial terms, and both require specific wording. The
-/// notices below are reproduced verbatim because paraphrasing them is not a
-/// substitute — Wizards' policy prescribes its text word for word.
+/// Wizards and The Pokémon Company license third-party apps to use their card
+/// data under revocable, non-commercial terms, and both require specific
+/// wording. The notices below are reproduced verbatim because paraphrasing them
+/// is not a substitute — Wizards' policy prescribes its text word for word.
 ///
-/// Neither notice may be removed, and neither game may be promoted in the app's
-/// name, icon or store listing. "Arcanum" is a neutral product name; a name like
+/// Every other publisher covered here offers no such licence, so for their games
+/// the app claims the least that can honestly be claimed: it is unofficial, it is
+/// not commercial, and it implies no endorsement by anyone.
+///
+/// No notice may be removed, and no game may be promoted in the app's name,
+/// icon or store listing. "Arcanum" is a neutral product name; a name like
 /// "Arcanum — MTG Tracker" would breach both licences.
 abstract final class Legal {
   /// Verbatim notice required by the Wizards of the Coast Fan Content Policy.
@@ -40,6 +44,30 @@ abstract final class Legal {
       'affiliated with, endorsed by, sponsored by or approved by Ravensburger '
       'or The Walt Disney Company. Disney Lorcana and Disney character names '
       'are trademarks of their respective owners.';
+
+  /// Non-affiliation statement for the Bandai card games.
+  ///
+  /// Bandai publishes no fan-content licence for the One Piece, Digimon, Dragon
+  /// Ball Super: Fusion World or Gundam card games - what it has published about
+  /// intellectual property concerns counterfeit physical product rather than
+  /// reference software - so this claims the least that can honestly be claimed:
+  /// the app is unofficial, it is not commercial, and it implies no endorsement
+  /// by anyone.
+  static const bandaiNotice =
+      'Arcanum is an unofficial, non-commercial reference tool. It is not '
+      'affiliated with, endorsed by, sponsored by or approved by Bandai or '
+      'Bandai Namco. The One Piece, Digimon, Dragon Ball and Gundam card games '
+      'and their character names are trademarks of their respective owners.';
+
+  /// Non-affiliation statement for Yu-Gi-Oh!.
+  ///
+  /// Konami offers no fan-content licence either, so this is the same claim on
+  /// the same terms as the notices above.
+  static const konamiNotice =
+      'Arcanum is an unofficial, non-commercial reference tool. It is not '
+      'affiliated with, endorsed by, sponsored by or approved by Konami Digital '
+      'Entertainment. Yu-Gi-Oh! and its card names are trademarks of their '
+      'respective owners.';
 
   /// What the app does with the user's data. Written to match the app's actual
   /// behaviour, which is the point: it collects nothing, and the one thing that
@@ -91,6 +119,20 @@ abstract final class Legal {
       name: 'Lorcast',
       purpose: 'Lorcana card data, card text and current prices',
       url: 'https://lorcast.com',
+    ),
+    (
+      name: 'YGOPRODeck',
+      purpose:
+          'Yu-Gi-Oh! card data and prices, including the Cardmarket EUR '
+          'reference',
+      url: 'https://ygoprodeck.com/api-guide/',
+    ),
+    (
+      name: 'tcgcsv (TCGplayer)',
+      purpose:
+          'Card data and current prices for One Piece, Digimon, Dragon Ball, '
+          'Gundam and Star Wars: Unlimited',
+      url: 'https://tcgcsv.com',
     ),
     (
       name: 'TCGplayer',

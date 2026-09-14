@@ -114,7 +114,11 @@ enum CardRarity {
   /// Rare` — which is why the tail of this method falls back to "contains
   /// rare" rather than matching whole strings.
   static CardRarity fromCode(String? c) {
-    final s = (c ?? '').toLowerCase().trim();
+    // Bandai hangs plus signs off a rarity code to mark the parallel or foil
+    // treatment of an otherwise ordinary card - Gundam ships C+, U+, R+, LR+
+    // and LR++ - and the treatment is a separate price rather than a separate
+    // rung, so the signs come off before the code is read.
+    final s = (c ?? '').toLowerCase().trim().replaceAll(RegExp(r'\++$'), '');
     if (s.isEmpty) return CardRarity.unknown;
 
     // Bandai publishes its rarity as a short code and One Piece ships every one
@@ -137,6 +141,9 @@ enum CardRarity {
       // set's chase printing: both are the top of the ladder.
       case 'l':
       case 'sec':
+      // Gundam's own top rung, above Rare, is the Legend Rare - and its
+      // Leader, like Fusion World's, is the card the deck is built around.
+      case 'lr':
         return CardRarity.mythic;
       case 'p':
       case 'don!!':
@@ -152,6 +159,7 @@ enum CardRarity {
         s.contains('hyper rare') ||
         s.contains('secret') ||
         s.contains('starlight') ||
+        s.contains('legend') ||
         s.contains('mythic')) {
       return CardRarity.mythic;
     }
@@ -180,6 +188,10 @@ enum CardRarity {
     if (s.contains('legendary') || s.contains('iconic') || s.contains('epic')) {
       return CardRarity.mythic;
     }
+    // Fusion World's Leader is not a rarer printing of a card in the set - it
+    // is a card of its own kind, and it is the one a deck is named after, which
+    // is why it grades where One Piece's Leader grades.
+    if (s == 'leader') return CardRarity.mythic;
     if (s.contains('promo')) return CardRarity.bonus;
     if (s.contains('uncommon')) return CardRarity.uncommon;
     if (s.contains('common')) return CardRarity.common;
@@ -254,6 +266,8 @@ enum CardCondition {
     CardGameTag.onePiece,
     CardGameTag.digimon,
     CardGameTag.starWarsUnlimited,
+    CardGameTag.dragonBall,
+    CardGameTag.gundam,
   }),
   excellent('excellent', 'Excellent', 'EX', {CardGameTag.mtg}),
   good('good', 'Good', 'GD', {CardGameTag.mtg}),
@@ -265,6 +279,8 @@ enum CardCondition {
     CardGameTag.onePiece,
     CardGameTag.digimon,
     CardGameTag.starWarsUnlimited,
+    CardGameTag.dragonBall,
+    CardGameTag.gundam,
   }),
   moderatelyPlayed('moderately_played', 'Moderately Played', 'MP', {
     CardGameTag.pokemon,
@@ -273,6 +289,8 @@ enum CardCondition {
     CardGameTag.onePiece,
     CardGameTag.digimon,
     CardGameTag.starWarsUnlimited,
+    CardGameTag.dragonBall,
+    CardGameTag.gundam,
   }),
   heavilyPlayed('heavily_played', 'Heavily Played', 'HP', {
     CardGameTag.pokemon,
@@ -281,6 +299,8 @@ enum CardCondition {
     CardGameTag.onePiece,
     CardGameTag.digimon,
     CardGameTag.starWarsUnlimited,
+    CardGameTag.dragonBall,
+    CardGameTag.gundam,
   }),
   played('played', 'Played', 'PL', {CardGameTag.mtg}),
   poor('poor', 'Poor', 'PO', {CardGameTag.mtg}),
@@ -291,6 +311,8 @@ enum CardCondition {
     CardGameTag.onePiece,
     CardGameTag.digimon,
     CardGameTag.starWarsUnlimited,
+    CardGameTag.dragonBall,
+    CardGameTag.gundam,
   });
 
   const CardCondition(this.code, this.label, this.short, this.games);
@@ -338,7 +360,9 @@ enum CardGameTag {
   lorcana('lorcana'),
   onePiece('onepiece'),
   digimon('digimon'),
-  starWarsUnlimited('swu');
+  starWarsUnlimited('swu'),
+  dragonBall('dragonball'),
+  gundam('gundam');
 
   const CardGameTag(this.id);
   final String id;

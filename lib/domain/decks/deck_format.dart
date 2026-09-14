@@ -435,6 +435,70 @@ abstract final class DeckFormats {
     ),
   ];
 
+  /// Fusion World's constructed format.
+  ///
+  /// The official rule: one Leader card, and a deck of 50 to 60 cards with no
+  /// more than four copies of any one card number - so a card's parallel arts
+  /// count together, which is what the printed number key is for. The Leader
+  /// gates the deck's colours, exactly as One Piece's Leader does, so it is held
+  /// on the commander board and checked the way a commander is.
+  ///
+  /// The Leader is not part of the 50 to 60: it sits in its own zone, which is
+  /// why the format counts the commander board separately from the deck size.
+  static const dragonBallFormats = <DeckFormat>[
+    DeckFormat(
+      id: 'dragonball-standard',
+      label: 'Standard',
+      game: CardGame.dragonBall,
+      minCards: 50,
+      maxCards: 60,
+      copyKey: DeckCopyKey.printedNumber,
+      hasCommander: true,
+      usesColourIdentity: true,
+      notes:
+          'The Leader is held separately and does not count towards the 50 to '
+          '60. Every card must share a colour with it.',
+    ),
+    DeckFormat(
+      id: 'dragonball-casual',
+      label: 'Casual',
+      game: CardGame.dragonBall,
+      minCards: 0,
+      copyKey: DeckCopyKey.printedNumber,
+      notes: 'No size or copy rules are checked.',
+    ),
+  ];
+
+  /// The Gundam Card Game's constructed format.
+  ///
+  /// A main deck of exactly 50 cards - Units, Pilots, Commands and Bases - with
+  /// no more than four copies of any one card number, which is why the copy key
+  /// is the number printed on the card rather than its name. A Gundam deck also
+  /// has a ten-card resource deck, and a deck may use at most two colours;
+  /// Arcanum models neither, so the format says so rather than pretending the
+  /// main deck is the whole deck.
+  static const gundamFormats = <DeckFormat>[
+    DeckFormat(
+      id: 'gundam-standard',
+      label: 'Standard',
+      game: CardGame.gundam,
+      minCards: 50,
+      maxCards: 50,
+      copyKey: DeckCopyKey.printedNumber,
+      notes:
+          'The ten-card resource deck is not modelled and is not checked, and '
+          'neither is the two-colour limit.',
+    ),
+    DeckFormat(
+      id: 'gundam-casual',
+      label: 'Casual',
+      game: CardGame.gundam,
+      minCards: 0,
+      copyKey: DeckCopyKey.printedNumber,
+      notes: 'No size or copy rules are checked.',
+    ),
+  ];
+
   /// Every format of one game, in the order the picker shows them.
   static List<DeckFormat> forGame(CardGame game) => switch (game) {
     CardGame.mtg => <DeckFormat>[commander, ...mtgConstructed],
@@ -444,6 +508,8 @@ abstract final class DeckFormats {
     CardGame.onePiece => onePieceFormats,
     CardGame.starWarsUnlimited => swuFormats,
     CardGame.digimon => digimonFormats,
+    CardGame.dragonBall => dragonBallFormats,
+    CardGame.gundam => gundamFormats,
   };
 
   /// The format with this id, or null when it is not one we know.

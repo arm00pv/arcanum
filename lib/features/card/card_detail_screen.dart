@@ -855,7 +855,9 @@ class _AnalyticsSection extends StatelessWidget {
                         // did would promise a backfill that never arrives.
                         CardGame.onePiece ||
                         CardGame.starWarsUnlimited ||
-                        CardGame.digimon =>
+                        CardGame.digimon ||
+                        CardGame.dragonBall ||
+                        CardGame.gundam =>
                           'TCGplayer publishes current prices only: the file '
                               'Arcanum reads is rewritten once a day and keeps '
                               'no history at all. So this game has one source, '

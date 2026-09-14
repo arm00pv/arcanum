@@ -117,6 +117,44 @@ enum CardGame {
     dataSource: 'TCGplayer',
     catalogueSince: 2020,
     collectionNoun: 'binder',
+  ),
+  dragonBall(
+    id: 'dragonball',
+    label: 'Dragon Ball Super: Fusion World',
+    shortLabel: 'Dragon Ball',
+    // Fusion World shortens itself to FW on the cards and DBSFW in the shop's
+    // own set codes; three letters on a badge want the name of the game rather
+    // than the name of the line, and DBS is what the deck boxes say.
+    abbreviation: 'DBS',
+    publisher: 'Bandai',
+    // Dragon Ball's own colour is the orange of a gi, and Digimon's accent is
+    // already that orange: the two sit next to each other in the switcher and
+    // would read as one game. The dragon the whole series is named for is
+    // green, green is unused by every other game here, and it is still the
+    // game's own artwork rather than an arbitrary hue chosen to be different.
+    accent: Color(0xFF3FBF6A),
+    deep: Color(0xFF14572A),
+    dataSource: 'TCGplayer',
+    catalogueSince: 2024,
+    collectionNoun: 'binder',
+  ),
+  gundam(
+    id: 'gundam',
+    label: 'Gundam Card Game',
+    shortLabel: 'Gundam',
+    // The game abbreviates itself GCG - Gundam Card Game - and its sets print
+    // GD01, ST11 and SC01, so the initials are what its players already read.
+    abbreviation: 'GCG',
+    publisher: 'Bandai',
+    // The mobile suit is white and steel with a tricolour flash, and the flash
+    // is not available: its red is One Piece's accent and its blue is Unlimited's.
+    // The steel is: it is lighter than every other game's accent, which is what
+    // makes it readable as the Gundam in a switcher of seven saturated hues.
+    accent: Color(0xFF9AA7B8),
+    deep: Color(0xFF3A4657),
+    dataSource: 'TCGplayer',
+    catalogueSince: 2025,
+    collectionNoun: 'binder',
   );
 
   const CardGame({
@@ -174,6 +212,8 @@ enum CardGame {
     CardGame.onePiece => CardGameTag.onePiece,
     CardGame.starWarsUnlimited => CardGameTag.starWarsUnlimited,
     CardGame.digimon => CardGameTag.digimon,
+    CardGame.dragonBall => CardGameTag.dragonBall,
+    CardGame.gundam => CardGameTag.gundam,
   };
 
   /// The finishes and print variants that physically exist for this game.
@@ -210,7 +250,9 @@ enum CardGame {
     // alone; a card whose only quote is a foil quote shows as a foil card.
     CardGame.onePiece ||
     CardGame.starWarsUnlimited ||
-    CardGame.digimon => const [CardFinish.nonfoil, CardFinish.foil],
+    CardGame.digimon ||
+    CardGame.dragonBall ||
+    CardGame.gundam => const [CardFinish.nonfoil, CardFinish.foil],
   };
 
   /// The condition grades recognised by this game's collectors.
@@ -229,6 +271,8 @@ enum CardGame {
     CardGame.onePiece => OnePieceColor.values,
     CardGame.starWarsUnlimited => SwuAspect.values,
     CardGame.digimon => DigimonColor.values,
+    CardGame.dragonBall => DragonBallColor.values,
+    CardGame.gundam => GundamColor.values,
   };
 
   /// Resolves a stored symbol to this game's category.
@@ -240,6 +284,8 @@ enum CardGame {
     CardGame.onePiece => OnePieceColor.fromSymbol(symbol),
     CardGame.starWarsUnlimited => SwuAspect.fromSymbol(symbol),
     CardGame.digimon => DigimonColor.fromSymbol(symbol),
+    CardGame.dragonBall => DragonBallColor.fromSymbol(symbol),
+    CardGame.gundam => GundamColor.fromSymbol(symbol),
   };
 
   /// Picks the single category a card belongs to.
@@ -267,6 +313,12 @@ enum CardGame {
       // primary colour and the bucket is stable between downloads.
       CardGame.onePiece => OnePieceColor.fromName(values.first),
       CardGame.digimon => DigimonColor.fromName(values.first),
+      // Fusion World stamps a card with one of five colours and a Leader with
+      // one or two; Gundam allows a deck two colours and prints the pair in
+      // the order the card shows them, so the first entry is the primary one in
+      // both games and the bucket is stable between downloads.
+      CardGame.dragonBall => DragonBallColor.fromName(values.first),
+      CardGame.gundam => GundamColor.fromName(values.first),
       // Star Wars: Unlimited is the one game here whose category field mixes
       // two different things: a card has one of four aspects (Vigilance,
       // Command, Aggression, Cunning) and, separately, an alignment (Heroism
@@ -663,6 +715,125 @@ enum DigimonColor implements ColourBucket {
   static DigimonColor fromSymbol(String symbol) {
     final s = symbol.trim().toUpperCase();
     for (final colour in DigimonColor.values) {
+      if (colour.symbol == s) return colour;
+    }
+    return fromName(s);
+  }
+}
+
+/// The five colours of the Dragon Ball Super Card Game: Fusion World.
+///
+/// Fusion World prints Red, Blue, Green, Yellow and Black, and its Leader is
+/// one or two of them: a deck may only contain cards that share a colour with
+/// its Leader, which is the same rule One Piece plays under and the reason both
+/// formats hold the Leader outside the deck.
+///
+/// [noColour] is the catch-all for a printing the provider leaves blank - the
+/// tournament and event promos, mostly - which is counted rather than guessed
+/// into a colour the card has not got.
+enum DragonBallColor implements ColourBucket {
+  red('R', 'Red', Color(0xFFE4573D), Color(0xFF8E2A18)),
+  blue('U', 'Blue', Color(0xFF4C8DE8), Color(0xFF1D4E96)),
+  green('G', 'Green', Color(0xFF3FAF6A), Color(0xFF186B3C)),
+  yellow('Y', 'Yellow', Color(0xFFEFC03C), Color(0xFF9A7412)),
+  black('B', 'Black', Color(0xFF7E7A99), Color(0xFF3A3750)),
+  noColour('N', 'No colour', Color(0xFF8C9AAE), Color(0xFF4A5566));
+
+  const DragonBallColor(this.symbol, this.label, this.accent, this.deep);
+
+  @override
+  final String symbol;
+
+  @override
+  final String label;
+
+  @override
+  final Color accent;
+
+  @override
+  final Color deep;
+
+  /// Maps the provider's Color field to a palette entry.
+  static DragonBallColor fromName(String? name) {
+    switch ((name ?? '').toLowerCase().trim()) {
+      case 'red':
+        return DragonBallColor.red;
+      case 'blue':
+        return DragonBallColor.blue;
+      case 'green':
+        return DragonBallColor.green;
+      case 'yellow':
+        return DragonBallColor.yellow;
+      case 'black':
+        return DragonBallColor.black;
+      default:
+        return DragonBallColor.noColour;
+    }
+  }
+
+  /// Resolves a stored symbol, or the full colour name, back to a colour.
+  static DragonBallColor fromSymbol(String symbol) {
+    final s = symbol.trim().toUpperCase();
+    for (final colour in DragonBallColor.values) {
+      if (colour.symbol == s) return colour;
+    }
+    return fromName(s);
+  }
+}
+
+/// The five colours of the Gundam Card Game.
+///
+/// The game prints Blue, Green, Red, White and Purple, and a deck may use two
+/// of them: a card's colour decides whether a deck can play it at all, which
+/// makes it the same kind of category as One Piece's colour or Unlimited's
+/// aspect rather than a cosmetic detail.
+///
+/// [noColour] is the catch-all. The provider states a colour for every card in
+/// a set, so nothing in a set lands there; a printing it leaves blank does.
+enum GundamColor implements ColourBucket {
+  blue('U', 'Blue', Color(0xFF4C8DE8), Color(0xFF1D4E96)),
+  green('G', 'Green', Color(0xFF3FAF6A), Color(0xFF186B3C)),
+  red('R', 'Red', Color(0xFFE4573D), Color(0xFF8E2A18)),
+  white('W', 'White', Color(0xFFC3CCDA), Color(0xFF6B7480)),
+  purple('P', 'Purple', Color(0xFF9B6BE0), Color(0xFF4E2E85)),
+  noColour('N', 'No colour', Color(0xFF8C9AAE), Color(0xFF4A5566));
+
+  const GundamColor(this.symbol, this.label, this.accent, this.deep);
+
+  @override
+  final String symbol;
+
+  @override
+  final String label;
+
+  @override
+  final Color accent;
+
+  @override
+  final Color deep;
+
+  /// Maps the provider's Color field to a palette entry.
+  static GundamColor fromName(String? name) {
+    switch ((name ?? '').toLowerCase().trim()) {
+      case 'blue':
+        return GundamColor.blue;
+      case 'green':
+        return GundamColor.green;
+      case 'red':
+        return GundamColor.red;
+      case 'white':
+        return GundamColor.white;
+      case 'purple':
+        return GundamColor.purple;
+      default:
+        return GundamColor.noColour;
+    }
+  }
+
+  /// Resolves a stored symbol, or the full colour name, back to a colour.
+  static GundamColor fromSymbol(String symbol) {
+    final s = symbol.trim().toUpperCase();
+    for (final colour in GundamColor.values) {
       if (colour.symbol == s) return colour;
     }
     return fromName(s);

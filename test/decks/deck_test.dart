@@ -661,6 +661,32 @@ void main() {
       expect(format.notes, contains('Digi-Egg'));
     });
 
+    test('Fusion World is a Leader and fifty to sixty cards', () {
+      // The official rule: one Leader, and a deck of 50 to 60 cards with no
+      // more than four copies of a card number. The Leader gates the colours
+      // exactly as One Piece's does, so it is held the same way.
+      final format = DeckFormats.forGame(CardGame.dragonBall).first;
+      expect(format.id, 'dragonball-standard');
+      expect(format.minCards, 50);
+      expect(format.maxCards, 60);
+      expect(format.maxCopies, 4);
+      expect(format.hasCommander, isTrue);
+      expect(format.usesColourIdentity, isTrue);
+      expect(format.copyKey, DeckCopyKey.printedNumber);
+    });
+
+    test('Gundam is exactly fifty, and says what it does not check', () {
+      final format = DeckFormats.forGame(CardGame.gundam).first;
+      expect(format.minCards, 50);
+      expect(format.maxCards, 50);
+      expect(format.maxCopies, 4);
+      expect(format.copyKey, DeckCopyKey.printedNumber);
+      // The resource deck and the two-colour limit are real rules the app does
+      // not model, and the format says so rather than staying quiet.
+      expect(format.notes, contains('resource deck'));
+      expect(format.notes, contains('two-colour'));
+    });
+
     test('every format of every game can be judged', () {
       for (final game in CardGame.values) {
         final formats = DeckFormats.forGame(game);

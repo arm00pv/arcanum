@@ -969,6 +969,8 @@ TCGCSV_CATEGORIES = {
     "onepiece": 68,
     "swu": 79,
     "digimon": 63,
+    "dragonball": 80,
+    "gundam": 86,
 }
 
 # Product names that are sealed product even when the list is vague about it.
@@ -1150,6 +1152,8 @@ GAME_LABELS = {
     "onepiece": "One Piece Card Game",
     "swu": "Star Wars: Unlimited",
     "digimon": "Digimon Card Game",
+    "dragonball": "Dragon Ball Super: Fusion World",
+    "gundam": "Gundam Card Game",
 }
 
 
