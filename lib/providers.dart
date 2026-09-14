@@ -34,6 +34,7 @@ import 'package:arcanum/domain/models/price_alert.dart';
 import 'package:arcanum/domain/models/sealed_product.dart';
 import 'package:arcanum/domain/models/set_completion.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
+import 'package:arcanum/domain/portfolio/portfolio_change.dart';
 import 'package:arcanum/domain/quant/quant.dart';
 
 /// The phone's own authentication: a fingerprint, a face, or the screen lock.
@@ -458,6 +459,20 @@ final portfolioSeriesProvider =
     FutureProvider.family<List<PricePoint>, CardGame>((ref, game) async {
       await ref.watch(collectionOverviewProvider(game).future);
       return ref.watch(bootstrapProvider).collectionFor(game).portfolioSeries();
+    });
+
+/// The portfolio curve with the card count of each day, for the dashboard.
+///
+/// Its own provider rather than a change to [portfolioSeriesProvider]: the count
+/// is only needed where the change is captioned, and one extra column should not
+/// change what every other caller of the series receives.
+final portfolioHistoryProvider =
+    FutureProvider.family<List<PortfolioPoint>, CardGame>((ref, game) async {
+      await ref.watch(collectionOverviewProvider(game).future);
+      return ref
+          .watch(bootstrapProvider)
+          .collectionFor(game)
+          .portfolioHistory();
     });
 
 /// Headline figures for every game, used by the switcher.

@@ -9,6 +9,7 @@ import 'package:arcanum/data/repositories/collection_repository.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
+import 'package:arcanum/domain/portfolio/portfolio_change.dart';
 import 'package:arcanum/domain/quant/quant.dart';
 import 'package:arcanum/features/alerts/alerts_screen.dart';
 import 'package:arcanum/features/card/card_detail_screen.dart';
@@ -81,6 +82,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           .recordDailySnapshot();
       if (!mounted) return;
       ref.invalidate(portfolioSeriesProvider(game));
+      ref.invalidate(portfolioHistoryProvider(game));
       ref.invalidate(collectionOverviewProvider(game));
     } catch (_) {
       // A failed snapshot must never break the dashboard.
@@ -102,6 +104,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final overviewAsync = ref.watch(collectionOverviewProvider(game));
     final series =
         ref.watch(portfolioSeriesProvider(game)).value ?? const <PricePoint>[];
+    // The same curve with the card count of each day, which is what tells a
+    // fall in the market apart from a change in what is actually owned.
+    final history =
+        ref.watch(portfolioHistoryProvider(game)).value ??
+        const <PortfolioPoint>[];
     final cards =
         ref.watch(ownedCardsProvider(game)).value ?? const <String, TcgCard>{};
     final cataloguedSets = ref.watch(setCountProvider(game)).value ?? 0;
@@ -121,6 +128,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ref.invalidate(collectionOverviewProvider(game));
               ref.invalidate(ownedCardsProvider(game));
               ref.invalidate(portfolioSeriesProvider(game));
+              ref.invalidate(portfolioHistoryProvider(game));
               ref.invalidate(setCountProvider(game));
             },
             child: CustomScrollView(
@@ -172,7 +180,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 6, 16, 120),
                     sliver: SliverList.list(
                       children: [
-                        _ValueHero(overview: o, series: series, game: game),
+                        _ValueHero(
+                          overview: o,
+                          series: series,
+                          history: history,
+                          game: game,
+                        ),
                         const SizedBox(height: 14),
                         _StatGrid(overview: o),
                         if (o.valueByCategory.isNotEmpty) ...[
@@ -275,11 +288,16 @@ class _ValueHero extends StatelessWidget {
   const _ValueHero({
     required this.overview,
     required this.series,
+    required this.history,
     required this.game,
   });
 
   final CollectionOverview overview;
   final List<PricePoint> series;
+
+  /// The same series with the card count of each day.
+  final List<PortfolioPoint> history;
+
   final CardGame game;
 
   @override
@@ -289,9 +307,11 @@ class _ValueHero extends StatelessWidget {
     final change = values.length >= 2
         ? (values.last / values[values.length - 2] - 1) * 100
         : null;
-    final sinceStart = values.length >= 2 && values.first > 0
-        ? (values.last / values.first - 1) * 100
-        : null;
+    // The stretch the caption describes, and whether the two ends of it held
+    // the same collection - which is the difference between a market move and a
+    // change in what is owned.
+    final PortfolioChange? stretch = portfolioChange(history);
+    final sinceStart = stretch?.percent;
 
     return GlassCard(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
@@ -333,10 +353,21 @@ class _ValueHero extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Since ${Fmt.dateShort(series.first.date)}  ·  '
-              '${Fmt.percent(sinceStart)}',
+              stretch?.label ??
+                  'Since ${Fmt.dateShort(series.first.date)}  ·  '
+                      '${Fmt.percent(sinceStart)}',
               style: context.t.labelSmall?.copyWith(color: c.textTertiary),
             ),
+            if (stretch?.caveat != null) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                stretch!.caveat!,
+                style: context.t.labelSmall?.copyWith(
+                  color: c.textTertiary,
+                  height: 1.4,
+                ),
+              ),
+            ],
           ] else
             Container(
               padding: const EdgeInsets.all(12),

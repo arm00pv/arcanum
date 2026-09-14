@@ -10,6 +10,7 @@ import 'package:arcanum/data/repositories/catalog_repository.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
+import 'package:arcanum/domain/portfolio/portfolio_change.dart';
 import 'package:arcanum/domain/quant/quant.dart';
 
 /// Aggregated view of everything the user owns in one game.
@@ -468,6 +469,10 @@ class CollectionRepository {
   /// The portfolio value series for this game, oldest first.
   Future<List<PricePoint>> portfolioSeries({int days = 400}) =>
       _hist.portfolioSeries(game, days: days);
+
+  /// The same series, with the card count of each day.
+  Future<List<PortfolioPoint>> portfolioHistory({int days = 400}) =>
+      _hist.portfolioHistory(game, days: days);
 
   /// Pulls real history for this game's whole collection from the configured
   /// providers.

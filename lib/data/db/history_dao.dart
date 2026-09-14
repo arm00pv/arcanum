@@ -2,6 +2,7 @@ import 'package:sqflite/sqflite.dart';
 
 import 'package:arcanum/core/theme/mana.dart';
 import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/domain/portfolio/portfolio_change.dart';
 import 'package:arcanum/domain/quant/quant.dart';
 
 /// Persists the daily price observations the app accumulates over time.
@@ -248,6 +249,33 @@ class HistoryDao {
         PricePoint(
           _parseKey(r['date'] as String),
           (r['total_value'] as num).toDouble(),
+        ),
+    ];
+  }
+
+  /// The portfolio series with the card count of each day.
+  ///
+  /// The same rows [portfolioSeries] returns, plus how many cards the collection
+  /// held: the dashboard needs both to tell a market move from a change in what
+  /// is owned.
+  Future<List<PortfolioPoint>> portfolioHistory(
+    CardGame game, {
+    int days = 400,
+  }) async {
+    final cutoff = _key(DateTime.now().subtract(Duration(days: days)));
+    final rows = await _db.query(
+      'portfolio_snapshots',
+      columns: <String>['date', 'total_value', 'total_cards'],
+      where: 'game = ? AND date >= ?',
+      whereArgs: <Object?>[game.id, cutoff],
+      orderBy: 'date ASC',
+    );
+    return <PortfolioPoint>[
+      for (final r in rows)
+        PortfolioPoint(
+          date: _parseKey(r['date'] as String),
+          value: (r['total_value'] as num).toDouble(),
+          cards: (r['total_cards'] as num?)?.toInt() ?? 0,
         ),
     ];
   }
