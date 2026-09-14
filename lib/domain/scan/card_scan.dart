@@ -144,6 +144,14 @@ final RegExp _bulletPair = RegExp(
 /// 'LOB-EN001', which is both the set and the number.
 final RegExp _ygoCode = RegExp(r'\b([A-Z]{2,4})-([A-Z]{2,3})?(\d{3,4})\b');
 
+/// 'OP01-002' and 'BT26-052', which are also both the set and the number.
+///
+/// The same shape as the Yu-Gi-Oh! code with one difference that matters: the
+/// set part carries digits of its own - OP01, BT26, ST31, EX13 - so a reader
+/// that looked for letters followed by a dash would find nothing on the card.
+/// The dash is the only separator, and the digits after it are the position.
+final RegExp _bandaiCode = RegExp(r'\b([A-Z]{1,4}\d{0,2})-(\d{2,4})\b');
+
 /// What a set code, a language and a rarity are separated by on a card.
 final RegExp _separators = RegExp(r'[\s•·*°⁕©®+]+');
 
@@ -209,7 +217,10 @@ CardScan readCardText(
   return switch (game) {
     CardGame.mtg => _readMtg(cleaned, known),
     CardGame.yugioh => _readYugioh(cleaned),
-    CardGame.pokemon || CardGame.lorcana => _readNumbered(cleaned),
+    CardGame.onePiece || CardGame.digimon => _readBandai(cleaned),
+    CardGame.pokemon ||
+    CardGame.lorcana ||
+    CardGame.starWarsUnlimited => _readNumbered(cleaned),
   };
 }
 
@@ -249,6 +260,29 @@ CardScan _readYugioh(List<ScannedLine> lines) {
     // The region in the middle ('EN') is a printing detail rather than a
     // position, and the catalogue stores the number without it.
     collectorNumber: _normaliseNumber(match.group(3)!),
+    name: _nameFrom(lines),
+    lines: ScannedLine.textOf(lines),
+  );
+}
+
+/// One Piece and Digimon: one hyphenated code for the set and the position.
+///
+/// Both games print it in the same place and in the same shape as Yu-Gi-Oh!,
+/// and in both the set part is a code the catalogue already uses - once the
+/// separators come out of it. 'BT-26' as the provider spells the set and 'BT26'
+/// as the card prints it are the same set, and the app stores the second, so
+/// the reader produces the second.
+CardScan _readBandai(List<ScannedLine> lines) {
+  final allText = _fixDigits(
+    lines.map((ScannedLine l) => l.text).join('\n').toUpperCase(),
+  );
+  final match = _bandaiCode.firstMatch(allText);
+  if (match == null) {
+    return CardScan(name: _nameFrom(lines), lines: ScannedLine.textOf(lines));
+  }
+  return CardScan(
+    setCode: match.group(1)!.replaceAll(_notToken, ''),
+    collectorNumber: _normaliseNumber(match.group(2)!),
     name: _nameFrom(lines),
     lines: ScannedLine.textOf(lines),
   );

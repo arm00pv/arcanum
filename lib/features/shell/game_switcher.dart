@@ -67,9 +67,10 @@ class GameSwitcherBar extends ConsumerWidget {
                   child: Text(
                     summary == null || summary.totalCards == 0
                         ? (summary?.hasCatalog == true
-                              ? '${Fmt.count(summary!.setCount)} sets catalogued'
+                              ? '${Fmt.countOf(summary!.setCount, 'set')} '
+                                    'catalogued'
                               : 'Not downloaded yet')
-                        : '${Fmt.count(summary.totalCards)} cards · '
+                        : '${Fmt.countOf(summary.totalCards, 'card')} · '
                               '${Fmt.moneyCompact(summary.totalValue)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

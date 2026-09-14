@@ -412,6 +412,51 @@ class CompanionTest(unittest.TestCase):
         status, _ = self.call("GET", "/v1/backup/status", token="not-the-token")
         self.assertEqual(status, 401)
 
+    # -- sealed product, and the set codes it is keyed by ------------------
+
+    def test_every_game_the_app_tracks_has_a_price_category(self):
+        # A game missing here has no sealed product this server can price, and
+        # the app is told so rather than sold a box from another game.
+        for game in ("mtg", "pokemon", "lorcana", "yugioh", "onepiece", "swu",
+                     "digimon"):
+            self.assertIn(game, sync_server.TCGCSV_CATEGORIES)
+            self.assertIn(game, sync_server.GAME_LABELS)
+
+    def test_a_set_code_is_matched_the_way_the_card_prints_it(self):
+        # TCGplayer spells a Digimon set "BT-26" and the card prints "BT26-052";
+        # the app stores the second, so the two have to be the same string here.
+        self.assertEqual(sync_server._code_key("BT-26"), "bt26")
+        self.assertEqual(sync_server._code_key("BT26"), "bt26")
+        self.assertEqual(sync_server._code_key("OP18 RE"), "op18re")
+        self.assertEqual(sync_server._code_key(""), "")
+        self.assertEqual(sync_server._code_key(None), "")
+
+        groups = [
+            {"groupId": 24623, "abbreviation": "BT-26", "name": "Timeless Bonds"},
+            {"groupId": 3188, "abbreviation": "OP01", "name": "Romance Dawn"},
+            {"groupId": 9999, "abbreviation": "", "name": "Only A Name"},
+        ]
+        original = sync_server._tcgsv_groups
+        sync_server._tcgsv_groups = lambda category: groups
+        try:
+            self.assertEqual(
+                sync_server._group_for(63, "bt26")["groupId"], 24623
+            )
+            self.assertEqual(
+                sync_server._group_for(68, "op01")["groupId"], 3188
+            )
+            # Some sets are only named, and a name still has to match exactly.
+            self.assertEqual(
+                sync_server._group_for(63, "Only A Name")["groupId"], 9999
+            )
+            self.assertIsNone(sync_server._group_for(63, "nothing"))
+        finally:
+            sync_server._tcgsv_groups = original
+
+    def test_an_unknown_game_has_no_sealed_product(self):
+        # The answer to a game this server does not price is None, not a guess.
+        self.assertIsNone(sync_server.sealed_for("checkers", "op01"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

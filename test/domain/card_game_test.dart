@@ -5,8 +5,8 @@
 // A game is not just a name and a colour: it decides which finishes a card can
 // be owned in, which grades its collectors use, and which axis its allocation
 // chart is drawn along. Those three things are what every other layer reads, so
-// they are pinned here for all four games at once - a fifth game added later
-// fails these tests until it declares them.
+// they are pinned here for every game at once - a new game added later fails
+// these tests until it declares them.
 
 import 'package:arcanum/core/theme/mana.dart';
 import 'package:arcanum/domain/models/card_game.dart';
@@ -14,7 +14,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('the roster', () {
-    test('covers the four games, and their ids never change', () {
+    test('covers the seven games, and their ids never change', () {
       // The id is written into SQLite rows and SharedPreferences, so renaming
       // one would orphan a collection rather than migrate it.
       expect(CardGame.values.map((g) => g.id), <String>[
@@ -22,6 +22,9 @@ void main() {
         'pokemon',
         'lorcana',
         'yugioh',
+        'onepiece',
+        'swu',
+        'digimon',
       ]);
     });
 
@@ -135,6 +138,28 @@ void main() {
       expect(CardRarity.fromCode(''), CardRarity.unknown);
       expect(CardRarity.fromCode(null), CardRarity.unknown);
     });
+
+    test('read the short codes the two Bandai games print', () {
+      // One Piece ships a letter or two where the other games ship a word, so
+      // none of these reached a tier and every One Piece card in the app wore a
+      // grey Unknown badge. Super Rare is the same rung as Yu-Gi-Oh!'s, which
+      // the keyword chain already reads as the rare tier, so the two agree.
+      expect(CardRarity.fromCode('C'), CardRarity.common);
+      expect(CardRarity.fromCode('UC'), CardRarity.uncommon);
+      expect(CardRarity.fromCode('R'), CardRarity.rare);
+      expect(CardRarity.fromCode('SR'), CardRarity.rare);
+      expect(CardRarity.fromCode('L'), CardRarity.mythic);
+      expect(CardRarity.fromCode('SEC'), CardRarity.mythic);
+      expect(CardRarity.fromCode('P'), CardRarity.bonus);
+      expect(CardRarity.fromCode('DON!!'), CardRarity.bonus);
+      // Digimon's one rarity word outside the ladder: a promo or a box topper.
+      expect(CardRarity.fromCode('None'), CardRarity.special);
+      // The codes are matched exactly, so a word that merely starts with one of
+      // their letters still goes through the keyword chain.
+      expect(CardRarity.fromCode('Special'), CardRarity.special);
+      expect(CardRarity.fromCode('Ultra Rare'), CardRarity.rare);
+      expect(CardRarity.fromCode('Rare Holo'), CardRarity.rare);
+    });
   });
 
   group('Lorcana inks', () {
@@ -212,6 +237,130 @@ void main() {
           );
         }
       }
+    });
+  });
+
+  group('the games TCGplayer catalogs', () {
+    test('print an ordinary card and a foil', () {
+      // One Piece, Star Wars: Unlimited and Digimon are all priced under the
+      // same two subtypes TCGplayer publishes, which is the same pair Lorcana
+      // prints - so the finish vocabulary is the pair rather than a guess.
+      for (final game in <CardGame>[
+        CardGame.onePiece,
+        CardGame.starWarsUnlimited,
+        CardGame.digimon,
+      ]) {
+        expect(game.finishes, <CardFinish>[
+          CardFinish.nonfoil,
+          CardFinish.foil,
+        ], reason: game.id);
+        // The first entry is the one a collection entry, an alert and a
+        // history series fall back to.
+        expect(game.finishes.first, CardFinish.nonfoil, reason: game.id);
+      }
+    });
+
+    test('grade on the scale TCGplayer publishes', () {
+      for (final game in <CardGame>[
+        CardGame.onePiece,
+        CardGame.starWarsUnlimited,
+        CardGame.digimon,
+      ]) {
+        expect(game.conditions, <CardCondition>[
+          CardCondition.nearMint,
+          CardCondition.lightPlayed,
+          CardCondition.moderatelyPlayed,
+          CardCondition.heavilyPlayed,
+          CardCondition.damaged,
+        ], reason: game.id);
+      }
+    });
+
+    test('bucket along the axis the game itself uses', () {
+      expect(CardGame.onePiece.colourCategories, OnePieceColor.values);
+      expect(CardGame.digimon.colourCategories, DigimonColor.values);
+      expect(CardGame.starWarsUnlimited.colourCategories, SwuAspect.values);
+    });
+
+    test('read a colour from the wire name or the stored symbol', () {
+      expect(OnePieceColor.fromName('Green'), OnePieceColor.green);
+      expect(OnePieceColor.fromName('Yellow'), OnePieceColor.yellow);
+      expect(OnePieceColor.fromSymbol('U'), OnePieceColor.blue);
+      expect(DigimonColor.fromName('Purple'), DigimonColor.purple);
+      expect(DigimonColor.fromSymbol('W'), DigimonColor.white);
+      expect(SwuAspect.fromName('Cunning'), SwuAspect.cunning);
+      expect(SwuAspect.fromSymbol('V'), SwuAspect.vigilance);
+    });
+
+    test('anything unreadable is the catch-all, never a real colour', () {
+      // Painting an unknown card into Red would put its value in the wrong
+      // slice of the chart, which is worse than a labelled bucket.
+      expect(OnePieceColor.fromName(null), OnePieceColor.noColour);
+      expect(OnePieceColor.fromName('rainbow'), OnePieceColor.noColour);
+      expect(OnePieceColor.fromSymbol('???'), OnePieceColor.noColour);
+      expect(DigimonColor.fromName(null), DigimonColor.white);
+      expect(SwuAspect.fromName(null), SwuAspect.unaligned);
+    });
+
+    test('a dual-colour card collapses onto the colour it names first', () {
+      // The provider lists a card's colours in printed order, so the bucket is
+      // stable rather than dependent on how the list happened to be sorted.
+      expect(
+        CardGame.onePiece.dominantBucket(<String>['Green', 'Red']),
+        OnePieceColor.green,
+      );
+      expect(
+        CardGame.digimon.dominantBucket(<String>['Blue', 'Green']),
+        DigimonColor.blue,
+      );
+    });
+
+    test('an Unlimited card is bucketed by its aspect, not its alignment', () {
+      // The provider mixes both into one field and lists them in either order,
+      // so the aspect - the game's colour pie - has to win whichever comes
+      // first, or half the chart would silently become a chart of alignments.
+      expect(
+        CardGame.starWarsUnlimited.dominantBucket(<String>[
+          'Villainy',
+          'Command',
+        ]),
+        SwuAspect.command,
+      );
+      expect(
+        CardGame.starWarsUnlimited.dominantBucket(<String>[
+          'Command',
+          'Villainy',
+        ]),
+        SwuAspect.command,
+      );
+      // A card with no aspect at all is still counted somewhere real.
+      expect(
+        CardGame.starWarsUnlimited.dominantBucket(<String>['Heroism']),
+        SwuAspect.heroism,
+      );
+      expect(
+        CardGame.starWarsUnlimited.dominantBucket(<String>[]),
+        SwuAspect.unaligned,
+      );
+    });
+
+    test('a card names every category it is in, not just the first', () {
+      // What a card detail screen draws: a two-colour Leader is two pips.
+      expect(
+        CardGame.onePiece
+            .bucketsOf(<String>['Green', 'Red'])
+            .map((ColourBucket b) => b.label),
+        <String>['Green', 'Red'],
+      );
+      // A card with no colour at all shows the bucket it was counted in.
+      expect(
+        CardGame.onePiece.bucketsOf(<String>[], includeCatchAll: true).single,
+        OnePieceColor.noColour,
+      );
+      expect(
+        CardGame.pokemon.bucketsOf(<String>[], includeCatchAll: true).single,
+        PokemonType.colorless,
+      );
     });
   });
 }

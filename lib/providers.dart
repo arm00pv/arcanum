@@ -8,6 +8,7 @@ import 'package:arcanum/data/backup/backup_service.dart';
 import 'package:arcanum/data/catalog/lorcana_catalog.dart';
 import 'package:arcanum/data/catalog/mtg_catalog.dart';
 import 'package:arcanum/data/catalog/pokemon_catalog.dart';
+import 'package:arcanum/data/catalog/tcgcsv_catalog.dart';
 import 'package:arcanum/data/catalog/ygo_catalog.dart';
 import 'package:arcanum/data/db/alert_dao.dart';
 import 'package:arcanum/data/db/app_database.dart';
@@ -132,6 +133,12 @@ class Bootstrap {
           CardGame.pokemon: PokemonCatalog(),
           CardGame.yugioh: YgoCatalog(),
           CardGame.lorcana: LorcanaCatalog(),
+          // The three games TCGplayer catalogs itself share one adapter: the
+          // provider's shape is the same for all of them and only the category
+          // id and the name of the colour field differ.
+          CardGame.onePiece: TcgcsvCatalog.onePiece(),
+          CardGame.starWarsUnlimited: TcgcsvCatalog.starWarsUnlimited(),
+          CardGame.digimon: TcgcsvCatalog.digimon(),
         };
 
     final catalogRepository = CatalogRepository(

@@ -16,6 +16,7 @@ class DeckFormat {
     required this.minCards,
     this.maxCards,
     this.maxCopies = 4,
+    this.copyKey = DeckCopyKey.printing,
     this.singleton = false,
     this.hasCommander = false,
     this.sideboardSize = 0,
@@ -41,6 +42,9 @@ class DeckFormat {
 
   /// Copies of one card allowed, ignoring [unlimited].
   final int maxCopies;
+
+  /// What "one card" means when [maxCopies] is counted.
+  final DeckCopyKey copyKey;
 
   /// True when every card but the commander must be unique (Commander, Brawl).
   final bool singleton;
@@ -75,6 +79,30 @@ class DeckFormat {
 
   /// True when the deck has a sideboard at all.
   bool get hasSideboard => sideboardSize > 0;
+}
+
+/// What a format's copy limit counts as the same card.
+///
+/// Every game writes its four-of rule against something, and it is almost never
+/// the product id Arcanum stores: Magic counts the card's English name, One
+/// Piece, Digimon and Star Wars: Unlimited count the number printed on the card,
+/// and only Pokémon and Lorcana count the printing itself. Getting this wrong is
+/// not cosmetic - it is the difference between a checker and a checker that
+/// passes an illegal deck.
+enum DeckCopyKey {
+  /// The printing: the id the provider gave this exact card. Right for games
+  /// whose provider publishes one product per playable card.
+  printing,
+
+  /// The number printed on the card, inside its set. Right for the games whose
+  /// catalogue is full of parallel arts: those are separate products, with
+  /// separate ids, that a deck may still hold only four of between them.
+  printedNumber,
+
+  /// Every printing of the card, grouped by the provider's oracle identity. A
+  /// Magic deck may hold four Lightning Bolts, not four from each set it was
+  /// printed in.
+  oracle,
 }
 
 /// Magic's basic lands, which are exempt from the four-copy rule.
@@ -127,6 +155,7 @@ abstract final class DeckFormats {
     id: 'commander',
     label: 'Commander',
     game: CardGame.mtg,
+    copyKey: DeckCopyKey.oracle,
     minCards: 100,
     maxCards: 100,
     maxCopies: 1,
@@ -146,6 +175,7 @@ abstract final class DeckFormats {
       id: 'standard',
       label: 'Standard',
       game: CardGame.mtg,
+      copyKey: DeckCopyKey.oracle,
       minCards: 60,
       banListQuery: 'banned:standard',
       unlimited: _isBasicLand,
@@ -155,6 +185,7 @@ abstract final class DeckFormats {
       id: 'pioneer',
       label: 'Pioneer',
       game: CardGame.mtg,
+      copyKey: DeckCopyKey.oracle,
       minCards: 60,
       banListQuery: 'banned:pioneer',
       unlimited: _isBasicLand,
@@ -164,6 +195,7 @@ abstract final class DeckFormats {
       id: 'modern',
       label: 'Modern',
       game: CardGame.mtg,
+      copyKey: DeckCopyKey.oracle,
       minCards: 60,
       banListQuery: 'banned:modern',
       unlimited: _isBasicLand,
@@ -173,6 +205,7 @@ abstract final class DeckFormats {
       id: 'legacy',
       label: 'Legacy',
       game: CardGame.mtg,
+      copyKey: DeckCopyKey.oracle,
       minCards: 60,
       banListQuery: 'banned:legacy',
       unlimited: _isBasicLand,
@@ -182,6 +215,7 @@ abstract final class DeckFormats {
       id: 'vintage',
       label: 'Vintage',
       game: CardGame.mtg,
+      copyKey: DeckCopyKey.oracle,
       minCards: 60,
       banListQuery: 'banned:vintage',
       unlimited: _isBasicLand,
@@ -193,6 +227,7 @@ abstract final class DeckFormats {
       id: 'pauper',
       label: 'Pauper',
       game: CardGame.mtg,
+      copyKey: DeckCopyKey.oracle,
       minCards: 60,
       banListQuery: 'banned:pauper',
       unlimited: _isBasicLand,
@@ -202,6 +237,7 @@ abstract final class DeckFormats {
       id: 'mtg-casual',
       label: 'Casual',
       game: CardGame.mtg,
+      copyKey: DeckCopyKey.oracle,
       minCards: 0,
       unlimited: _isBasicLand,
       sideboardSize: 15,
@@ -242,6 +278,10 @@ abstract final class DeckFormats {
       id: 'ygo-advanced',
       label: 'Advanced',
       game: CardGame.yugioh,
+      // Yu-Gi-Oh!'s limit is written against the card, and its three regional
+      // printings of one card - LOB-000, LOB-E000, LOB-EN000 - are three
+      // products that share a number and must be counted together.
+      copyKey: DeckCopyKey.printedNumber,
       minCards: 40,
       maxCards: 60,
       maxCopies: 3,
@@ -252,6 +292,10 @@ abstract final class DeckFormats {
       id: 'ygo-traditional',
       label: 'Traditional',
       game: CardGame.yugioh,
+      // Yu-Gi-Oh!'s limit is written against the card, and its three regional
+      // printings of one card - LOB-000, LOB-E000, LOB-EN000 - are three
+      // products that share a number and must be counted together.
+      copyKey: DeckCopyKey.printedNumber,
       minCards: 40,
       maxCards: 60,
       maxCopies: 3,
@@ -262,6 +306,10 @@ abstract final class DeckFormats {
       id: 'ygo-casual',
       label: 'Casual',
       game: CardGame.yugioh,
+      // Yu-Gi-Oh!'s limit is written against the card, and its three regional
+      // printings of one card - LOB-000, LOB-E000, LOB-EN000 - are three
+      // products that share a number and must be counted together.
+      copyKey: DeckCopyKey.printedNumber,
       minCards: 0,
       notes: 'No size or copy rules are checked.',
     ),
@@ -284,12 +332,118 @@ abstract final class DeckFormats {
     ),
   ];
 
+  /// One Piece's constructed format.
+  ///
+  /// The official rule is exact and simple: one Leader card, a deck of exactly
+  /// 50 cards, and up to four copies of any one card number. The colour rule is
+  /// unusual - every card in the deck must match the colour of the Leader - and
+  /// it is the same shape as Magic's colour identity, so the Leader is held on
+  /// the commander board and checked the way a commander is.
+  ///
+  /// The Leader is not part of the 50: it sits in its own zone, which is why
+  /// the format counts the commander board separately from the deck size.
+  static const onePieceFormats = <DeckFormat>[
+    DeckFormat(
+      id: 'onepiece-standard',
+      label: 'Standard',
+      game: CardGame.onePiece,
+      minCards: 50,
+      maxCards: 50,
+      copyKey: DeckCopyKey.printedNumber,
+      hasCommander: true,
+      usesColourIdentity: true,
+      notes: 'The Leader is held separately and does not count towards the 50.',
+    ),
+    DeckFormat(
+      id: 'onepiece-casual',
+      label: 'Casual',
+      game: CardGame.onePiece,
+      minCards: 0,
+      copyKey: DeckCopyKey.printedNumber,
+      notes: 'No size or copy rules are checked.',
+    ),
+  ];
+
+  /// Star Wars: Unlimited's two constructed formats.
+  ///
+  /// Premier is a main deck of at least 50 cards with no more than three copies
+  /// of a card, plus exactly one Leader and one Base, neither of which counts
+  /// towards the 50. Twin Suns is the multiplayer format: 80 cards, one copy of
+  /// each, two Leaders and a Base, and the only deckbuilding restriction on
+  /// aspects is that Heroism and Villainy cannot be mixed.
+  static const swuFormats = <DeckFormat>[
+    DeckFormat(
+      id: 'swu-premier',
+      label: 'Premier',
+      game: CardGame.starWarsUnlimited,
+      minCards: 50,
+      maxCopies: 3,
+      copyKey: DeckCopyKey.printedNumber,
+      notes:
+          'The Leader and Base are held separately and do not count towards '
+          'the 50. Aspect penalties are not checked.',
+    ),
+    DeckFormat(
+      id: 'swu-twin-suns',
+      label: 'Twin Suns',
+      game: CardGame.starWarsUnlimited,
+      minCards: 80,
+      maxCards: 80,
+      maxCopies: 1,
+      singleton: true,
+      copyKey: DeckCopyKey.printedNumber,
+      notes:
+          'Two Leaders, one Base, and one copy of each card. Only mixing '
+          'Heroism with Villainy is forbidden, and that is not checked.',
+    ),
+    DeckFormat(
+      id: 'swu-casual',
+      label: 'Casual',
+      game: CardGame.starWarsUnlimited,
+      minCards: 0,
+      copyKey: DeckCopyKey.printedNumber,
+      notes: 'No size or copy rules are checked.',
+    ),
+  ];
+
+  /// Digimon's constructed format.
+  ///
+  /// A main deck of exactly 50 cards with no more than four copies of any one
+  /// card number - so a card's parallel arts count together, which is what the
+  /// printed number key is for. A Digimon deck also has a Digi-Egg deck of up
+  /// to five cards, which Arcanum does not model: the format says so rather
+  /// than pretending the main deck is the whole deck.
+  static const digimonFormats = <DeckFormat>[
+    DeckFormat(
+      id: 'digimon-standard',
+      label: 'Standard',
+      game: CardGame.digimon,
+      minCards: 50,
+      maxCards: 50,
+      copyKey: DeckCopyKey.printedNumber,
+      notes:
+          'The Digi-Egg deck - up to five cards, four of each - is not '
+          'modelled and is not checked.',
+    ),
+    DeckFormat(
+      id: 'digimon-casual',
+      label: 'Casual',
+      game: CardGame.digimon,
+      minCards: 0,
+      copyKey: DeckCopyKey.printedNumber,
+      notes: 'No size or copy rules are checked.',
+    ),
+  ];
+
   /// Every format of one game, in the order the picker shows them.
   static List<DeckFormat> forGame(CardGame game) => switch (game) {
     CardGame.mtg => <DeckFormat>[commander, ...mtgConstructed],
     CardGame.pokemon => pokemonFormats,
     CardGame.yugioh => yugiohFormats,
     CardGame.lorcana => lorcanaFormats,
+    CardGame.onePiece => onePieceFormats,
+    CardGame.starWarsUnlimited => swuFormats,
+    CardGame.digimon => digimonFormats,
   };
 
   /// The format with this id, or null when it is not one we know.

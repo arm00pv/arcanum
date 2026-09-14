@@ -332,4 +332,86 @@ void main() {
       expect(scan.toString(), contains('117'));
     });
   });
+
+  group('a One Piece card', () {
+    /// An One Piece card, laid out the way one is printed: the name at the top
+    /// and the one hyphenated code under the art, with nothing else on it that
+    /// looks like a set.
+    List<ScannedLine> onePieceCard({
+      String name = 'Monkey.D.Luffy',
+      String bottom = 'OP01-003',
+      String type = 'Leader',
+    }) => <ScannedLine>[
+      at(0.05, name, height: 0.05),
+      at(0.12, type, height: 0.03),
+      at(0.86, bottom, height: 0.02),
+      at(0.90, 'P-070', height: 0.02),
+    ];
+
+    test('set and number come off the one code it prints', () {
+      final scan = readCardText(onePieceCard(), game: CardGame.onePiece);
+      // The code the card prints is the code the catalogue stores: the shop
+      // spells the set 'OP-01' and the card spells it 'OP01', and only the
+      // second is a match.
+      expect(scan.setCode, 'OP01');
+      expect(scan.collectorNumber, '003');
+      expect(scan.name, 'Monkey.D.Luffy');
+    });
+
+    test('a starter deck is read the same way', () {
+      final scan = readCardText(
+        onePieceCard(name: 'Roronoa Zoro', bottom: 'ST31-001'),
+        game: CardGame.onePiece,
+      );
+      expect(scan.setCode, 'ST31');
+      expect(scan.collectorNumber, '001');
+    });
+
+    test('with nothing readable it offers the name alone', () {
+      // A photograph of the top half of a card still narrows a search.
+      final scan = readCardText(<ScannedLine>[
+        at(0.05, 'Nami', height: 0.05),
+      ], game: CardGame.onePiece);
+      expect(scan.setCode, isNull);
+      expect(scan.collectorNumber, isNull);
+      expect(scan.name, 'Nami');
+    });
+  });
+
+  group('a Digimon card', () {
+    test('set and number come off a code with a rarity stuck to it', () {
+      final scan = readCardText(<ScannedLine>[
+        at(0.05, 'Agumon', height: 0.05),
+        at(0.86, 'BT26-052 C', height: 0.02),
+      ], game: CardGame.digimon);
+      // The rarity on the end is not part of the position, and the set is
+      // stored the way the card prints it rather than the way the shop does.
+      expect(scan.setCode, 'BT26');
+      expect(scan.collectorNumber, '052');
+      expect(scan.name, 'Agumon');
+    });
+
+    test('an extra booster is read the same way', () {
+      final scan = readCardText(<ScannedLine>[
+        at(0.05, 'Omnimon', height: 0.05),
+        at(0.86, 'EX13-011 U', height: 0.02),
+      ], game: CardGame.digimon);
+      expect(scan.setCode, 'EX13');
+      expect(scan.collectorNumber, '011');
+    });
+  });
+
+  group('a Star Wars: Unlimited card', () {
+    test('prints a fraction of the set and no code at all', () {
+      final scan = readCardText(<ScannedLine>[
+        at(0.05, 'Grand Admiral Thrawn', height: 0.05),
+        at(0.86, '094/264', height: 0.02),
+      ], game: CardGame.starWarsUnlimited);
+      // No set code on the card, and a token that merely looked like one would
+      // send the lookup to a set the card is not in.
+      expect(scan.setCode, isNull);
+      expect(scan.collectorNumber, '094');
+      expect(scan.name, 'Grand Admiral Thrawn');
+    });
+  });
 }

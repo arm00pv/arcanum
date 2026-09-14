@@ -39,6 +39,15 @@ abstract final class Fmt {
 
   /// A plain integer with thousands separators, e.g. \`12,480\`.
   static String count(int? v) => v == null ? '--' : _int.format(v);
+
+  /// A count with its noun, singular where the count is one: `1 card`,
+  /// `2 cards`.
+  ///
+  /// Every noun it is given pluralises with an `s`. The line above a
+  /// collection is read by someone with a single card in it as often as by
+  /// someone with ten thousand, and "1 cards" is wrong for the first of them.
+  static String countOf(int? v, String noun) =>
+      '${count(v)} $noun${v == 1 ? '' : 's'}';
   static String compact(num? v) => v == null ? '--' : _compact.format(v);
 
   /// `+12.4%`

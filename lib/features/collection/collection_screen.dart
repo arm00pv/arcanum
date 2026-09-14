@@ -119,7 +119,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                             // The game comes first: with two collections in one
                             // app it must be obvious which one is on screen.
                             '${game.shortLabel}  ·  '
-                            '${Fmt.count(overview.totalCards)} cards  ·  '
+                            '${Fmt.countOf(overview.totalCards, 'card')}  ·  '
                             '${Fmt.count(overview.uniqueCards)} unique  ·  '
                             '${Fmt.moneyCompact(overview.totalValue)}',
                             maxLines: 1,

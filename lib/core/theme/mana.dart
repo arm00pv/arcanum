@@ -117,6 +117,36 @@ enum CardRarity {
     final s = (c ?? '').toLowerCase().trim();
     if (s.isEmpty) return CardRarity.unknown;
 
+    // Bandai publishes its rarity as a short code and One Piece ships every one
+    // of them - C, UC, R, SR, L, SEC and the DON!! deck's own tier - so the
+    // codes are read exactly, before the keyword chain below, which shares no
+    // word with any of them and would call each one Unknown.
+    switch (s) {
+      case 'c':
+        return CardRarity.common;
+      case 'u':
+      case 'uc':
+        return CardRarity.uncommon;
+      case 'r':
+        return CardRarity.rare;
+      // "Super Rare" is the same rung in One Piece as in Yu-Gi-Oh!, which the
+      // chain already reads as the rare tier, so the two chart alike.
+      case 'sr':
+        return CardRarity.rare;
+      // A Leader is the card a deck is built around and a Secret Rare is the
+      // set's chase printing: both are the top of the ladder.
+      case 'l':
+      case 'sec':
+        return CardRarity.mythic;
+      case 'p':
+      case 'don!!':
+        return CardRarity.bonus;
+      // Digimon's word for a printing outside the rarity ladder - a promo, a
+      // box topper - which is the tier the app already gives those.
+      case 'none':
+        return CardRarity.special;
+    }
+
     // Highest tiers first: "special illustration rare" must not match "rare".
     if (s.contains('special illustration') ||
         s.contains('hyper rare') ||
@@ -208,9 +238,11 @@ enum CardFinish {
 /// Condition grades, ordered from best to worst.
 ///
 /// The games use different vocabularies. Magic players grade with the
-/// M/NM/EX/GD/LP/PL/PO scale; Pokémon, Yu-Gi-Oh! and Lorcana collectors all use
-/// the NM/LP/MP/HP/DMG scale TCGplayer publishes, which is why those five grades
-/// are shared between them and the Magic-only ones are not. Each game shows only
+/// M/NM/EX/GD/LP/PL/PO scale; every other game Arcanum tracks - Pokémon,
+/// Yu-Gi-Oh!, Lorcana, One Piece, Digimon and Star Wars: Unlimited - is
+/// collected on the NM/LP/MP/HP/DMG scale TCGplayer publishes, because
+/// TCGplayer is where those games are bought and sold. That is why those five
+/// grades are shared and the Magic-only ones are not. Each game shows only
 /// the grades its collectors actually use.
 enum CardCondition {
   mint('mint', 'Mint', 'M', {CardGameTag.mtg}),
@@ -219,6 +251,9 @@ enum CardCondition {
     CardGameTag.pokemon,
     CardGameTag.yugioh,
     CardGameTag.lorcana,
+    CardGameTag.onePiece,
+    CardGameTag.digimon,
+    CardGameTag.starWarsUnlimited,
   }),
   excellent('excellent', 'Excellent', 'EX', {CardGameTag.mtg}),
   good('good', 'Good', 'GD', {CardGameTag.mtg}),
@@ -227,16 +262,25 @@ enum CardCondition {
     CardGameTag.pokemon,
     CardGameTag.yugioh,
     CardGameTag.lorcana,
+    CardGameTag.onePiece,
+    CardGameTag.digimon,
+    CardGameTag.starWarsUnlimited,
   }),
   moderatelyPlayed('moderately_played', 'Moderately Played', 'MP', {
     CardGameTag.pokemon,
     CardGameTag.yugioh,
     CardGameTag.lorcana,
+    CardGameTag.onePiece,
+    CardGameTag.digimon,
+    CardGameTag.starWarsUnlimited,
   }),
   heavilyPlayed('heavily_played', 'Heavily Played', 'HP', {
     CardGameTag.pokemon,
     CardGameTag.yugioh,
     CardGameTag.lorcana,
+    CardGameTag.onePiece,
+    CardGameTag.digimon,
+    CardGameTag.starWarsUnlimited,
   }),
   played('played', 'Played', 'PL', {CardGameTag.mtg}),
   poor('poor', 'Poor', 'PO', {CardGameTag.mtg}),
@@ -244,6 +288,9 @@ enum CardCondition {
     CardGameTag.pokemon,
     CardGameTag.yugioh,
     CardGameTag.lorcana,
+    CardGameTag.onePiece,
+    CardGameTag.digimon,
+    CardGameTag.starWarsUnlimited,
   });
 
   const CardCondition(this.code, this.label, this.short, this.games);
@@ -288,7 +335,10 @@ enum CardGameTag {
   mtg('mtg'),
   pokemon('pokemon'),
   yugioh('yugioh'),
-  lorcana('lorcana');
+  lorcana('lorcana'),
+  onePiece('onepiece'),
+  digimon('digimon'),
+  starWarsUnlimited('swu');
 
   const CardGameTag(this.id);
   final String id;

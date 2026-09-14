@@ -269,13 +269,25 @@ class _Header extends StatelessWidget {
             // Magic shows a mana cost; Pokémon shows its energy types.
             if (game == CardGame.mtg && card.manaCost != null)
               ManaCostRow(cost: card.manaCost, size: 17)
-            else
+            else if (game == CardGame.mtg)
+              // Magic's pips are drawn from its own letters so they come out in
+              // WUBRG order, and a card with no colour - a land, an artifact -
+              // keeps its colourless pip rather than showing nothing.
               ManaPips(
                 symbols: [
                   for (final t in card.colors) game.bucketFor(t).symbol,
                 ],
                 size: 17,
                 showColorless: card.colors.isEmpty,
+              )
+            else
+              // Every other game buckets by something that is not mana, so the
+              // categories are handed over whole: a two-colour One Piece Leader
+              // is two pips, and a Pokémon Trainer shows the catch-all bucket it
+              // was counted in.
+              ManaPips(
+                buckets: game.bucketsOf(card.colors, includeCatchAll: true),
+                size: 17,
               ),
             const SizedBox(width: 10),
             RarityBadge(rarity: rarity),
@@ -803,8 +815,8 @@ class _AnalyticsSection extends StatelessWidget {
                     const SizedBox(height: 6),
                     Text(
                       // Each game has a different answer to "where is my
-                      // history?", and two of the three have nowhere to
-                      // backfill from, so the sentence follows the game.
+                      // history?", and most of them have nowhere to backfill
+                      // from, so the sentence follows the game.
                       switch (game) {
                         CardGame.mtg =>
                           'Arcanum records a price snapshot every day you open '
@@ -829,6 +841,20 @@ class _AnalyticsSection extends StatelessWidget {
                               'companion records every Lorcana card once a day, '
                               'and the app snapshots the cards you own. Analysis '
                               'begins after a couple of weeks.',
+                        // The three games TCGplayer catalogs are republished
+                        // once a day as a price file with no history in it at
+                        // all, so they are in Lorcana's position - except that
+                        // the companion does not sample them yet, and saying it
+                        // did would promise a backfill that never arrives.
+                        CardGame.onePiece ||
+                        CardGame.starWarsUnlimited ||
+                        CardGame.digimon =>
+                          'TCGplayer publishes current prices only: the file '
+                              'Arcanum reads is rewritten once a day and keeps '
+                              'no history at all. So this game has one source, '
+                              'and it is yours - the app records a snapshot of '
+                              'the cards you own every day you open it. '
+                              'Analysis begins after a couple of weeks.',
                       },
                       textAlign: TextAlign.center,
                       style: context.t.bodySmall,

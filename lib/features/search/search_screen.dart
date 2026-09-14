@@ -270,9 +270,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               decoration: InputDecoration(
                 hintText: switch (game) {
                   CardGame.mtg => 'Card name, set or oracle text',
-                  CardGame.pokemon => 'Card name, set or card text',
-                  CardGame.yugioh => 'Card name, set or card text',
-                  CardGame.lorcana => 'Card name, set or card text',
+                  CardGame.pokemon ||
+                  CardGame.yugioh ||
+                  CardGame.lorcana ||
+                  CardGame.onePiece ||
+                  CardGame.starWarsUnlimited ||
+                  CardGame.digimon => 'Card name, set or card text',
                 },
                 prefixIcon: Icon(
                   Icons.search_rounded,
@@ -329,12 +332,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           CardGame.pokemon => 'Search every Pokémon set',
           CardGame.yugioh => 'Search every Yu-Gi-Oh! set',
           CardGame.lorcana => 'Search every Lorcana set',
+          CardGame.onePiece => 'Search every One Piece set',
+          CardGame.starWarsUnlimited => 'Search every Star Wars: Unlimited set',
+          CardGame.digimon => 'Search every Digimon set',
         },
         message:
             'Type at least two characters - card names, set names and '
             '$textNoun all work. '
-            'Arcanum answers from your cached ${game.shortLabel} catalogue '
-            'first and asks ${game.dataSource} for the rest.',
+            '${_searchScope(game)}',
       ),
       SectionHeader(
         title: 'Quick filters',
@@ -376,6 +381,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   CardGame.lorcana =>
                     'Partial names work: "elsa" finds every Elsa, and a '
                         'version name such as "Snow Queen" narrows it.',
+                  CardGame.onePiece =>
+                    'Partial names work: "luffy" finds every Monkey.D.Luffy, '
+                        'and the number - OP01-003 - narrows it to one.',
+                  CardGame.starWarsUnlimited =>
+                    'Partial names work: "luke" finds every Luke Skywalker.',
+                  CardGame.digimon =>
+                    'Partial names work: "agumon" finds every Agumon.',
                 },
               ),
               _SearchTip(
@@ -388,6 +400,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     'Search a set name such as "Base Set" to browse it.',
                   CardGame.yugioh => 'Search a set name such as "Legend of Blue Eyes" to browse it.',
                   CardGame.lorcana => 'Search a set name such as "The First Chapter" to browse it.',
+                  CardGame.onePiece =>
+                    'Search a set name such as "Romance Dawn" to browse it.',
+                  CardGame.starWarsUnlimited =>
+                    'Search a set name such as "Ashes of the Empire" to '
+                        'browse it.',
+                  CardGame.digimon =>
+                    'Search a set name such as "Timeless Bonds" to browse it.',
                 },
               ),
               _SearchTip(
@@ -406,6 +425,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   CardGame.lorcana =>
                     'Card text is searched, so "banish" finds the cards that '
                         'do it.',
+                  CardGame.onePiece =>
+                    'Card text is searched, so "Blocker" finds the cards that '
+                        'have it.',
+                  CardGame.starWarsUnlimited =>
+                    'Card text is searched, so "Sentinel" finds the cards that '
+                        'have it.',
+                  CardGame.digimon =>
+                    'Card text is searched, so "Blocker" finds the cards that '
+                        'have it.',
                 },
               ),
               _SearchTip(
@@ -423,6 +451,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     ];
   }
 
+  /// Where a game's search results can come from.
+  ///
+  /// Four of the games have a provider with a search endpoint. The three
+  /// catalogued through tcgcsv do not - it republishes TCGplayer's product
+  /// dumps once a day and offers no way to ask about a card by name - so their
+  /// search covers the sets that have been opened, and the screen says so
+  /// rather than promising a query of the whole game it cannot make.
+  static String _searchScope(CardGame game) => switch (game) {
+    CardGame.onePiece || CardGame.starWarsUnlimited || CardGame.digimon =>
+      'Arcanum answers from the ${game.shortLabel} cards already on this '
+          'phone. ${game.dataSource} publishes no search index for this game, '
+          'so open a set from Sets and its cards become searchable.',
+    _ =>
+      'Arcanum answers from your cached ${game.shortLabel} catalogue first '
+          'and asks ${game.dataSource} for the rest.',
+  };
+
   /// What a game calls the text printed on its cards.
   ///
   /// Each game names this differently and the search tips read badly when the
@@ -430,8 +475,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   static String _textNoun(CardGame game) => switch (game) {
     CardGame.mtg => 'oracle text',
     CardGame.pokemon => 'attack and rules text',
-    CardGame.yugioh => 'card text',
-    CardGame.lorcana => 'card text',
+    CardGame.yugioh ||
+    CardGame.lorcana ||
+    CardGame.onePiece ||
+    CardGame.starWarsUnlimited ||
+    CardGame.digimon => 'card text',
   };
 
   // ----------------------------------------------------------------- results

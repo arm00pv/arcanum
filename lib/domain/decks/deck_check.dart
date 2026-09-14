@@ -1,4 +1,5 @@
 import 'package:arcanum/domain/decks/deck.dart';
+import 'package:arcanum/domain/decks/deck_format.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// How much a problem matters.
@@ -50,6 +51,24 @@ class DeckCheckResult {
     for (final i in issues)
       if (i.level == DeckIssueLevel.error) i,
   ];
+}
+
+/// What one deck entry counts as, for the format's copy limit.
+///
+/// A printing key falls back to the entry's own id when the card was never
+/// resolved: an entry the app cannot see is still an entry, and counting it as
+/// no card at all would under-report a deck that is over its limit.
+String _copyKeyOf(DeckEntry entry, DeckFormat format) {
+  final card = entry.card;
+  if (card == null) return entry.cardId;
+  switch (format.copyKey) {
+    case DeckCopyKey.printing:
+      return entry.cardId;
+    case DeckCopyKey.printedNumber:
+      return '${card.setCode}/${card.collectorNumber}';
+    case DeckCopyKey.oracle:
+      return card.oracleId ?? TcgCard.normaliseName(card.name);
+  }
 }
 
 /// Judges a deck against its format.
@@ -137,24 +156,23 @@ DeckCheckResult checkDeck(
   // four-of rule works: a fifth copy hidden in the sideboard is still a fifth.
   final copies = <String, int>{};
   final names = <String, String>{};
-  for (final entry in <DeckEntry>[...main, ...side]) {
-    copies[entry.cardId] = (copies[entry.cardId] ?? 0) + entry.quantity;
-    names[entry.cardId] = entry.card?.name ?? entry.cardId;
-  }
-  for (final entry in commanders) {
-    copies[entry.cardId] = (copies[entry.cardId] ?? 0) + entry.quantity;
-    names[entry.cardId] = entry.card?.name ?? entry.cardId;
+  final exemplars = <String, TcgCard>{};
+  for (final entry in <DeckEntry>[...main, ...side, ...commanders]) {
+    final key = _copyKeyOf(entry, format);
+    copies[key] = (copies[key] ?? 0) + entry.quantity;
+    names[key] = entry.card?.name ?? entry.cardId;
+    if (entry.card != null) exemplars[key] ??= entry.card!;
   }
 
   final overLimit = <String>[];
-  copies.forEach((String id, int count) {
+  copies.forEach((String key, int count) {
     final limit = format.singleton ? 1 : format.maxCopies;
     if (count <= limit) return;
-    final card = _find(contents, id)?.card;
+    final card = exemplars[key];
     // Basic lands and basic Energy are exempt from every copy rule, in every
     // format that has one.
     if (card != null && (format.unlimited?.call(card) ?? false)) return;
-    overLimit.add('${names[id]} ($count)');
+    overLimit.add('${names[key]} ($count)');
   });
   if (overLimit.isNotEmpty) {
     issues.add(
@@ -284,14 +302,6 @@ DeckCheckResult checkDeck(
   }
 
   return DeckCheckResult(issues: issues, banListChecked: banListChecked);
-}
-
-/// The entry holding this printing, whichever board it is on.
-DeckEntry? _find(DeckContents contents, String cardId) {
-  for (final entry in contents.entries) {
-    if (entry.cardId == cardId) return entry;
-  }
-  return null;
 }
 
 /// The colour identity a set of cards spans, for showing on a deck tile.

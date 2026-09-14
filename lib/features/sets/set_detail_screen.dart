@@ -90,8 +90,9 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
   /// miscount; quoting both says why the two numbers disagree.
   static String _holdingsLabel(List<TcgCard> cards) {
     final slots = groupIntoSlots(cards).length;
-    if (slots == cards.length) return '${cards.length} printings';
-    return '$slots cards · ${cards.length} printings';
+    if (slots == cards.length) return Fmt.countOf(cards.length, 'printing');
+    return '${Fmt.countOf(slots, 'card')} · '
+        '${Fmt.countOf(cards.length, 'printing')}';
   }
 
   @override
@@ -588,11 +589,24 @@ class _CardListTile extends StatelessWidget {
                       // type — showing the wrong one would be nonsense.
                       if (card.game == CardGame.mtg && card.manaCost != null)
                         ManaCostRow(cost: card.manaCost, size: 13)
-                      else
+                      else if (card.game == CardGame.mtg)
                         ManaPips(
                           symbols: card.colors.isEmpty
                               ? const []
                               : [card.game.bucketFor(card.colors.first).symbol],
+                          size: 13,
+                          showColorless: card.colors.isEmpty,
+                        )
+                      else
+                        // One pip, not all of them: this is a list row. The
+                        // category is the game's own, which is why it is handed
+                        // over as a bucket rather than as a letter.
+                        ManaPips(
+                          buckets: card.colors.isEmpty
+                              ? const <ColourBucket>[]
+                              : <ColourBucket>[
+                                  card.game.bucketFor(card.colors.first),
+                                ],
                           size: 13,
                         ),
                     ],

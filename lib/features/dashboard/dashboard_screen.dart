@@ -172,7 +172,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   emptyTitle: 'Your ${game.shortLabel} vault is empty',
                   emptyMessage:
                       'Browse the Sets tab to explore ${game.label} — '
-                      '${Fmt.count(cataloguedSets)} sets catalogued from '
+                      '${Fmt.countOf(cataloguedSets, 'set')} catalogued from '
                       '${game.dataSource}. Add the copies you own and Arcanum '
                       'values them against live market prices and tracks how '
                       'they move.',
@@ -264,12 +264,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 ///
 /// Magic buckets its collection by mana colour, Pokémon by energy type,
 /// Yu-Gi-Oh! by monster attribute and Lorcana by ink, so one shared title would
-/// be a lie for three games out of four.
+/// be a lie for most of them. The games that do bucket by colour say so.
 String _categorySectionTitle(CardGame game) => switch (game) {
-  CardGame.mtg => 'By colour',
+  CardGame.mtg || CardGame.onePiece || CardGame.digimon => 'By colour',
   CardGame.pokemon => 'By energy type',
   CardGame.yugioh => 'By attribute',
   CardGame.lorcana => 'By ink',
+  CardGame.starWarsUnlimited => 'By aspect',
 };
 
 /// Explains what the buckets are measured against, per game.
@@ -281,6 +282,12 @@ String _categorySectionSubtitle(CardGame game) => switch (game) {
   CardGame.yugioh => 'Market value by attribute, Spells and Traps apart',
   // A handful of cards are printed in two inks; they land in the first.
   CardGame.lorcana => 'Market value by ink',
+  // One Piece and Digimon cards are printed in one colour, or two when the
+  // card is a dual-colour Leader or a splash; the pair lands in the first.
+  CardGame.onePiece || CardGame.digimon => 'Market value by colour',
+  // A card carries an aspect and, often, an alignment from the same field;
+  // the aspect is the colour pie, so that is what the chart counts.
+  CardGame.starWarsUnlimited => 'Market value by aspect',
 };
 
 /// The headline: total value, change, and the portfolio curve.
@@ -344,9 +351,9 @@ class _ValueHero extends StatelessWidget {
           Text(Fmt.money(overview.totalValue), style: context.t.displayMedium),
           const SizedBox(height: 4),
           Text(
-            '${game.shortLabel} · ${Fmt.count(overview.totalCards)} cards · '
-            '${Fmt.count(overview.uniqueCards)} unique · '
-            '${overview.valueBySet.length} sets',
+            '${game.shortLabel} · ${Fmt.countOf(overview.totalCards, 'card')} '
+            '· ${Fmt.count(overview.uniqueCards)} unique · '
+            '${Fmt.countOf(overview.valueBySet.length, 'set')}',
             style: context.t.bodySmall,
           ),
           const SizedBox(height: 14),

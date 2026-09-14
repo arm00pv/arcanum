@@ -100,6 +100,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -965,6 +966,9 @@ TCGCSV_CATEGORIES = {
     "yugioh": 2,
     "pokemon": 3,
     "lorcana": 71,
+    "onepiece": 68,
+    "swu": 79,
+    "digimon": 63,
 }
 
 # Product names that are sealed product even when the list is vague about it.
@@ -1030,18 +1034,30 @@ def _tcgsv_groups(category):
     return groups
 
 
+def _code_key(text):
+    """A set code with everything that is not a letter or a digit taken out.
+
+    TCGplayer spells a set "BT-26" where the card prints "BT26-052", and the app
+    stores the second. Both sides are normalised here so the two are the same
+    string, which is what the app's own catalogue does with the same value.
+    """
+    return re.sub(r"[^a-z0-9]+", "", str(text or "").strip().lower())
+
+
 def _group_for(category, set_code):
     """The TCGplayer group id for a set code, or None."""
-    wanted = (set_code or "").strip().lower()
+    wanted = _code_key(set_code)
     if not wanted:
         return None
     for group in _tcgsv_groups(category):
-        if str(group.get("abbreviation") or "").strip().lower() == wanted:
+        if _code_key(group.get("abbreviation")) == wanted:
             return group
     # Some sets are only named, not abbreviated; a name that matches exactly is
     # still an answer, and anything looser would attach a box to the wrong set.
     for group in _tcgsv_groups(category):
-        if str(group.get("name") or "").strip().lower() == wanted:
+        if str(group.get("name") or "").strip().lower() == str(
+            set_code or ""
+        ).strip().lower():
             return group
     return None
 
@@ -1131,6 +1147,9 @@ GAME_LABELS = {
     "pokemon": "Pokemon",
     "lorcana": "Disney Lorcana",
     "yugioh": "Yu-Gi-Oh!",
+    "onepiece": "One Piece Card Game",
+    "swu": "Star Wars: Unlimited",
+    "digimon": "Digimon Card Game",
 }
 
 

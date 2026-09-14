@@ -16,6 +16,7 @@ class ManaPips extends StatelessWidget {
     super.key,
     this.symbols = const <String>[],
     this.colorIdentity,
+    this.buckets = const <ColourBucket>[],
     this.size = 16,
     this.showColorless = false,
     this.spacing = 4,
@@ -26,6 +27,16 @@ class ManaPips extends StatelessWidget {
 
   /// Raw identity string, used when [symbols] is empty.
   final String? colorIdentity;
+
+  /// Whole categories, for the games that do not bucket by mana.
+  ///
+  /// [symbols] is Magic's vocabulary: five letters out of WUBRG and a colourless
+  /// C, in WUBRG order. Every other game buckets by something else - a Pokémon
+  /// energy type, a Yu-Gi-Oh! attribute, a Lorcana ink, a One Piece colour -
+  /// and its symbol is not a member of that set, so a caller handing one over
+  /// by letter gets nothing drawn. Those callers hand over the resolved
+  /// [ColourBucket]s instead, in the order the card names them.
+  final List<ColourBucket> buckets;
 
   /// Diameter of each pip in logical pixels.
   final double size;
@@ -75,16 +86,29 @@ class ManaPips extends StatelessWidget {
     return out;
   }
 
+  /// The buckets to draw, whichever vocabulary the caller used.
+  ///
+  /// A game's own categories are drawn as given; Magic's mana is resolved and
+  /// ordered WUBRG. Duplicates are dropped, so a two-colour card that names the
+  /// same colour twice draws one pip.
+  List<ColourBucket> resolvedBuckets() {
+    final out = <ColourBucket>[];
+    for (final bucket in buckets.isEmpty ? resolve() : buckets) {
+      if (!out.contains(bucket)) out.add(bucket);
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final resolved = resolve();
+    final resolved = resolvedBuckets();
     if (resolved.isEmpty) return const SizedBox.shrink();
 
     return Semantics(
       container: true,
       label:
           'Color identity: '
-          '${resolved.map((ManaColor m) => m.label).join(', ')}',
+          '${resolved.map((ColourBucket m) => m.label).join(', ')}',
       child: ExcludeSemantics(
         child: FittedBox(
           fit: BoxFit.scaleDown,
@@ -93,7 +117,7 @@ class ManaPips extends StatelessWidget {
             children: <Widget>[
               for (var i = 0; i < resolved.length; i++) ...<Widget>[
                 if (i > 0) SizedBox(width: spacing),
-                _Pip(mana: resolved[i], text: resolved[i].symbol, size: size),
+                _Pip(bucket: resolved[i], text: resolved[i].symbol, size: size),
               ],
             ],
           ),
@@ -153,7 +177,7 @@ class ManaCostRow extends StatelessWidget {
       if (first.isNotEmpty) {
         return _Pip(
           text: first,
-          mana: ManaColor.fromSymbol(first),
+          bucket: ManaColor.fromSymbol(first),
           size: size,
           hybrid: true,
         );
@@ -162,10 +186,10 @@ class ManaCostRow extends StatelessWidget {
     }
 
     if (t.length == 1 && _colored.contains(t)) {
-      return _Pip(text: t, mana: ManaColor.fromSymbol(t), size: size);
+      return _Pip(text: t, bucket: ManaColor.fromSymbol(t), size: size);
     }
     if (t == 'C') {
-      return _Pip(text: 'C', mana: ManaColor.colorless, size: size);
+      return _Pip(text: 'C', bucket: ManaColor.colorless, size: size);
     }
     return _Pip(text: raw.trim(), size: size);
   }
@@ -338,13 +362,20 @@ class RarityBadge extends StatelessWidget {
 class _Pip extends StatelessWidget {
   const _Pip({
     required this.text,
-    this.mana,
+    this.bucket,
     this.size = 16,
     this.hybrid = false,
   });
 
   final String text;
-  final ManaColor? mana;
+
+  /// The category this pip stands for, or null for a neutral face pip.
+  ///
+  /// A [ColourBucket] rather than a [ManaColor] because only Magic's pips are
+  /// mana: the same circle draws a Pokémon energy type, a Yu-Gi-Oh! attribute,
+  /// a Lorcana ink, a One Piece colour, a Digimon colour and a Star Wars:
+  /// Unlimited aspect.
+  final ColourBucket? bucket;
   final double size;
   final bool hybrid;
 
@@ -353,22 +384,23 @@ class _Pip extends StatelessWidget {
   /// Saturated mana takes pure white. Pale mana (white, colourless) takes a
   /// darkened version of its own [ManaColor.deep] companion so the glyph keeps
   /// the mana hue rather than pulling a colour from outside the palette.
-  static Color _glyphOn(ManaColor mana) => mana.accent.computeLuminance() > 0.5
-      ? Color.lerp(mana.deep, Colors.black, 0.45)!
+  static Color _glyphOn(ColourBucket bucket) =>
+      bucket.accent.computeLuminance() > 0.5
+      ? Color.lerp(bucket.deep, Colors.black, 0.45)!
       : Colors.white;
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final mana = this.mana;
+    final bucket = this.bucket;
 
     final Color fillStart;
     final Color fillEnd;
     final Color on;
-    if (mana != null) {
-      fillStart = mana.accent;
-      fillEnd = mana.deep;
-      on = _glyphOn(mana);
+    if (bucket != null) {
+      fillStart = bucket.accent;
+      fillEnd = bucket.deep;
+      on = _glyphOn(bucket);
     } else {
       fillStart = c.surfaceRaised;
       fillEnd = Color.alphaBlend(c.glass, c.surfaceRaised);

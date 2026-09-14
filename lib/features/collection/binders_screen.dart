@@ -212,7 +212,8 @@ class _BinderTile extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${binder.cards} cards  ·  ${binder.unique} '
+                        '${Fmt.countOf(binder.cards, 'card')}  ·  '
+                        '${binder.unique} '
                         'distinct${richest?.card == null ? '' : '  ·  top: '
                                   '${richest!.card!.name}'}',
                         maxLines: 1,

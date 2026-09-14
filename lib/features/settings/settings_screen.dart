@@ -1122,6 +1122,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // either: the field is hidden rather than promising a source that would
     // never answer.
     final bool isYgo = game == CardGame.yugioh || game == CardGame.lorcana;
+    // The three games TCGplayer catalogs are in the same position, and in one
+    // respect a worse one: no free archive of them exists either, and the
+    // companion does not sample them yet, so their history is what the app
+    // records itself until a sampler is pointed at them.
+    final bool isTcgplayerOnly =
+        game == CardGame.onePiece ||
+        game == CardGame.starWarsUnlimited ||
+        game == CardGame.digimon;
     final bool configured = settings.hasHistoryProvider(game);
     // Every game can now be probed, because the companion answers for all four:
     // Magic from the MTGJSON slice, and the rest from their daily samplers. A
@@ -1164,6 +1172,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'history of every card is complete from the day the sampler was '
               'switched on. Arcanum adds its own daily snapshot of everything '
               'you own on top.',
+              style: context.t.bodySmall?.copyWith(
+                color: c.textSecondary,
+                height: 1.45,
+              ),
+            ),
+          ] else if (isTcgplayerOnly) ...<Widget>[
+            Text(
+              'TCGplayer publishes what a card is worth today and nothing '
+              'else: the file Arcanum reads is rebuilt once a day and keeps no '
+              'history at all, and no free archive of this game exists to stand '
+              'in for one. So this game has one source, and it is yours - the '
+              'app records the price of everything you own once a day, so a '
+              'trend appears after a couple of weeks and grows from there. '
+              'The companion endpoint below is the one every game except Magic '
+              'shares, and it does not sample this game yet.',
               style: context.t.bodySmall?.copyWith(
                 color: c.textSecondary,
                 height: 1.45,

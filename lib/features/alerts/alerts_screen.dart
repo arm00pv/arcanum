@@ -184,8 +184,7 @@ class _AlertsScreenState extends ConsumerState<AlertsScreen> {
                           SectionHeader(
                             title: 'Armed',
                             subtitle:
-                                'Watching ${armed.length} '
-                                '${armed.length == 1 ? 'printing' : 'printings'}',
+                                'Watching ${Fmt.countOf(armed.length, 'printing')}',
                             padding: const EdgeInsets.only(bottom: 10),
                           ),
                           for (var i = 0; i < armed.length; i++)
