@@ -394,8 +394,10 @@ def run(args):
             fresh[key] = record
             continue
         if args.dry_run:
+            # A dry run changes nothing at all, including the memory of what
+            # has been sent - otherwise rehearsing a delivery would stop the
+            # real one from ever happening.
             print("dry run, would notify: %s" % name)
-            fresh[key] = record
             continue
         tags = ["chart_with_downwards_trend"]
         if (record.get("message") or "").find("up ") >= 0:
@@ -412,7 +414,8 @@ def run(args):
     live = set(alert_key(a) for a in armed)
     fresh = {k: v for k, v in fresh.items() if k in live}
 
-    save_state(args.state, fresh)
+    if not args.dry_run:
+        save_state(args.state, fresh)
     print(
         "fired %d, delivered %d, quiet %d, unpriced %d"
         % (len(fired), delivered, quiet, unavailable)

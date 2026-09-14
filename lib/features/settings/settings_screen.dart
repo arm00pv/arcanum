@@ -419,7 +419,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           'Your companion checks the alerts in each backup and sends the ones '
           'that fired to this topic. Subscribing needs the ntfy app; the topic '
           'is the only thing protecting what is published, which is why it is '
-          'derived from the token rather than something memorable.',
+          'derived from the token rather than something memorable. A card your '
+          'companion holds no price for cannot be checked there - Arcanum '
+          'still checks that one itself every time you open it.',
           style: context.t.labelSmall?.copyWith(
             color: c.textTertiary,
             height: 1.4,

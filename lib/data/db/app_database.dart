@@ -80,19 +80,18 @@ class AppDatabase {
   static Future<AppDatabase> openReadOnly() async {
     final dir = await getDatabasesPath();
     final path = p.join(dir, _fileName);
-    Future<void> configure(Database d) async {
-      // The app may be mid-write when this fires. Waiting is better than
-      // failing: the archive is one SELECT per table and the lock clears.
-      await d.execute('PRAGMA busy_timeout = 8000');
-    }
-
     try {
       return AppDatabase._(
         await openDatabase(
           path,
           readOnly: true,
           singleInstance: false,
-          onConfigure: configure,
+          // sqflite opens a read-only database in a mode where only query and
+          // rawQuery are permitted, and rejects execute() outright - so the
+          // pragma has to be asked for as a query. The app may be mid-write
+          // when this fires, and waiting is better than failing: the archive is
+          // one SELECT per table and the lock clears.
+          onConfigure: (Database d) => d.rawQuery('PRAGMA busy_timeout = 8000'),
         ),
       );
     } on DatabaseException {
@@ -102,7 +101,11 @@ class AppDatabase {
       // here; it gives up the guarantee that this connection cannot write, and
       // keeps the backup working, which is the trade worth making.
       return AppDatabase._(
-        await openDatabase(path, singleInstance: false, onConfigure: configure),
+        await openDatabase(
+          path,
+          singleInstance: false,
+          onConfigure: (Database d) => d.execute('PRAGMA busy_timeout = 8000'),
+        ),
       );
     }
   }
