@@ -66,6 +66,24 @@ double _annualizedPct(double slope) {
   return (growth - 1) * 100;
 }
 
+/// Sizes an analysis window to the data actually available.
+///
+/// The engine's confidence term compares the number of real observations with
+/// the window length, so passing a fixed 400-day window would report a perfectly
+/// dense 90-day series as "thin data" purely because the card is younger than
+/// the window. Measuring against the true span makes coverage mean what it
+/// should: how densely the period is actually sampled.
+///
+/// Series shorter than two points have no span to measure, so [requested] is
+/// returned unchanged.
+int effectiveWindow(List<PricePoint> series, {int requested = 400}) {
+  if (series.length < 2) return requested;
+  final first = series.first.date;
+  final last = series.last.date;
+  final span = last.difference(first).inDays + 1;
+  return span.clamp(14, requested);
+}
+
 /// Sorts, de-duplicates and normalises raw input into usable observations.
 ///
 /// Non-finite and non-positive prices are dropped (they cannot be logged),

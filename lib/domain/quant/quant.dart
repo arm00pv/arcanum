@@ -24,4 +24,5 @@
 library;
 
 export 'analytics.dart';
+export 'backtest.dart';
 export 'models.dart';

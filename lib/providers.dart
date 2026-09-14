@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:arcanum/core/theme/mana.dart';
@@ -21,6 +22,7 @@ import 'package:arcanum/data/repositories/alert_repository.dart';
 import 'package:arcanum/data/repositories/catalog_repository.dart';
 import 'package:arcanum/data/repositories/collection_repository.dart';
 import 'package:arcanum/data/repositories/deck_repository.dart';
+import 'package:arcanum/data/security/app_lock.dart';
 import 'package:arcanum/domain/decks/deck.dart';
 import 'package:arcanum/domain/decks/deck_format.dart';
 import 'package:arcanum/domain/decks/deck_suggestions.dart';
@@ -30,6 +32,12 @@ import 'package:arcanum/domain/models/price_alert.dart';
 import 'package:arcanum/domain/models/set_completion.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/domain/quant/quant.dart';
+
+/// The phone's own authentication: a fingerprint, a face, or the screen lock.
+///
+/// One provider so the lock screen and the Settings switch ask the same device
+/// the same question, and so a test can supply a device that always says yes.
+final deviceAuthProvider = Provider<DeviceAuth>((ref) => LocalDeviceAuth());
 
 /// A headline figure for one game, used by the game switcher and the drawer.
 class GameSummary {
@@ -663,6 +671,62 @@ final cardAnalyticsProvider =
           .watch(bootstrapProvider)
           .collectionFor(key.game)
           .analyticsFor(key.cardId, finish: key.finish);
+    });
+
+/// Identifies a back-test: one collection, one forecast horizon.
+typedef ForecastAuditKey = ({CardGame game, int horizonDays});
+
+/// The payload handed to the isolate that runs a back-test.
+typedef ForecastAuditRequest = ({
+  String label,
+  List<BacktestSeries> series,
+  int horizonDays,
+});
+
+/// Runs a back-test on a background isolate.
+///
+/// Top-level and single-argument because that is what [compute] requires. The
+/// arithmetic refits the model the card screen would have shown, once per
+/// prediction, which is far too much to do between two frames.
+ForecastAudit runForecastAuditInIsolate(ForecastAuditRequest request) =>
+    runForecastAudit(
+      gameLabel: request.label,
+      series: request.series,
+      horizonDays: request.horizonDays,
+    );
+
+/// Back-tests the app's own trend reading and forecast on this phone's own
+/// history.
+///
+/// Reads only what is already stored - no network, no catalogue, no price
+/// refresh - and then scores the model against what actually happened. A
+/// collection with no recorded history produces an audit that says exactly
+/// that rather than an empty set of zeros.
+final forecastAuditProvider =
+    FutureProvider.family<ForecastAudit, ForecastAuditKey>((ref, key) async {
+      final bootstrap = ref.watch(bootstrapProvider);
+      final ids = await bootstrap.collectionDao.ownedCardIds(key.game);
+      final series = ids.isEmpty
+          ? const <BacktestSeries>[]
+          : await bootstrap.historyDao
+                .seriesForCards(
+                  key.game,
+                  ids,
+                  finish: key.game.finishes.first,
+                  days: 400,
+                )
+                .then(
+                  (Map<String, List<PricePoint>> byCard) => <BacktestSeries>[
+                    for (final MapEntry<String, List<PricePoint>> e
+                        in byCard.entries)
+                      BacktestSeries(e.key, e.value),
+                  ],
+                );
+      return compute(runForecastAuditInIsolate, (
+        label: key.game.label,
+        series: series,
+        horizonDays: key.horizonDays,
+      ));
     });
 
 /// Price history for one printing, used by the detail chart.

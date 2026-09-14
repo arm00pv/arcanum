@@ -372,21 +372,8 @@ class CollectionRepository {
     );
     return analyzeSeries(
       series,
-      windowDays: _effectiveWindow(series, windowDays),
+      windowDays: effectiveWindow(series, requested: windowDays),
     );
-  }
-
-  /// Sizes the analysis window to the data actually available.
-  ///
-  /// The engine's confidence term compares the number of real observations with
-  /// the window length, so passing a fixed 400-day window would report a
-  /// perfectly dense 90-day series as "thin data" purely because the card is
-  /// younger than the window. Measuring against the true span makes coverage
-  /// mean what it should: how densely the period is actually sampled.
-  static int _effectiveWindow(List<PricePoint> series, int requested) {
-    if (series.length < 2) return requested;
-    final span = series.last.date.difference(series.first.date).inDays + 1;
-    return span.clamp(14, requested);
   }
 
   /// Analytics for many printings at once, keyed by card id.
@@ -409,7 +396,7 @@ class CollectionRepository {
       for (final e in seriesMap.entries)
         e.key: analyzeSeries(
           e.value,
-          windowDays: _effectiveWindow(e.value, windowDays),
+          windowDays: effectiveWindow(e.value, requested: windowDays),
         ),
     };
   }
