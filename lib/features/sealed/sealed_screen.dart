@@ -7,6 +7,7 @@ import 'package:arcanum/data/sealed/sealed_lookup.dart';
 import 'package:arcanum/data/sealed/sealed_refresh.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/sealed_product.dart';
+import 'package:arcanum/domain/portfolio/box_ev.dart';
 import 'package:arcanum/features/sealed/box_ev_screen.dart';
 import 'package:arcanum/features/sealed/sealed_sheet.dart';
 import 'package:arcanum/providers.dart';
@@ -44,6 +45,9 @@ class _SealedScreenState extends ConsumerState<SealedScreen> {
       sealedPortfolioProvider(_game),
     );
     final SealedPortfolio? data = portfolio.value;
+    // What the boxes on the shelf are worth opened. Null while it loads, which
+    // is a card that is simply absent rather than one that says zero.
+    final BoxShelf? shelf = ref.watch(boxShelfProvider(_game)).value;
 
     return Scaffold(
       appBar: AppBar(
@@ -62,13 +66,15 @@ class _SealedScreenState extends ConsumerState<SealedScreen> {
             subtitle: 'Boxes, packs and decks, counted and valued',
           ),
           if (data != null && !data.isEmpty) _totals(data),
+          if (shelf != null && !shelf.isEmpty && data != null && !data.isEmpty)
+            _opened(shelf),
           AsyncValueView<SealedPortfolio>(
             value: portfolio,
             isEmpty: (SealedPortfolio p) => p.isEmpty,
             emptyMessage: 'Nothing sealed yet',
             emptyIcon: Icons.inventory_2_outlined,
             onRetry: () => ref.invalidate(sealedPortfolioProvider(_game)),
-            builder: (SealedPortfolio p) => _list(p),
+            builder: (SealedPortfolio p) => _list(p, shelf),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -148,6 +154,160 @@ class _SealedScreenState extends ConsumerState<SealedScreen> {
     );
   }
 
+  /// The shelf's answer for one row, matched on the row it came from.
+  BoxOpening? _openingOf(BoxShelf? shelf, SealedHolding holding) {
+    if (shelf == null || holding.id == null) return null;
+    for (final BoxOpening opening in shelf.openings) {
+      if (opening.holdingId == holding.id) return opening;
+    }
+    return null;
+  }
+
+  /// What the boxes are worth opened against what they are worth shut.
+  ///
+  /// The two figures come from the same boxes on purpose: a total that covers
+  /// one set of boxes subtracted from a total that covers another is how a
+  /// valuation ends up wrong without ever looking wrong, so the comparison is
+  /// taken over the boxes where both sides are known and says how many that is.
+  Widget _opened(BoxShelf shelf) {
+    final c = context.c;
+    final unvalued = shelf.unvalued;
+    // Counted in boxes rather than in rows: a row of two displays is two boxes,
+    // and the breakdown beside this line counts them the same way.
+    var unvaluedBoxes = 0;
+    for (final BoxOpening opening in unvalued) {
+      unvaluedBoxes += opening.quantity;
+    }
+    final byBlocker = <BoxBlocker, int>{};
+    for (final BoxOpening opening in unvalued) {
+      final blocker = opening.blocker;
+      if (blocker == null) continue;
+      byBlocker[blocker] = (byBlocker[blocker] ?? 0) + opening.quantity;
+    }
+    final costs = shelf.cost;
+
+    return _group(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'OPENED OR KEPT',
+            style: context.t.labelSmall?.copyWith(
+              color: c.textTertiary,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            shelf.hasAnswer
+                ? 'What these boxes are worth as cards, against what they sell '
+                      'for.'
+                : 'What these boxes are worth as cards. None can be valued both '
+                      'ways yet.',
+            style: context.t.bodySmall?.copyWith(color: c.textSecondary),
+          ),
+          if (shelf.hasAnswer) ...<Widget>[
+            const SizedBox(height: 12),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: StatTile(
+                    label: 'Kept sealed',
+                    value: Fmt.money(shelf.sealedBoth),
+                    icon: Icons.inventory_2_outlined,
+                    caption: shelf.bothCount == 1
+                        ? 'The one box with both'
+                        : 'The ${shelf.bothCount} boxes with both',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: StatTile(
+                    label: 'Opened',
+                    value: Fmt.money(shelf.openedBoth),
+                    icon: Icons.all_inbox_rounded,
+                    caption: 'What the cards in them add up to',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _row(
+              'Opening pays better by',
+              Fmt.moneySigned(shelf.difference),
+              colour: c.forDelta(shelf.difference),
+            ),
+            if (costs != null)
+              _row(
+                'Against what they cost',
+                Fmt.moneySigned(shelf.againstCost),
+              ),
+            const SizedBox(height: 6),
+            Text(
+              shelf.openingPays
+                  ? 'On these boxes, the cards inside are worth more than the '
+                        'boxes sell for.'
+                  : 'On these boxes, the boxes sell for more than the cards '
+                        'inside are worth.',
+              style: context.t.bodySmall?.copyWith(color: c.textSecondary),
+            ),
+          ],
+          if (unvalued.isNotEmpty) ...<Widget>[
+            const SizedBox(height: 12),
+            Text(
+              unvaluedBoxes == 1
+                  ? 'One box is not counted, because its value as cards is '
+                        'unknown:'
+                  : '${Fmt.count(unvaluedBoxes)} boxes are not counted, '
+                        'because their value as cards is unknown:',
+              style: context.t.bodySmall?.copyWith(color: c.textSecondary),
+            ),
+            const SizedBox(height: 6),
+            for (final MapEntry<BoxBlocker, int> entry in byBlocker.entries)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  '${Fmt.count(entry.value)} × ${entry.key.label}',
+                  style: context.t.bodySmall?.copyWith(
+                    // The one thing the collector can fix is the one thing that
+                    // is not greyed out.
+                    color: entry.key == BoxBlocker.noComposition
+                        ? c.warning
+                        : c.textTertiary,
+                  ),
+                ),
+              ),
+            if (shelf.unstated.isNotEmpty) ...<Widget>[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => BoxEvScreen(
+                        game: _game,
+                        setCode: shelf.unstated.first.setCode,
+                        productId: shelf.unstated.first.productId,
+                        productName: shelf.unstated.first.name,
+                        heldPrice: shelf.unstated.first.price,
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.calculate_outlined, size: 18),
+                  label: Text(
+                    shelf.unstated.length == 1
+                        ? 'State what that box holds'
+                        : 'State what those boxes hold',
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _row(String label, String value, {Color? colour}) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(
@@ -162,7 +322,7 @@ class _SealedScreenState extends ConsumerState<SealedScreen> {
     ),
   );
 
-  Widget _list(SealedPortfolio p) => _group(
+  Widget _list(SealedPortfolio p, BoxShelf? shelf) => _group(
     padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
     child: Column(
       children: <Widget>[
@@ -218,6 +378,18 @@ class _SealedScreenState extends ConsumerState<SealedScreen> {
                             color: context.c.textTertiary,
                           ),
                         ),
+                      // What this box is worth opened, beside what it sells
+                      // for. Only boxes that can be valued both ways get the
+                      // line: a blank one would read as nothing, not as
+                      // unknown.
+                      if (_openingOf(shelf, holding)?.opened != null)
+                        Text(
+                          'opened '
+                          '${Fmt.money(_openingOf(shelf, holding)!.opened)}',
+                          style: context.t.labelSmall?.copyWith(
+                            color: context.c.textSecondary,
+                          ),
+                        ),
                     ],
                   ),
                   // A box of a set the app has cards for can be compared with
@@ -233,6 +405,9 @@ class _SealedScreenState extends ConsumerState<SealedScreen> {
                           builder: (_) => BoxEvScreen(
                             game: holding.game,
                             setCode: holding.setCode,
+                            productId: holding.productId,
+                            productName: holding.name,
+                            heldPrice: holding.unitValue,
                           ),
                         ),
                       ),

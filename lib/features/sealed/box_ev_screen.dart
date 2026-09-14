@@ -29,13 +29,33 @@ import 'package:arcanum/widgets/glass.dart';
 /// free, because a box whose mythics nobody quotes is not a box worth nothing.
 class BoxEvScreen extends ConsumerStatefulWidget {
   /// Creates the box value screen.
-  const BoxEvScreen({super.key, required this.game, required this.setCode});
+  ///
+  /// [productId], [productName] and [heldPrice] describe the box the collector
+  /// actually holds, when the screen was opened from one: the box being valued
+  /// is then that box, not whichever box in the set happens to be dearest.
+  const BoxEvScreen({
+    super.key,
+    required this.game,
+    required this.setCode,
+    this.productId = '',
+    this.productName = '',
+    this.heldPrice,
+  });
 
   /// The game the set belongs to.
   final CardGame game;
 
   /// The set whose boxes are being valued.
   final String setCode;
+
+  /// The price list's id for the box held, empty when there is no holding.
+  final String productId;
+
+  /// The held box's name, used when the price list renames or renumbers it.
+  final String productName;
+
+  /// What the holding itself is worth, used when no price list answers.
+  final double? heldPrice;
 
   @override
   ConsumerState<BoxEvScreen> createState() => _BoxEvScreenState();
@@ -83,9 +103,24 @@ class _BoxEvScreenState extends ConsumerState<BoxEvScreen> {
     if (offers.isEmpty) return null;
     final index = _offerIndex;
     if (index == null) {
-      // The dearest box that is one box. A set with no box at all falls back to
-      // whatever the list does have, so a collector with a bundle is not made to
-      // type a price the companion already knows.
+      // The box the collector holds, when this screen knows which one that is.
+      // Opening the value of a shelf box and being shown the price of a
+      // different box is the kind of wrong that looks like a working screen.
+      final String id = widget.productId.trim();
+      if (id.isNotEmpty) {
+        final held = offers.indexWhere((SealedOffer o) => o.productId == id);
+        if (held >= 0) return offers[held];
+      }
+      final String name = widget.productName.trim().toLowerCase();
+      if (name.isNotEmpty) {
+        final same = offers.indexWhere(
+          (SealedOffer o) => o.name.toLowerCase() == name,
+        );
+        if (same >= 0) return offers[same];
+      }
+      // Otherwise the dearest box that is one box. A set with no box at all
+      // falls back to whatever the list does have, so a collector with a bundle
+      // is not made to type a price the companion already knows.
       final box = offers.indexWhere(_isBox);
       if (box >= 0) return offers[box];
       final any = offers.indexWhere((SealedOffer o) => !_isCase(o));
@@ -150,7 +185,9 @@ class _BoxEvScreenState extends ConsumerState<BoxEvScreen> {
     );
     final SealedOffer? chosen = _chosen(offers);
     final composition = _composition(stored.value);
-    final double? boxPrice = _typed ?? chosen?.market;
+    // The holding's own recorded value is the last resort rather than zero: it
+    // is what the shelf already says the box is worth.
+    final double? boxPrice = _typed ?? chosen?.market ?? widget.heldPrice;
     final BoxEv ev = BoxEv.of(
       cards: cards,
       composition: composition,
@@ -417,35 +454,21 @@ class _BoxEvScreenState extends ConsumerState<BoxEvScreen> {
               ),
             ),
           const Divider(height: 26),
-          // Wrapped rather than a Row: a button's padding grows with the text
-          // scale, and at 2x "Deal them out" is wider than a phone's card.
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: <Widget>[
-              Text('How the cards come out', style: context.t.titleSmall),
-              TextButton(
-                onPressed: composition.promised <= 0
-                    ? null
-                    : () => setState(() {
-                        _draft = BoxComposition.evenAcross(
-                          cards: cards,
-                          packs: composition.packs,
-                          cardsPerPack: composition.cardsPerPack,
-                        );
-                      }),
-                child: const Text('Deal them out'),
-              ),
-            ],
-          ),
+          Text('How the cards come out', style: context.t.titleSmall),
+          const SizedBox(height: 4),
+          // The app does not fill these in, and an earlier version did: it dealt
+          // the box out in the proportions of the set's own printings, which is
+          // a uniform draw across the whole set - so a 36-pack box came out at
+          // twenty-six times what the box sells for, in green, under a heading
+          // that said it was a model. A pack is not dealt like the set, the
+          // shop's copy gives ranges rather than a rule, and an average that is
+          // wrong by a factor of twenty-six is worse than no average. Typing the
+          // numbers is the honest version.
           Text(
-            composition.promised <= 0
-                ? "State the size of the box above and the app can fill this in "
-                      "from the set's own rarity counts."
-                : "Deal them out fills every slot from the set's rarity counts - "
-                      'a model, not a measurement, and yours to change.',
+            'A pack is not dealt like the set, so these are yours to state: '
+            'tap a count to type it. What one pack holds is not published as a '
+            'rule, only as the ranges a shop prints - and a range is not a '
+            'distribution.',
             style: context.t.bodySmall?.copyWith(color: c.textSecondary),
           ),
           const SizedBox(height: 10),
@@ -495,6 +518,49 @@ class _BoxEvScreenState extends ConsumerState<BoxEvScreen> {
     );
   }
 
+  /// Asks for a count, because a slot can hold 252 cards and no one is going
+  /// to tap a plus sign two hundred and fifty-two times.
+  Future<void> _typeCount(
+    String label,
+    int current,
+    ValueChanged<int> onSet,
+  ) async {
+    // Typed into a field that keeps its own value rather than through a
+    // controller: a controller outlives the route by a frame or two, and
+    // disposing one while its field is still on screen is an assertion.
+    var typed = current;
+    final int? answer = await showDialog<int>(
+      context: context,
+      builder: (BuildContext dialog) => AlertDialog(
+        title: Text(label),
+        content: TextFormField(
+          initialValue: current == 0 ? '' : '$current',
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          inputFormatters: <TextInputFormatter>[
+            FilteringTextInputFormatter.digitsOnly,
+          ],
+          decoration: const InputDecoration(labelText: 'Cards', hintText: '0'),
+          onChanged: (String value) => typed = int.tryParse(value.trim()) ?? 0,
+          onFieldSubmitted: (String value) =>
+              Navigator.of(dialog).pop(int.tryParse(value.trim()) ?? 0),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialog).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialog).pop(typed),
+            child: const Text('Set'),
+          ),
+        ],
+      ),
+    );
+    if (answer == null || answer == current) return;
+    onSet(answer);
+  }
+
   Widget _stepper(
     String label,
     int value,
@@ -521,12 +587,24 @@ class _BoxEvScreenState extends ConsumerState<BoxEvScreen> {
             Icons.remove_rounded,
             value <= 0 ? null : () => onChanged(value - 1),
           ),
-          SizedBox(
-            width: 54,
-            child: Text(
-              Fmt.count(value),
-              textAlign: TextAlign.center,
-              style: context.t.titleMedium,
+          // The count is the button as well as the readout: a slot can hold a
+          // few hundred cards, and the way to say so is to type it.
+          Tooltip(
+            message: 'Type a count',
+            child: InkWell(
+              onTap: () => _typeCount(label, value, onChanged),
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 62,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Text(
+                    Fmt.count(value),
+                    textAlign: TextAlign.center,
+                    style: context.t.titleMedium,
+                  ),
+                ),
+              ),
             ),
           ),
           _round(Icons.add_rounded, () => onChanged(value + 1)),

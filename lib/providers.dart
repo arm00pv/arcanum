@@ -722,6 +722,51 @@ final boxCompositionProvider = FutureProvider.family<BoxComposition?, SetRef>((
   return ref.watch(boxDaoProvider).forSet(key.game, key.code);
 });
 
+/// A game's boxes, valued both ways: kept shut and opened.
+///
+/// The shelf's own price and the value of what is inside it are two different
+/// numbers, and this is where they meet. A box whose set is not on the phone,
+/// or whose composition nobody has stated, is reported as such rather than as
+/// a box worth nothing - which is why the cards are loaded here rather than
+/// left to the screen to discover.
+final boxShelfProvider = FutureProvider.family<BoxShelf, CardGame>((
+  ref,
+  game,
+) async {
+  ref.watch(sealedRevisionProvider);
+  ref.watch(boxRevisionProvider);
+  final holdings = <SealedHolding>[
+    for (final SealedHolding holding
+        in await ref.watch(sealedDaoProvider).all(game))
+      if (holding.category == SealedCategory.boosterBox ||
+          holding.category == SealedCategory.bundle)
+        holding,
+  ];
+  if (holdings.isEmpty) return BoxShelf.empty;
+
+  final compositions = await ref.watch(boxDaoProvider).allForGame(game);
+  // Only the sets that have a composition to apply are worth loading: a set
+  // with nothing stated cannot be valued by its cards either.
+  final cards = <String, List<TcgCard>>{};
+  for (final String code in <String>{
+    for (final SealedHolding holding in holdings)
+      if (compositions.containsKey(holding.setCode)) holding.setCode,
+  }) {
+    final List<TcgCard> printings = await ref.watch(
+      setCardsProvider((game: game, code: code)).future,
+    );
+    // An empty set is a set that is not downloaded, and stays absent here so
+    // the shelf can say which of the two it is.
+    if (printings.isNotEmpty) cards[code] = printings;
+  }
+
+  return BoxShelf.of(
+    holdings: holdings,
+    compositions: compositions,
+    cards: cards,
+  );
+});
+
 /// Sealed products a price list knows about for one set.
 ///
 /// Fetched on demand, for the one set somebody is adding a box from, rather than

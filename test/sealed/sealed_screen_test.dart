@@ -17,9 +17,25 @@ import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/security/secret_store.dart';
 import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/core/theme/mana.dart';
 import 'package:arcanum/domain/models/sealed_product.dart';
+import 'package:arcanum/domain/models/tcg_card.dart';
+import 'package:arcanum/domain/portfolio/box_ev.dart';
 import 'package:arcanum/features/sealed/sealed_screen.dart';
 import 'package:arcanum/providers.dart';
+
+TcgCard card(String id, String rarity, [double? price]) => TcgCard(
+  game: CardGame.mtg,
+  id: id,
+  setCode: 'BLB',
+  setName: 'Bloomburrow',
+  name: 'Card $id',
+  collectorNumber: id,
+  rarity: rarity,
+  prices: price == null
+      ? TcgPrices.empty
+      : TcgPrices(byFinish: <String, double?>{'nonfoil': price}),
+);
 
 SealedHolding box({
   required String name,
@@ -29,8 +45,9 @@ SealedHolding box({
   String setCode = 'BLB',
   SealedCategory category = SealedCategory.boosterBox,
   String location = '',
+  int id = 1,
 }) => SealedHolding(
-  id: 1,
+  id: id,
   game: CardGame.mtg,
   setCode: setCode,
   setName: 'Bloomburrow',
@@ -44,8 +61,9 @@ SealedHolding box({
 
 Future<void> pumpShelf(
   WidgetTester tester,
-  List<SealedHolding> holdings,
-) async {
+  List<SealedHolding> holdings, {
+  BoxShelf shelf = BoxShelf.empty,
+}) async {
   // A tall window: the shelf, the totals and the footer note are one list, and
   // a lazily built list does not build what is below the fold.
   tester.view.physicalSize = const Size(900, 3600);
@@ -65,6 +83,9 @@ Future<void> pumpShelf(
         sealedPortfolioProvider.overrideWith(
           (ref, CardGame game) async => SealedPortfolio.of(holdings),
         ),
+        // Handed rather than computed: the screen is data-in, pixels-out, and a
+        // test should not have to open SQLite to say what a box is worth.
+        boxShelfProvider.overrideWith((ref, CardGame game) async => shelf),
       ],
       child: MaterialApp(
         theme: AppTheme.build(dark: true),
@@ -168,6 +189,88 @@ void main() {
     ]);
 
     expect(find.byTooltip('Box value'), findsNothing);
+  });
+
+  testWidgets('a box is valued both ways, shut and opened', (tester) async {
+    final SealedHolding display = box(
+      name: 'Play Booster Display',
+      quantity: 2,
+      unitValue: 100,
+      id: 7,
+    );
+    // Ten commons at a mean of 0.20 and two rares at 1.00: 4.00 a box, two
+    // boxes held.
+    final BoxShelf shelf = BoxShelf.of(
+      holdings: <SealedHolding>[display],
+      compositions: const <String, BoxComposition>{
+        'BLB': BoxComposition(
+          packs: 4,
+          cardsPerPack: 5,
+          slots: <BoxSlot>[
+            BoxSlot(CardRarity.common, 10),
+            BoxSlot(CardRarity.rare, 2),
+          ],
+        ),
+      },
+      cards: <String, List<TcgCard>>{
+        'BLB': <TcgCard>[
+          card('c1', 'common', 0.10),
+          card('c2', 'common', 0.30),
+          card('r1', 'rare', 1.00),
+        ],
+      },
+    );
+    await pumpShelf(tester, <SealedHolding>[display], shelf: shelf);
+
+    expect(find.text('OPENED OR KEPT'), findsOneWidget);
+    expect(find.text('Kept sealed'), findsOneWidget);
+    expect(find.text('Opened'), findsOneWidget);
+    // 200.00 shut, 8.00 opened, so opening is 192.00 behind.
+    expect(find.text(r'$200.00'), findsWidgets);
+    expect(find.text(r'$8.00'), findsWidgets);
+    expect(find.text(r'-$192.00'), findsOneWidget);
+    expect(
+      find.text(
+        'On these boxes, the boxes sell for more than the cards inside are '
+        'worth.',
+      ),
+      findsOneWidget,
+    );
+    // And the row for the box carries its own opened figure.
+    expect(find.text(r'opened $8.00'), findsOneWidget);
+  });
+
+  testWidgets('a box nobody has described is not counted as nothing', (
+    tester,
+  ) async {
+    final SealedHolding undescribed = box(
+      name: 'Undescribed Display',
+      quantity: 2,
+      unitValue: 100,
+      setCode: 'XYZ',
+      id: 9,
+    );
+    final BoxShelf shelf = BoxShelf.of(
+      holdings: <SealedHolding>[undescribed],
+      compositions: const <String, BoxComposition>{},
+      cards: const <String, List<TcgCard>>{},
+    );
+    await pumpShelf(tester, <SealedHolding>[undescribed], shelf: shelf);
+
+    expect(find.text('OPENED OR KEPT'), findsOneWidget);
+    // No figure is invented for it, and no comparison is made from nothing.
+    expect(find.text('Opening pays better by'), findsNothing);
+    expect(find.text('Kept sealed'), findsNothing);
+    expect(
+      find.text(
+        '2 boxes are not counted, because their value as cards is '
+        'unknown:',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('2 × No composition stated'), findsOneWidget);
+    // One row to state, however many boxes that row holds.
+    expect(find.text('State what that box holds'), findsOneWidget);
   });
 
   testWidgets('the screen explains where its prices come from', (tester) async {

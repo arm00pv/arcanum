@@ -58,10 +58,11 @@ SealedOffer offer({
   String name = 'Test Set Play Booster Box',
   double? market = 100,
   String description = '',
+  String productId = '1',
 }) => SealedOffer(
   name: name,
   category: SealedCategory.guess(name),
-  productId: '1',
+  productId: productId,
   market: market,
   description: description,
 );
@@ -71,6 +72,9 @@ Future<void> pumpScreen(
   BoxComposition? composition = tenTwoOne,
   List<SealedOffer> offers = const <SealedOffer>[],
   List<TcgCard>? cards,
+  String productId = '',
+  String productName = '',
+  double? heldPrice,
   Size size = const Size(900, 3600),
   double textScale = 1,
 }) async {
@@ -103,7 +107,13 @@ Future<void> pumpScreen(
           builder: (BuildContext context) => MediaQuery(
             data: MediaQuery.of(context)
                 .copyWith(textScaler: TextScaler.linear(textScale)),
-            child: const BoxEvScreen(game: CardGame.mtg, setCode: 'tst'),
+            child: BoxEvScreen(
+              game: CardGame.mtg,
+              setCode: 'tst',
+              productId: productId,
+              productName: productName,
+              heldPrice: heldPrice,
+            ),
           ),
         ),
       ),
@@ -214,16 +224,14 @@ void main() {
       ],
     );
 
-    // Nothing stated yet, so there is nothing to value, and nothing to deal
-    // out - the size of the box is the gate on both.
+    // Nothing stated yet, so there is nothing to value: the shape of a pack is
+    // the collector's to state and the app will not fill it in.
     expect(
       find.text('State what the box holds and the answer appears here.'),
       findsOneWidget,
     );
-    expect(
-      find.textContaining('State the size of the box above'),
-      findsOneWidget,
-    );
+    expect(find.text('The slots account for 0 cards'), findsOneWidget);
+    expect(find.text('Deal them out'), findsNothing);
 
     // The shop's own words are offered as a button and change nothing until
     // they are taken.
@@ -232,16 +240,36 @@ void main() {
     );
     await tester.pump();
 
-    // Taken, the size of the box is filled in, and the rest follows from it:
-    // the set's six printings dealt out across 288 cards is 144 commons, 96
-    // rares and 48 mythics.
-    await tester.tap(find.text('Deal them out'));
-    await tester.pump();
+    // Taken, the size of the box is filled in - and only the size. The slots
+    // are still the collector's, and the screen says so rather than inventing
+    // a distribution.
+    expect(find.text('The slots account for 0 of 288 cards'), findsOneWidget);
+    expect(
+      find.textContaining('A pack is not dealt like the set'),
+      findsOneWidget,
+    );
+    expect(find.text('Deal them out'), findsNothing);
+  });
 
-    expect(find.text('The slots account for 288 of 288 cards'), findsOneWidget);
-    // 144 commons at a mean of 0.20 plus 96 rares at 1.00.
-    expect(find.text(r'$124.80'), findsOneWidget);
-    expect(find.text('Across 24 packs'), findsOneWidget);
+  testWidgets('a slot count is typed, not tapped in one at a time', (
+    tester,
+  ) async {
+    await pumpScreen(
+      tester,
+      composition: const BoxComposition(packs: 36, cardsPerPack: 14),
+      offers: <SealedOffer>[offer()],
+    );
+
+    // The first slot is the common one; tapping its count opens a box to type
+    // in, because three hundred cards is not three hundred taps.
+    await tester.tap(find.text('0').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '252');
+    await tester.tap(find.text('Set'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('252'), findsOneWidget);
+    expect(find.text('The slots account for 252 of 504 cards'), findsOneWidget);
   });
 
   testWidgets('a set nobody has priced says why there is no answer', (
@@ -271,6 +299,42 @@ void main() {
     // and a lazily built list does not build what is below the fold.
     expect(find.text('THE BOX'), findsOneWidget);
     expect(find.text('WHAT THE BOX HOLDS'), findsOneWidget);
+  });
+
+  testWidgets('the box the collector holds is the one being valued', (
+    tester,
+  ) async {
+    // Opened from a shelf row for the Play Booster Display, in a set where the
+    // dearest box is a Collector Booster Display six times the price.
+    await pumpScreen(
+      tester,
+      productId: '555',
+      productName: 'Test Set Play Booster Display',
+      offers: <SealedOffer>[
+        offer(name: 'Test Set Collector Booster Display', market: 1272),
+        offer(
+          name: 'Test Set Play Booster Display',
+          market: 199,
+          productId: '555',
+        ),
+      ],
+    );
+
+    expect(
+      find.text(r'The box is $199.00, so opening pays back 2% of it'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a box no price list answers for keeps its own recorded value', (
+    tester,
+  ) async {
+    await pumpScreen(tester, offers: const <SealedOffer>[], heldPrice: 175);
+
+    expect(
+      find.text(r'The box is $175.00, so opening pays back 2% of it'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the set not being downloaded is said in words', (tester) async {

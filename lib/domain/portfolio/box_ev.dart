@@ -1,4 +1,5 @@
 import 'package:arcanum/core/theme/mana.dart';
+import 'package:arcanum/domain/models/sealed_product.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// One rarity slot in a box: how many cards of one tier come out of it.
@@ -107,96 +108,99 @@ class BoxComposition {
   BoxComposition withNoSlots() =>
       BoxComposition(packs: packs, cardsPerPack: cardsPerPack);
 
-  /// A box whose cards are dealt out in the proportions the set is printed in.
+  /// A number that counts cards, e.g. the 14 in '14 Magic: The Gathering
+  /// cards'.
   ///
-  /// The set's own rarity makeup applied to one box, with the leftovers given to
-  /// the tiers that were closest to another card so the slots add up exactly.
-  /// It is a model and not a measurement - a real pack is weighted towards the
-  /// lower rarities rather than towards the set's makeup - which is why it is
-  /// offered as one of the things a collector can choose rather than as the
-  /// app's opinion.
-  static BoxComposition evenAcross({
-    required List<TcgCard> cards,
-    required int packs,
-    required int cardsPerPack,
-  }) {
-    final total = packs * cardsPerPack;
-    if (total <= 0 || cards.isEmpty) {
-      return BoxComposition(packs: packs, cardsPerPack: cardsPerPack);
-    }
-    final counts = <CardRarity, int>{};
-    for (final TcgCard card in cards) {
-      final tier = CardRarity.fromCode(card.rarity);
-      counts[tier] = (counts[tier] ?? 0) + 1;
-    }
-    final slots = <BoxSlot>[];
-    final remainder = <MapEntry<CardRarity, double>>[];
-    var assigned = 0;
-    for (final MapEntry<CardRarity, int> entry in counts.entries) {
-      final exact = total * entry.value / cards.length;
-      final whole = exact.floor();
-      assigned += whole;
-      if (whole > 0) slots.add(BoxSlot(entry.key, whole));
-      remainder.add(MapEntry<CardRarity, double>(entry.key, exact - whole));
-    }
-    remainder.sort(
-      (MapEntry<CardRarity, double> a, MapEntry<CardRarity, double> b) =>
-          b.value.compareTo(a.value),
-    );
-    var left = total - assigned;
-    for (final MapEntry<CardRarity, double> entry in remainder) {
-      if (left <= 0) break;
-      final at = slots.indexWhere((BoxSlot s) => s.rarity == entry.key);
-      if (at >= 0) {
-        slots[at] = BoxSlot(entry.key, slots[at].count + 1);
-      } else {
-        slots.add(BoxSlot(entry.key, 1));
-      }
-      left--;
-    }
-    slots.sort(
-      (BoxSlot a, BoxSlot b) => a.rarity.index.compareTo(b.rarity.index),
-    );
-    return BoxComposition(
-      packs: packs,
-      cardsPerPack: cardsPerPack,
-      slots: slots,
-    );
-  }
+  /// The lookbehind refuses a range: '1-4 cards' is a spread and not a count,
+  /// and reading it as four cards a pack is exactly the mistake this parser was
+  /// rewritten to stop making.
+  static final RegExp _cardCount = RegExp(
+    r'(?<![\d-])(\d+)[^0-9\n]{0,60}?\bcards?\b',
+  );
+
+  /// A number that counts packs, e.g. the 36 in '36 Play Booster Packs'. A box
+  /// of boxes is not a box of packs, so the unit may not be 'boxes'.
+  static final RegExp _packCount = RegExp(
+    r'(?<![\d-])(\d+)[^0-9\n]{0,60}?\b(?:packs?|boosters?)(?!\s*box)',
+  );
+
+  /// Whether a line says what a container holds.
+  static bool _statesContents(String line, String noun) =>
+      RegExp('(?:$noun)[a-z ]{0,16}\\b(?:contains?|includes?|holds?)\\b')
+          .hasMatch(line);
 
   /// What the shop's own description says about the size of the box.
   ///
-  /// Sealed product carries the shop's copy with it, and two sentences in it are
+  /// Sealed product carries the shop's copy with it, and two things in it are
   /// exactly what a composition needs: 'Each Booster Pack contains 12 cards' and
-  /// '1 Box contains 24 Booster packs'. Those two numbers are read and nothing
-  /// else is: the shape of a pack is not in the description, and inferring one
-  /// from the set's rarity counts would be the app inventing the one number it
-  /// has no source for. A case of boxes is deliberately not read as a box - the
-  /// unit has to be packs - and a description that states neither number
-  /// returns null rather than an empty composition.
+  /// 'Box contains: 36 Play Booster Packs'. Those two numbers are read and
+  /// nothing else is: the shape of a pack is not in the description, and
+  /// inferring one from the set's rarity counts would be the app inventing the
+  /// one number it has no source for.
+  ///
+  /// Read as lines rather than as one blob, because that is what the copy is -
+  /// a heading and a bullet list under it - and a blob puts the first number it
+  /// finds against the wrong noun. The real Bloomburrow listing says the box
+  /// holds 36 packs of 14 cards and then lists '1-4 cards of rarity Rare', and
+  /// the version of this parser that read sentences offered '4 cards a pack' on
+  /// a collector's own box. So: the noun has to be followed by a containing
+  /// verb, the number has to be a count and not a range, and the number may sit
+  /// on the line below its heading, which is where a bullet list puts it.
   static BoxComposition? fromDescription(String? text) {
     if (text == null || text.trim().isEmpty) return null;
-    final clean = text
+
+    // Markup that means 'a new line' becomes one before the rest is stripped:
+    // stripping first welds a heading to its list, which is the whole bug.
+    final lines = <String>[];
+    final marked = text
+        .replaceAll(
+          RegExp(r'<(br|/p|/li|/div|/tr|/h[1-6])[^>]*>', caseSensitive: false),
+          '\n',
+        )
+        .replaceAll(RegExp(r'<li[^>]*>', caseSensitive: false), '\n• ')
         .replaceAll(RegExp(r'<[^>]*>'), ' ')
         .replaceAll('&nbsp;', ' ')
-        .replaceAll('&amp;', '&');
+        .replaceAll('&amp;', '&')
+        .replaceAll(RegExp(r'[•·▪]'), '\n');
+    for (final String chunk in marked.split(RegExp(r'[\n\r]+'))) {
+      // Full stops only: a colon or a semicolon is a list being
+      // introduced, and splitting on one separates a number from the noun it
+      // counts - which is how 'Box contains: 36 packs' becomes 36 orphans.
+      for (final String piece in chunk.split(RegExp(r'(?<=[.!?])\s+'))) {
+        final line = piece.trim();
+        if (line.isNotEmpty) lines.add(line.toLowerCase());
+      }
+    }
+    if (lines.isEmpty) return null;
+
     var packs = 0;
     var perPack = 0;
-    for (final String sentence in clean.split(RegExp(r'(?<=[.!?])\s+'))) {
-      final lower = sentence.toLowerCase();
-      if (perPack == 0 && lower.contains('pack')) {
-        final match = RegExp(r'(\d+)\s*cards?\b').firstMatch(lower);
-        if (match != null) perPack = int.parse(match.group(1)!);
+    for (int i = 0; i < lines.length; i++) {
+      if (perPack == 0 && _statesContents(lines[i], 'packs?')) {
+        perPack = _countUnder(lines, i, _cardCount);
       }
-      if (packs == 0 && lower.contains('box')) {
-        final match = RegExp(
-          r'(\d+)\s*(?:booster\s+|ultimate\s+advent\s+)?(?:packs?|boosters?)(?!\s*box)',
-        ).firstMatch(lower);
-        if (match != null) packs = int.parse(match.group(1)!);
+      if (packs == 0 && _statesContents(lines[i], 'box(?:es)?|display')) {
+        packs = _countUnder(lines, i, _packCount);
       }
     }
     if (packs == 0 && perPack == 0) return null;
     return BoxComposition(packs: packs, cardsPerPack: perPack);
+  }
+
+  /// The first count in a line, or in the two lines under it.
+  ///
+  /// A heading is followed by the list it introduces, so the number that
+  /// belongs to the noun in the heading is usually one line down. Two lines is
+  /// as far as this looks: further than that and it is reading someone else's
+  /// bullet.
+  static int _countUnder(List<String> lines, int at, RegExp pattern) {
+    for (int i = at; i < at + 3 && i < lines.length; i++) {
+      final match = pattern.firstMatch(lines[i]);
+      if (match == null) continue;
+      final value = int.tryParse(match.group(1)!);
+      if (value != null && value > 0) return value;
+    }
+    return 0;
   }
 
   /// The composition as it is stored.
@@ -446,4 +450,284 @@ class BoxEv {
 
   /// True when the answer is worth showing at all.
   bool get isComputable => composition.cards > 0 && pricedCards > 0;
+}
+
+/// What stops a box being valued as cards.
+///
+/// Four different things, and they call for four different actions: stating
+/// what the box holds, saying which set it is, downloading the set, or waiting
+/// for a price list to quote a set nobody has quoted yet. One is the
+/// collector's to fix, two are a tap, and one is nobody's fault - so they are
+/// not one message.
+enum BoxBlocker {
+  /// Nobody has said what the box holds.
+  noComposition('No composition stated'),
+
+  /// The holding does not say which set it belongs to.
+  noSet('No set recorded'),
+
+  /// The set the box belongs to is not on the phone.
+  setNotDownloaded('Set not downloaded'),
+
+  /// The set is here and holds nothing anything has priced.
+  nothingPriced('Nothing in the set is priced');
+
+  const BoxBlocker(this.label);
+
+  /// How it reads on screen.
+  final String label;
+}
+
+/// One sealed holding valued both ways: kept shut, and opened.
+class BoxOpening {
+  /// Creates a valued holding.
+  const BoxOpening({
+    required this.name,
+    required this.setCode,
+    required this.quantity,
+    this.holdingId,
+    this.productId = '',
+    this.price,
+    this.composition,
+    this.ev,
+    this.blocker,
+  });
+
+  /// The shelf row this is about, so a screen can find it again.
+  ///
+  /// Two boxes of the same set and product are two holdings with one
+  /// composition, and their values differ by quantity - so a name is not
+  /// enough to hang a figure on.
+  final int? holdingId;
+
+  /// The price list's own id for the product, so a screen opened from this
+  /// row can pick the same box out of the price list again.
+  final String productId;
+
+  /// What the holding is worth kept shut, or null when nothing has priced it.
+  final double? price;
+
+  /// The product's name, as the shelf has it.
+  final String name;
+
+  /// The set it belongs to, which is what a composition is filed under.
+  final String setCode;
+
+  /// How many are held.
+  final int quantity;
+
+  /// What the collector said the box holds, when they have said it.
+  final BoxComposition? composition;
+
+  /// What one box is worth opened, when it could be worked out.
+  final BoxEv? ev;
+
+  /// Why it could not be, when it could not.
+  final BoxBlocker? blocker;
+
+  /// What all the copies are worth opened, or null when the answer is unknown.
+  ///
+  /// Null and not zero: a box whose contents nobody can price is not a box
+  /// holding nothing, and a shelf that counted it as one would report a total
+  /// its own detail contradicts.
+  double? get opened {
+    final one = ev;
+    if (one == null || !one.isComputable) return null;
+    return one.expected * quantity;
+  }
+
+  /// What one box is worth opened, or null when it is unknown.
+  double? get openedEach => opened == null ? null : opened! / quantity;
+}
+
+/// A game's boxes, valued both ways.
+///
+/// The point of the whole feature in one line: a shelf has a price and a
+/// contents, and they are not the same number. Two things keep this honest.
+/// Every total is over the boxes it is actually known for, and says how many
+/// that was - an unpriced box is not a box worth nothing. And the comparison is
+/// taken only over the boxes where both sides are known, because subtracting a
+/// total from a different total is how a valuation ends up quietly wrong.
+class BoxShelf {
+  const BoxShelf._({
+    required this.openings,
+    required this.opened,
+    required this.openedCount,
+    required this.sealed,
+    required this.sealedCount,
+    required this.sealedBoth,
+    required this.openedBoth,
+    required this.bothCount,
+    required this.cost,
+    required this.costCount,
+  });
+
+  /// An empty shelf.
+  static const BoxShelf empty = BoxShelf._(
+    openings: <BoxOpening>[],
+    opened: 0,
+    openedCount: 0,
+    sealed: 0,
+    sealedCount: 0,
+    sealedBoth: 0,
+    openedBoth: 0,
+    bothCount: 0,
+    cost: null,
+    costCount: 0,
+  );
+
+  /// Values a shelf from what the app knows about each of its boxes.
+  ///
+  /// [compositions] and [cards] are keyed by set code. A set missing from
+  /// [cards] is a set that is not on the phone, which is a different problem
+  /// from a set nothing has priced, and [BoxBlocker] keeps the two apart.
+  factory BoxShelf.of({
+    required List<SealedHolding> holdings,
+    required Map<String, BoxComposition> compositions,
+    required Map<String, List<TcgCard>> cards,
+  }) {
+    final openings = <BoxOpening>[];
+    var opened = 0.0;
+    var openedCount = 0;
+    var sealed = 0.0;
+    var sealedCount = 0;
+    var sealedBoth = 0.0;
+    var openedBoth = 0.0;
+    var bothCount = 0;
+    var cost = 0.0;
+    var costCount = 0;
+
+    for (final SealedHolding holding in holdings) {
+      final BoxComposition? composition = compositions[holding.setCode];
+      final List<TcgCard>? setCards = cards[holding.setCode];
+      BoxEv? ev;
+      BoxBlocker? blocker;
+      if (holding.setCode.isEmpty) {
+        blocker = BoxBlocker.noSet;
+      } else if (composition == null || composition.isEmpty) {
+        blocker = BoxBlocker.noComposition;
+      } else if (setCards == null) {
+        blocker = BoxBlocker.setNotDownloaded;
+      } else {
+        final worked = BoxEv.of(
+          cards: setCards,
+          composition: composition,
+          boxPrice: holding.unitValue,
+        );
+        if (worked.isComputable) {
+          ev = worked;
+        } else {
+          blocker = BoxBlocker.nothingPriced;
+        }
+      }
+
+      final opening = BoxOpening(
+        holdingId: holding.id,
+        productId: holding.productId,
+        price: holding.unitValue,
+        name: holding.name,
+        setCode: holding.setCode,
+        quantity: holding.quantity,
+        composition: composition,
+        ev: ev,
+        blocker: blocker,
+      );
+      openings.add(opening);
+
+      final openEach = opening.openedEach;
+      final shutEach = holding.unitValue;
+      if (openEach != null) {
+        opened += openEach * holding.quantity;
+        openedCount++;
+      }
+      if (shutEach != null) {
+        sealed += shutEach * holding.quantity;
+        sealedCount++;
+      }
+      if (openEach != null && shutEach != null) {
+        openedBoth += openEach * holding.quantity;
+        sealedBoth += shutEach * holding.quantity;
+        bothCount++;
+      }
+      final paidEach = holding.unitCost;
+      if (openEach != null && paidEach != null) {
+        cost += paidEach * holding.quantity;
+        costCount++;
+      }
+    }
+
+    return BoxShelf._(
+      openings: openings,
+      opened: opened,
+      openedCount: openedCount,
+      sealed: sealed,
+      sealedCount: sealedCount,
+      sealedBoth: sealedBoth,
+      openedBoth: openedBoth,
+      bothCount: bothCount,
+      cost: costCount == 0 ? null : cost,
+      costCount: costCount,
+    );
+  }
+
+  /// Every box held, in shelf order.
+  final List<BoxOpening> openings;
+
+  /// What every box whose contents could be valued is worth opened, and how
+  /// many boxes that covers.
+  final double opened;
+  final int openedCount;
+
+  /// What every box a price list has priced is worth kept shut, and how many
+  /// boxes that covers.
+  final double sealed;
+  final int sealedCount;
+
+  /// The two sides added up over the boxes where both are known, which is the
+  /// only pair of numbers that may be subtracted from each other.
+  final double sealedBoth;
+  final double openedBoth;
+  final int bothCount;
+
+  /// What the boxes with both a contents value and a recorded cost cost, and
+  /// how many that covers.
+  final double? cost;
+  final int costCount;
+
+  /// The boxes that could not be valued as cards.
+  List<BoxOpening> get unvalued => <BoxOpening>[
+    for (final BoxOpening o in openings)
+      if (o.opened == null) o,
+  ];
+
+  /// How many physical boxes are held, counting quantity.
+  int get boxes {
+    var n = 0;
+    for (final BoxOpening o in openings) {
+      n += o.quantity;
+    }
+    return n;
+  }
+
+  /// Whether there is anything to say.
+  bool get isEmpty => openings.isEmpty;
+
+  /// Whether at least one box can be compared both ways.
+  bool get hasAnswer => bothCount > 0;
+
+  /// What opening the comparable boxes is worth against keeping them shut.
+  double get difference => openedBoth - sealedBoth;
+
+  /// Whether, on the boxes that can be compared, opening pays better.
+  bool get openingPays => difference > 0;
+
+  /// What the boxes with a recorded cost have made against what they cost.
+  double? get againstCost => cost == null ? null : opened - cost!;
+
+  /// The boxes held with no composition stated, which is the one blocker the
+  /// collector can clear.
+  List<BoxOpening> get unstated => <BoxOpening>[
+    for (final BoxOpening o in openings)
+      if (o.blocker == BoxBlocker.noComposition) o,
+  ];
 }
