@@ -15,6 +15,7 @@ import 'package:arcanum/features/collection/purchases_screen.dart';
 import 'package:arcanum/features/collection/trade_screen.dart';
 import 'package:arcanum/features/collection/wants_screen.dart';
 import 'package:arcanum/features/scan/scan_screen.dart';
+import 'package:arcanum/features/sealed/sealed_screen.dart';
 import 'package:arcanum/features/transfer/paste_import_screen.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
@@ -62,6 +63,7 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
       'binders' => const BindersScreen(),
       'paste' => const PasteImportScreen(),
       'scan' => const ScanScreen(),
+      'sealed' => const SealedScreen(),
       _ => const TradeScreen(),
     };
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
@@ -181,6 +183,10 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                               PopupMenuItem<String>(
                                 value: 'scan',
                                 child: Text('Scan a card'),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'sealed',
+                                child: Text('Sealed product'),
                               ),
                             ],
                       ),

@@ -176,7 +176,8 @@ pw.Widget _sectionHead(ValuationSection section) => pw.Row(
     ),
     pw.Text(
       '${Fmt.count(section.cards)} '
-      '${section.cards == 1 ? 'card' : 'cards'} · ${Fmt.money(section.subtotal)}',
+      '${section.unit}${section.cards == 1 ? '' : 's'} · '
+      '${Fmt.money(section.subtotal)}',
       style: const pw.TextStyle(color: _quiet, fontSize: 10),
     ),
   ],
@@ -268,6 +269,13 @@ pw.Widget _totals(ValuationReport report) {
   final List<(String, String)> rows = <(String, String)>[
     ('Listed above', Fmt.money(listed)),
     ('Whole collection', Fmt.money(report.totalValue)),
+    if (report.sealedLines.isNotEmpty)
+      ('Sealed product', Fmt.money(report.sealedValue)),
+    if (report.sealedLines.isNotEmpty)
+      (
+        'Everything together',
+        Fmt.money(report.totalValue + report.sealedValue),
+      ),
     if (report.totalCost != null) ('Paid', Fmt.money(report.totalCost)),
     if (report.totalCost != null)
       ('Unrealised', Fmt.moneySigned(report.unrealised)),

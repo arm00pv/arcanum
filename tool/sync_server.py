@@ -15,6 +15,14 @@ Endpoints:
   GET /v1/history/<cardId>.json
       {"id": ..., "updated": ..., "series": {"nonfoil": [[ts, price], ...]}, "game": ...}
       Dates are unix seconds. Missing printings return 404 with a JSON body.
+  GET /v1/sealed?game=mtg&set=BLB
+      {"set": "BLB", "setName": "Bloomburrow", "updated": ...,
+       "products": [{"productId":..., "name":..., "market":..., "low":..., "mid":...}]}
+      Sealed product and what it sells for, read from TCGplayer's own product
+      dumps through tcgcsv.com and cached here for half a day. Cards are filtered
+      out structurally - a single carries a rarity and a collector number, a box
+      carries neither - so nothing has to guess from a name alone. A set this
+      server cannot resolve answers 404 and the app falls back to typing it in.
 
 The four games address a printing differently - Scryfall UUIDs, TCGdex ids,
 Lorcast's crd_ ids and Yu-Gi-Oh!'s compound ids - and those id spaces do not
@@ -54,9 +62,11 @@ import socket
 import sqlite3
 import sys
 import threading
+import time
+import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 DB_PATH = ""
 POKEMON_DB_PATH = ""
@@ -405,6 +415,183 @@ def drain_body(sock, rfile, length):
     return read == length
 
 
+
+# --------------------------------------------------------------- sealed product
+
+# TCGplayer's own product lists, mirrored as plain JSON and CSV by tcgcsv.com.
+# Arcanum reads them through this server rather than from the phone: one cache,
+# one rate limit, one place to change when the shape moves.
+TCGCSV_ROOT = "https://tcgcsv.com/tcgplayer"
+SEALED_DIR = ""
+SEALED_TTL = 12 * 3600
+GROUPS_TTL = 7 * 24 * 3600
+SEALED_TIMEOUT = 25
+
+# The app's game ids to TCGplayer's category ids. A game missing here has no
+# sealed product this server can price, and says so rather than guessing.
+TCGCSV_CATEGORIES = {
+    "mtg": 1,
+    "yugioh": 2,
+    "pokemon": 3,
+    "lorcana": 71,
+}
+
+# Product names that are sealed product even when the list is vague about it.
+SEALED_WORDS = (
+    "booster box", "booster pack", "booster bundle", "display", "bundle",
+    "elite trainer box", "trainer box", "tin", "commander deck", "starter deck",
+    "structure deck", "theme deck", "precon", "deck box", "gift box",
+    "collector box", "illumineer", "trove", "case", "pack", "box", "deck",
+)
+
+
+def _sealed_cache_path(kind, key):
+    return os.path.join(SEALED_DIR, "%s-%s.json" % (kind, key))
+
+
+def _read_cache(path, ttl):
+    """A cached JSON document, when it is younger than ttl seconds."""
+    try:
+        age = time.time() - os.path.getmtime(path)
+        if age > ttl:
+            return None
+        with open(path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return None
+
+
+def _write_cache(path, payload):
+    """Stores a document for next time; a cache that cannot be written is fine."""
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def _fetch_json(url):
+    """One small JSON document, or None when the price list cannot be reached."""
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "ArcanumSync/1.0 (+personal collection app)"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=SEALED_TIMEOUT) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return None
+
+
+def _tcgsv_groups(category):
+    """Every group (set) in a category, cached for a week."""
+    path = _sealed_cache_path("groups", category)
+    cached = _read_cache(path, GROUPS_TTL)
+    if cached is not None:
+        return cached
+    payload = _fetch_json("%s/%d/groups" % (TCGCSV_ROOT, category))
+    if not payload:
+        return []
+    groups = payload.get("results") or []
+    _write_cache(path, groups)
+    return groups
+
+
+def _group_for(category, set_code):
+    """The TCGplayer group id for a set code, or None."""
+    wanted = (set_code or "").strip().lower()
+    if not wanted:
+        return None
+    for group in _tcgsv_groups(category):
+        if str(group.get("abbreviation") or "").strip().lower() == wanted:
+            return group
+    # Some sets are only named, not abbreviated; a name that matches exactly is
+    # still an answer, and anything looser would attach a box to the wrong set.
+    for group in _tcgsv_groups(category):
+        if str(group.get("name") or "").strip().lower() == wanted:
+            return group
+    return None
+
+
+def _is_sealed(product):
+    """Whether a listed product is sealed product rather than a single card.
+
+    Decided structurally first: a single card carries a rarity and a collector
+    number, and a box carries neither. The name is used only to confirm, because
+    no keyword list survives contact with a game that prints "Illumineer's Trove".
+    """
+    fields = {}
+    for entry in product.get("extendedData") or []:
+        name = str(entry.get("name") or "").lower()
+        fields[name] = entry.get("value")
+    if fields.get("rarity") or fields.get("number") or fields.get("cardnumber"):
+        return False
+    name = str(product.get("name") or "").lower()
+    return any(word in name for word in SEALED_WORDS)
+
+
+def sealed_for(game, set_code):
+    """Sealed product and its prices for one set, or None when unknown.
+
+    Returns {"set": ..., "group": ..., "updated": ..., "products": [...]}, where
+    each product carries market, low and mid. Prices come from the same dump
+    TCGplayer publishes for its own site, so a box is priced on the same basis as
+    the cards inside it.
+    """
+    category = TCGCSV_CATEGORIES.get((game or "").strip().lower())
+    if category is None:
+        return None
+    group = _group_for(category, set_code)
+    if group is None:
+        return None
+    group_id = group.get("groupId")
+    products_path = _sealed_cache_path("products", "%d-%s" % (category, group_id))
+    prices_path = _sealed_cache_path("prices", "%d-%s" % (category, group_id))
+    products = _read_cache(products_path, SEALED_TTL)
+    prices = _read_cache(prices_path, SEALED_TTL)
+    if not products or not prices:
+        fetched_products = _fetch_json(
+            "%s/%d/%s/products" % (TCGCSV_ROOT, category, group_id)
+        )
+        fetched_prices = _fetch_json(
+            "%s/%d/%s/prices" % (TCGCSV_ROOT, category, group_id)
+        )
+        if not fetched_products or not fetched_prices:
+            return None
+        products = fetched_products.get("results") or []
+        prices = fetched_prices.get("results") or []
+        _write_cache(products_path, products)
+        _write_cache(prices_path, prices)
+
+    by_id = {}
+    for price in prices:
+        by_id[str(price.get("productId"))] = price
+
+    out = []
+    for product in products:
+        if not _is_sealed(product):
+            continue
+        price = by_id.get(str(product.get("productId"))) or {}
+        out.append({
+            "productId": product.get("productId"),
+            "name": product.get("cleanName") or product.get("name"),
+            "market": price.get("marketPrice"),
+            "low": price.get("lowPrice"),
+            "mid": price.get("midPrice"),
+            "url": product.get("url"),
+        })
+    out.sort(key=lambda p: p.get("market") or 0, reverse=True)
+    return {
+        "set": group.get("abbreviation") or set_code,
+        "setName": group.get("name"),
+        "group": group_id,
+        "updated": int(time.time()),
+        "products": out,
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "ArcanumSync/1.0"
     protocol_version = "HTTP/1.1"
@@ -440,6 +627,20 @@ class Handler(BaseHTTPRequestHandler):
                 data = history_for(sid)
                 if data is None:
                     self._send(404, {"error": "no history", "id": sid})
+                    return
+                self._send(200, data)
+                return
+            if path == "/v1/sealed":
+                query = parse_qs(urlparse(self.path).query)
+                game = (query.get("game") or ["mtg"])[0]
+                set_code = (query.get("set") or [""])[0]
+                if not set_code:
+                    self._send(400, {"error": "no set", "game": game})
+                    return
+                data = sealed_for(game, set_code)
+                if data is None:
+                    self._send(404, {"error": "no sealed product",
+                                     "game": game, "set": set_code})
                     return
                 self._send(200, data)
                 return
@@ -618,7 +819,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     global DB_PATH, POKEMON_DB_PATH, LORCANA_DB_PATH, YUGIOH_DB_PATH
-    global BACKUP_TOKEN_PATH, BACKUPS_DIR, _STATS
+    global BACKUP_TOKEN_PATH, BACKUPS_DIR, SEALED_DIR, _STATS
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser()
     default_db = os.path.join(here, "prices", "prices.db")
@@ -651,6 +852,11 @@ def main():
         help="file holding the token a backup request must send; while it is "
              "missing or empty the backup routes answer 503 and store nothing",
     )
+    ap.add_argument(
+        "--sealed-dir",
+        default=os.path.join(os.path.expanduser("~"), "arcanum", "data", "sealed"),
+        help="where set product lists and their prices are cached",
+    )
     args = ap.parse_args()
 
     if not os.path.exists(args.db):
@@ -665,6 +871,7 @@ def main():
     YUGIOH_DB_PATH = args.yugioh_db if os.path.exists(args.yugioh_db) else ""
     BACKUPS_DIR = args.backups_dir
     BACKUP_TOKEN_PATH = args.backup_token
+    SEALED_DIR = args.sealed_dir
     _STATS = None
     s = stats()
     print("Arcanum Sync serving {:,} printings / {:,} points ({} days) on http://{}:{}".format(
@@ -679,6 +886,8 @@ def main():
                 game, counts["printings"], counts["points"], counts["days"]))
         else:
             print("  (no {} database yet - run {} to build one)".format(game, poller))
+    print("  sealed product: cached in {} ({} categories)".format(
+        args.sealed_dir, len(TCGCSV_CATEGORIES)))
     if installed_token() is None:
         print("  backups disabled: no token in {} (backup routes answer 503)".format(
             args.backup_token))

@@ -1,6 +1,7 @@
 import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
+import 'package:arcanum/domain/models/sealed_product.dart';
 
 /// One stack, as a valuation report prints it.
 ///
@@ -73,11 +74,18 @@ class ValuationSection {
     required this.title,
     required this.lines,
     required this.subtotal,
+    this.unit = 'card',
   });
 
   final String title;
   final List<ValuationLine> lines;
   final double subtotal;
+
+  /// What one row of this section counts, singular: a card, or an item of
+  /// sealed product. A table of boxes is not a table of cards, and a report that
+  /// called three booster boxes three cards would be wrong in the one place a
+  /// reader is least likely to check.
+  final String unit;
 
   int get cards =>
       lines.fold(0, (int n, ValuationLine line) => n + line.quantity);
@@ -106,6 +114,10 @@ class ValuationReport {
     required this.concentration,
     required this.omittedLines,
     required this.omittedValue,
+    required this.sealedLines,
+    required this.sealedItems,
+    required this.sealedValue,
+    required this.sealedUnpriced,
   });
 
   final CardGame game;
@@ -147,6 +159,18 @@ class ValuationReport {
   /// Stacks left out by a limit, and what they were worth between them.
   final int omittedLines;
   final double omittedValue;
+
+  /// The sealed product the collector holds, as its own table.
+  final List<ValuationLine> sealedLines;
+
+  /// How many sealed products are held, counting quantity.
+  final int sealedItems;
+
+  /// What the priced sealed product comes to.
+  final double sealedValue;
+
+  /// Sealed holdings nothing has priced.
+  final int sealedUnpriced;
 
   double? get unrealised {
     final double? cost = totalCost;
@@ -196,6 +220,17 @@ class ValuationReport {
         'those.',
       );
     }
+    if (sealedLines.isNotEmpty) {
+      final String unpricedNote = sealedUnpriced == 0
+          ? ''
+          : ' ${Fmt.count(sealedUnpriced)} of those holdings have never been '
+                'priced and are left out of the total rather than guessed at.';
+      notes.add(
+        'Sealed product is valued at the last figure the app saw for it, from '
+        'the price list your own companion keeps, rather than at a live '
+        'price.$unpricedNote',
+      );
+    }
     notes.add(
       'These are market prices - what a card is selling for - rather than '
       'offers. A dealer buying a collection pays less, and a whole collection '
@@ -214,6 +249,15 @@ class ValuationReport {
       ('Cards', Fmt.count(totalCards)),
       ('Distinct printings', Fmt.count(uniquePrintings)),
       ('Market value', Fmt.money(totalValue)),
+      if (sealedLines.isNotEmpty)
+        (
+          'Sealed product',
+          '${Fmt.count(sealedItems)} '
+              '${sealedItems == 1 ? "item" : "items"} · '
+              '${Fmt.money(sealedValue)}',
+        ),
+      if (sealedLines.isNotEmpty)
+        ('Everything together', Fmt.money(totalValue + sealedValue)),
     ];
     if (totalCost != null) {
       rows.add(('Paid', Fmt.money(totalCost)));
@@ -243,6 +287,7 @@ ValuationReport buildValuationReport({
   DateTime? priceAsOf,
   int? maxLines,
   Map<String, String> setNames = const <String, String>{},
+  List<SealedHolding> sealed = const <SealedHolding>[],
 }) {
   final List<ValuationLine> all = <ValuationLine>[
     for (final ValuedEntry entry in entries) _lineOf(entry, setNames),
@@ -273,6 +318,28 @@ ValuationReport buildValuationReport({
       ? null
       : costs.fold<double>(0.0, (double a, double b) => a + b);
 
+  // Sealed product is not part of the card total and never has been: a box is
+  // not a card, and an insurer reading '751 cards' must not find thirty-six
+  // packs folded into it. It is its own table, its own count and its own value,
+  // and the summary adds the two together in one line for the reader who wants
+  // the whole shelf in a figure.
+  final List<ValuationLine> sealedLines = <ValuationLine>[
+    for (final SealedHolding holding in sealed) _sealedLineOf(holding),
+  ]..sort(_byValueDesc);
+  final int sealedItems = sealedLines.fold(
+    0,
+    (int n, ValuationLine line) => n + line.quantity,
+  );
+  final double sealedValue = sealedLines.fold(
+    0.0,
+    (double sum, ValuationLine line) => sum + (line.totalValue ?? 0),
+  );
+  // Holdings, not items: the caveat says how many rows nothing has priced.
+  final int sealedUnpriced = sealedLines.fold(
+    0,
+    (int n, ValuationLine line) => n + (line.isPriced ? 0 : 1),
+  );
+
   final bool cut = maxLines != null && all.length > maxLines;
   final List<ValuationLine> printed = cut ? all.sublist(0, maxLines) : all;
   final List<ValuationLine> dropped = cut ? all.sublist(maxLines) : const [];
@@ -282,7 +349,16 @@ ValuationReport buildValuationReport({
     generatedAt: generatedAt ?? DateTime.now(),
     priceAsOf: priceAsOf,
     lines: printed,
-    sections: _sectionsOf(printed),
+    sections: <ValuationSection>[
+      ..._sectionsOf(printed),
+      if (sealedLines.isNotEmpty)
+        ValuationSection(
+          title: 'Sealed product',
+          lines: sealedLines,
+          subtotal: sealedValue,
+          unit: 'item',
+        ),
+    ],
     totalCards: totalCards,
     uniquePrintings: <String>{
       for (final ValuedEntry entry in entries) entry.entry.cardId,
@@ -298,8 +374,32 @@ ValuationReport buildValuationReport({
       0.0,
       (double sum, ValuationLine line) => sum + (line.totalValue ?? 0),
     ),
+    sealedLines: sealedLines,
+    sealedItems: sealedItems,
+    sealedValue: sealedValue,
+    sealedUnpriced: sealedUnpriced,
   );
 }
+
+/// One sealed holding as a printable line.
+///
+/// The category takes the place the collector number has on a card, because that
+/// is the same question in a different shape: which printing of the thing is
+/// this. The finish and condition columns are left empty, because a box has
+/// neither and inventing "Near Mint" for shrink wrap would be a lie a valuer
+/// could rely on.
+ValuationLine _sealedLineOf(SealedHolding holding) => ValuationLine(
+  name: holding.name,
+  setCode: holding.setCode.toUpperCase(),
+  setName: holding.setName.isEmpty ? 'Sealed product' : holding.setName,
+  collectorNumber: holding.category.label,
+  finish: '',
+  condition: '',
+  binder: holding.location,
+  quantity: holding.quantity,
+  unitValue: holding.unitValue,
+  unitCost: holding.unitCost,
+);
 
 ValuationLine _lineOf(ValuedEntry entry, Map<String, String> setNames) {
   final cardId = entry.entry.cardId;

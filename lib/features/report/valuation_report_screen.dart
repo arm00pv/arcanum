@@ -10,6 +10,7 @@ import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/data/report/valuation_pdf.dart';
 import 'package:arcanum/data/repositories/collection_repository.dart';
 import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/domain/models/sealed_product.dart';
 import 'package:arcanum/domain/report/valuation_report.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/common.dart';
@@ -64,6 +65,9 @@ class _ValuationReportScreenState extends ConsumerState<ValuationReportScreen> {
     return buildValuationReport(
       game: _game,
       entries: data.entries,
+      sealed:
+          ref.watch(sealedPortfolioProvider(_game)).value?.holdings ??
+          const <SealedHolding>[],
       priceAsOf: ref.watch(pricesAsOfProvider(_game)).value,
       maxLines: _breadth.limit,
       setNames: <String, String>{

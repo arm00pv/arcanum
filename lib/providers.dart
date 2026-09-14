@@ -15,6 +15,7 @@ import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/data/db/collection_dao.dart';
 import 'package:arcanum/data/db/deck_dao.dart';
 import 'package:arcanum/data/db/history_dao.dart';
+import 'package:arcanum/data/db/sealed_dao.dart';
 import 'package:arcanum/data/db/wanted_dao.dart';
 import 'package:arcanum/data/decks/ban_list_service.dart';
 import 'package:arcanum/data/history/price_history_service.dart';
@@ -22,6 +23,7 @@ import 'package:arcanum/data/repositories/alert_repository.dart';
 import 'package:arcanum/data/repositories/catalog_repository.dart';
 import 'package:arcanum/data/repositories/collection_repository.dart';
 import 'package:arcanum/data/repositories/deck_repository.dart';
+import 'package:arcanum/data/sealed/sealed_lookup.dart';
 import 'package:arcanum/data/security/app_lock.dart';
 import 'package:arcanum/domain/decks/deck.dart';
 import 'package:arcanum/domain/decks/deck_format.dart';
@@ -29,6 +31,7 @@ import 'package:arcanum/domain/decks/deck_suggestions.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/price_alert.dart';
+import 'package:arcanum/domain/models/sealed_product.dart';
 import 'package:arcanum/domain/models/set_completion.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/domain/quant/quant.dart';
@@ -542,6 +545,48 @@ final wantedCountProvider = FutureProvider.family<int, CardGame>((
 ) async {
   ref.watch(wantedRevisionProvider);
   return ref.watch(wantedDaoProvider).count(game);
+});
+
+// -------------------------------------------------------------- sealed product
+
+/// Reads and writes the collector's sealed product.
+final sealedDaoProvider = Provider<SealedDao>(
+  (ref) => SealedDao(ref.watch(bootstrapProvider).database.db),
+);
+
+/// Bumped whenever the sealed shelf changes, so screens recompute without every
+/// caller remembering to invalidate three providers.
+class SealedRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  /// Signals that the shelf changed.
+  void bump() => state = state + 1;
+}
+
+final sealedRevisionProvider = NotifierProvider<SealedRevision, int>(
+  SealedRevision.new,
+);
+
+/// The sealed holdings of one game, added up.
+final sealedPortfolioProvider =
+    FutureProvider.family<SealedPortfolio, CardGame>((ref, game) async {
+      ref.watch(sealedRevisionProvider);
+      return SealedPortfolio.of(await ref.watch(sealedDaoProvider).all(game));
+    });
+
+/// Sealed products a price list knows about for one set.
+///
+/// Fetched on demand, for the one set somebody is adding a box from, rather than
+/// pulled wholesale: the phone has no business holding every product of every
+/// set it will never buy.
+final sealedOffersProvider = FutureProvider.family<List<SealedOffer>, SetRef>((
+  ref,
+  key,
+) async {
+  final settings = ref.watch(settingsProvider);
+  return CompanionSealedSource(endpoint: settings.historyEndpoint)
+      .forSet(key.game, key.code);
 });
 
 // ----------------------------------------------------------------- set progress

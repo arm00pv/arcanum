@@ -36,7 +36,9 @@ class AppDatabase {
   ///      readable without the catalogue - in a backup, in a notification sent
   ///      from the collector's own server, and on a phone that has never
   ///      downloaded the set.
-  static const _version = 9;
+  /// v10 - a sealed_products table, so a booster box is a holding like any
+  ///      other and reaches the valuation instead of being a note in a drawer.
+  static const _version = 10;
 
   static AppDatabase? _instance;
 
@@ -63,6 +65,7 @@ class AppDatabase {
         if (from < 7) await createDecks(d);
         if (from < 8) await addForTrade(d);
         if (from < 9) await addAlertLabels(d);
+        if (from < 10) await createSealedProducts(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -308,6 +311,12 @@ class AppDatabase {
       batch.execute(sql);
     }
 
+    // ------------------------------------------------------ sealed product
+    batch.execute(_sealedSql);
+    batch.execute(
+      'CREATE INDEX idx_sealed_game ON sealed_products(game, created_at DESC)',
+    );
+
     // ------------------------------------------------------------ metadata
     batch.execute('''
       CREATE TABLE meta (
@@ -411,6 +420,43 @@ class AppDatabase {
         )
       WHERE card_name IS NULL
     ''');
+  }
+
+  /// The sealed product table, shared by the schema and the v10 upgrade.
+  ///
+  /// Sealed holdings are their own table rather than rows in
+  /// collection_entries: a box has no finish, no condition and no printing, and
+  /// every query over the card collection - totals, completion, decks, scans -
+  /// would have to learn to exclude it. A separate table is a separate kind of
+  /// thing, which is what it is.
+  static const _sealedSql = '''
+    CREATE TABLE sealed_products (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      game          TEXT NOT NULL DEFAULT 'mtg',
+      set_code      TEXT NOT NULL DEFAULT '',
+      set_name      TEXT NOT NULL DEFAULT '',
+      name          TEXT NOT NULL,
+      category      TEXT NOT NULL DEFAULT 'other',
+      quantity      INTEGER NOT NULL DEFAULT 1,
+      unit_cost     REAL,
+      unit_value    REAL,
+      value_as_of   INTEGER,
+      location      TEXT NOT NULL DEFAULT '',
+      note          TEXT NOT NULL DEFAULT '',
+      product_id    TEXT NOT NULL DEFAULT '',
+      created_at    INTEGER NOT NULL
+    )
+  ''';
+
+  /// v10: sealed product is tracked as a holding.
+  ///
+  /// Created rather than converted: nothing before this version could record a
+  /// box, so an empty shelf is the truth.
+  static Future<void> createSealedProducts(DatabaseExecutor d) async {
+    await d.execute(_sealedSql);
+    await d.execute(
+      'CREATE INDEX idx_sealed_game ON sealed_products(game, created_at DESC)',
+    );
   }
 
   /// v7: decks, and the cards in them.
