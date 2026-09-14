@@ -311,7 +311,13 @@ class _ValueHero extends StatelessWidget {
     // the same collection - which is the difference between a market move and a
     // change in what is owned.
     final PortfolioChange? stretch = portfolioChange(history);
-    final sinceStart = stretch?.percent;
+    // The count arrives a moment after the curve does, and a caption that read
+    // '--' for that moment would be worse than one without the caveat.
+    final sinceStart =
+        stretch?.percent ??
+        (values.length >= 2 && values.first > 0
+            ? (values.last / values.first - 1) * 100
+            : null);
 
     return GlassCard(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 14),
