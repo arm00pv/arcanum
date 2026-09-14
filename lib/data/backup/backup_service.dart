@@ -10,6 +10,40 @@ import 'package:arcanum/data/backup/backup_archive.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/domain/sync/merge.dart';
 
+/// One archive read back from the companion, and who wrote it.
+///
+/// The companion knows which device uploaded each archive, so it is asked
+/// rather than guessed at: a merge is a merge of two devices, and the collector
+/// is told which phone the copy came from before anything is written.
+class RemoteCopy {
+  /// Describes one downloaded copy.
+  const RemoteCopy({required this.archive, this.device = '', this.written});
+
+  /// The archive itself.
+  final BackupArchive archive;
+
+  /// The label the other phone uploaded under, or empty when it sent none.
+  final String device;
+
+  /// When the companion stored it, or null when it did not say.
+  final DateTime? written;
+}
+
+/// Thrown when the companion holds copies, but none from another device.
+///
+/// Not an error the collector needs to fix: one phone is the normal case, and
+/// comparing this phone's collection against its own backup would report a
+/// merge that cannot happen. The screen says so in words instead.
+class NoOtherDeviceException implements Exception {
+  /// Creates the exception.
+  const NoOtherDeviceException();
+
+  @override
+  String toString() =>
+      'The server holds only copies from this phone, so there is nothing from '
+      'another device to add.';
+}
+
 /// One device that has written to the companion.
 class BackupDevice {
   /// Creates a device row.
@@ -349,24 +383,53 @@ class BackupService {
     }
   }
 
-  /// Downloads the newest archive without applying it, so the collector can be
-  /// told what is in it before anything changes on the phone.
-  Future<BackupArchive> downloadLatest() async {
-    final res = await _withRetry(
-      'download',
-      () => _dio.get<List<int>>(
-        '$_root/v1/backup/latest',
-        options: Options(
-          headers: _authHeaders,
-          responseType: ResponseType.bytes,
+  /// Downloads an archive without applying it, so the collector can be told
+  /// what is in it before anything changes on the phone.
+  ///
+  /// With [notDevice] the companion is asked for its newest archive that some
+  /// other device wrote - which is the only useful question when two phones
+  /// share one collection, because this phone's own copy is already in its own
+  /// database. When every archive on the server came from this phone the
+  /// companion says so and [NoOtherDeviceException] is thrown.
+  Future<RemoteCopy> downloadLatest({String notDevice = ''}) async {
+    final Response<List<int>> res;
+    try {
+      res = await _withRetry(
+        'download',
+        () => _dio.get<List<int>>(
+          '$_root/v1/backup/latest',
+          queryParameters: <String, dynamic>{
+            if (notDevice.isNotEmpty) 'not_device': notDevice,
+          },
+          options: Options(
+            headers: _authHeaders,
+            responseType: ResponseType.bytes,
+          ),
         ),
-      ),
-    );
+      );
+    } on DioException catch (error) {
+      if (notDevice.isNotEmpty && error.response?.statusCode == 404) {
+        throw const NoOtherDeviceException();
+      }
+      rethrow;
+    }
     final data = res.data;
     if (data == null || data.isEmpty) {
       throw const BackupFormatException('The server sent no backup.');
     }
-    return BackupArchive.decode(data);
+    return RemoteCopy(
+      archive: BackupArchive.decode(data),
+      device: _headerOf(res, 'x-arcanum-device'),
+      written: DateTime.tryParse(_headerOf(res, 'x-arcanum-written'))
+          ?.toLocal(),
+    );
+  }
+
+  /// One response header, or an empty string when the companion did not send
+  /// it - an older companion is not a reason to fail a download.
+  String _headerOf(Response<dynamic> res, String name) {
+    final String? value = res.headers.value(name);
+    return value?.trim() ?? '';
   }
 
   /// Replaces the collector's data with an archive's contents.
@@ -415,15 +478,17 @@ class BackupService {
 
   /// Works out what another device's newest copy would add.
   ///
-  /// Builds this phone's own archive, downloads the server's newest one and
+  /// Builds this phone's own archive, downloads the newest copy that is *not*
+  /// this phone's - [notDevice] is the label this phone uploads under - and
   /// hands both to [planMerge]. Nothing is written: the plan is what the
   /// collector is shown before they agree to anything.
-  Future<(MergePlan, BackupArchive)> planSync({
+  Future<(MergePlan, RemoteCopy)> planSync({
     required String appVersion,
+    String notDevice = '',
   }) async {
     final BackupArchive local = await build(appVersion: appVersion);
-    final BackupArchive remote = await downloadLatest();
-    return (planMerge(local, remote), remote);
+    final RemoteCopy remote = await downloadLatest(notDevice: notDevice);
+    return (planMerge(local, remote.archive), remote);
   }
 
   /// Adds what another device has, and takes nothing away.

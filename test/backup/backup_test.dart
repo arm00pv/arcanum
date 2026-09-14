@@ -19,6 +19,7 @@ import 'package:arcanum/data/backup/backup_service.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/data/db/wanted_dao.dart';
 import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/domain/sync/merge.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,14 +27,25 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Answers canned payloads and records what was asked for.
 class _FakeServer implements HttpClientAdapter {
-  _FakeServer(this._respond, this.requests, this.bodies, this.headers);
+  _FakeServer(
+    this._respond,
+    this.requests,
+    this.bodies,
+    this.headers, {
+    this.replyHeaders = const <String, String>{},
+  });
 
-  final String? Function(Uri uri, String method) _respond;
+  /// Answers one request: a String for JSON, bytes for an archive, or null
+  /// for the 404 the companion sends when it has nothing to give.
+  final Object? Function(Uri uri, String method) _respond;
   final List<String> requests;
   final List<List<int>> bodies;
 
   /// The headers of each request, so a test can prove the token was sent.
   final List<Map<String, dynamic>> headers;
+
+  /// Headers to answer with, so a test can prove the app reads them.
+  final Map<String, String> replyHeaders;
 
   @override
   Future<ResponseBody> fetch(
@@ -41,7 +53,10 @@ class _FakeServer implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    requests.add('${options.method} ${options.uri.path}');
+    requests.add(
+      '${options.method} ${options.uri.path}'
+      '${options.uri.query.isEmpty ? "" : "?${options.uri.query}"}',
+    );
     headers.add(Map<String, dynamic>.from(options.headers));
     if (requestStream != null) {
       final chunks = <int>[];
@@ -52,6 +67,8 @@ class _FakeServer implements HttpClientAdapter {
     }
     final responseHeaders = <String, List<String>>{
       Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+      for (final MapEntry<String, String> header in replyHeaders.entries)
+        header.key: <String>[header.value],
     };
     final body = _respond(options.uri, options.method);
     if (body == null) {
@@ -61,7 +78,14 @@ class _FakeServer implements HttpClientAdapter {
         headers: responseHeaders,
       );
     }
-    return ResponseBody.fromString(body, 200, headers: responseHeaders);
+    if (body is List<int>) {
+      return ResponseBody.fromBytes(body, 200, headers: responseHeaders);
+    }
+    return ResponseBody.fromString(
+      body as String,
+      200,
+      headers: responseHeaders,
+    );
   }
 
   @override
@@ -570,6 +594,120 @@ void main() {
       expect(service.isConfigured, isTrue);
       settings.backupToken = '   ';
       expect(service.isConfigured, isFalse);
+      await db.close();
+    });
+
+    test('asks for the newest copy that is not this phone\'s', () async {
+      // Two phones, one collection: this phone's own backup is already in its
+      // own database, so the only copy worth comparing against is one another
+      // device wrote. The label is what the companion filters on.
+      final requests = <String>[];
+      final (db, settings) = await fresh();
+      final mine = await BackupService(
+        database: db,
+        settings: settings,
+      ).build(appVersion: '1.16.0');
+
+      final dio = Dio(BaseOptions(baseUrl: 'https://mine.example/arcanum'));
+      dio.httpClientAdapter = _FakeServer(
+        (Uri uri, String method) =>
+            uri.path.endsWith('/v1/backup/latest') ? mine.encode() : null,
+        requests,
+        <List<int>>[],
+        <Map<String, dynamic>>[],
+        replyHeaders: <String, String>{
+          'X-Arcanum-Device': 'pixel',
+          'X-Arcanum-Written': '2026-09-14T04:47:32+00:00',
+        },
+      );
+
+      final service = BackupService(database: db, settings: settings, dio: dio);
+      final RemoteCopy copy = await service.downloadLatest(
+        notDevice: 'arcanum-hma1',
+      );
+
+      expect(
+        requests,
+        contains('GET /arcanum/v1/backup/latest?not_device=arcanum-hma1'),
+      );
+      // Who wrote it, read off the reply rather than guessed at from the
+      // archive's own contents.
+      expect(copy.device, 'pixel');
+      expect(copy.written?.toUtc(), DateTime.utc(2026, 9, 14, 4, 47, 32));
+      expect(copy.archive.tables['collection_entries'], isEmpty);
+      await db.close();
+    });
+
+    test('says so when every copy on the server is this phone\'s own', () async {
+      final requests = <String>[];
+      final (db, settings) = await fresh();
+      final dio = Dio(BaseOptions(baseUrl: 'https://mine.example/arcanum'));
+      dio.httpClientAdapter = _FakeServer(
+        (Uri uri, String method) => null,
+        requests,
+        <List<int>>[],
+        <Map<String, dynamic>>[],
+      );
+
+      final service = BackupService(database: db, settings: settings, dio: dio);
+
+      // Told apart from a plain failure: one phone is the normal case, and the
+      // screen says that in words instead of showing an error.
+      await expectLater(
+        service.downloadLatest(notDevice: 'arcanum-hma1'),
+        throwsA(isA<NoOtherDeviceException>()),
+      );
+      // A download that asked for anything at all - the restore path - is still
+      // an ordinary failure when the server has nothing.
+      await expectLater(service.downloadLatest(), throwsA(isA<DioException>()));
+      await db.close();
+    });
+
+    test('plans a merge against the other device\'s copy', () async {
+      // The plan is what the collector is shown before anything is written, so
+      // it has to describe the other phone's archive and say whose it is.
+      final requests = <String>[];
+      final (theirDb, theirSettings) = await fresh();
+      await theirDb.db.insert('collection_entries', <String, Object?>{
+        'game': 'mtg',
+        'card_id': 'their-card',
+        'finish': 'nonfoil',
+        'condition': 'nm',
+        'language': 'en',
+        'quantity': 4,
+        'created_at': 1,
+        'updated_at': 1,
+      });
+      final theirs = await BackupService(
+        database: theirDb,
+        settings: theirSettings,
+      ).build(appVersion: '1.16.0');
+      await theirDb.close();
+
+      final (db, settings) = await fresh();
+      final dio = Dio(BaseOptions(baseUrl: 'https://mine.example/arcanum'));
+      dio.httpClientAdapter = _FakeServer(
+        (Uri uri, String method) =>
+            uri.path.endsWith('/v1/backup/latest') ? theirs.encode() : null,
+        requests,
+        <List<int>>[],
+        <Map<String, dynamic>>[],
+        replyHeaders: <String, String>{'X-Arcanum-Device': 'pixel'},
+      );
+
+      final service = BackupService(database: db, settings: settings, dio: dio);
+      final (MergePlan plan, RemoteCopy copy) = await service.planSync(
+        appVersion: '1.16.0',
+        notDevice: 'arcanum-hma1',
+      );
+
+      expect(
+        requests,
+        contains('GET /arcanum/v1/backup/latest?not_device=arcanum-hma1'),
+      );
+      expect(copy.device, 'pixel');
+      expect(plan.nothingToDo, isFalse);
+      expect(plan.addedRows, 1);
       await db.close();
     });
 

@@ -84,7 +84,7 @@ cleartext exception for it.
 | `/v1/history/<cardId>.json` | one printing's price series | anyone |
 | `/v1/sealed?game=&set=` | sealed product and prices for one set | anyone |
 | `/v1/backup` (POST) | stores an archive | the token |
-| `/v1/backup/latest` | newest archive, as gzip | the token |
+| `/v1/backup/latest` | newest archive, as gzip; `?not_device=LABEL` for the newest one another device wrote, and `X-Arcanum-Device` names the writer | the token |
 | `/v1/backup/status` | counts, and which device wrote what | the token |
 | `/vault` | the vault as a read-only HTML page | the token |
 

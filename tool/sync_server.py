@@ -32,10 +32,14 @@ Backups, for the collector whose collection exists only on the phone:
 
   POST /v1/backup      body: the archive bytes (the app sends gzip)
       {"ok": true, "saved": "arcanum-backup-...json.gz", "bytes": N, "kept": K}
-  GET  /v1/backup/latest
-      the newest archive as application/gzip, or 404 when there is none
+  GET  /v1/backup/latest[?not_device=LABEL]
+      the newest archive as application/gzip, or 404 when there is none.
+      With not_device, the newest archive that no device named LABEL wrote,
+      which is what a second phone merges: a copy of its own is no news to it.
+      The reply carries X-Arcanum-Device and X-Arcanum-Written, so the app can
+      name the phone the copy came from without decoding the archive.
   GET  /v1/backup/status
-      {"ok": true, "enabled": true, "backups": N, "latest": "<ISO8601 or null>", "bytes": N}
+      {"ok": true, "enabled": true, "backups": N, "latest": "<ISO8601 or null>", "bytes": N, "devices": [...]}
 
 Every backup route demands an X-Arcanum-Token header matching the token in
 --backup-token (~/arcanum/backup.token by default), which is read on each
@@ -378,6 +382,23 @@ def device_of(name):
         return ""
     parts = tail.split(".")
     return parts[0] if parts else ""
+
+
+def newest_from_other(names, mine):
+    """The newest archive that a device other than `mine` wrote, or None.
+
+    This is the whole point of a second phone: this phone's own newest copy is
+    inside its own database already, so comparing against it says nothing. An
+    archive with no device label is a candidate - the server cannot say it came
+    from this phone, and saying so would hide a copy that might be the only one
+    holding something.
+    """
+    if not mine:
+        return names[-1] if names else None
+    for name in reversed(names):
+        if device_of(name) != mine:
+            return name
+    return None
 
 
 def device_summary(names):
@@ -1062,8 +1083,22 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/v1/backup/latest":
                 if not self._backup_gate():
                     return
+                query = parse_qs(urlparse(self.path).query)
+                mine = device_slug((query.get("not_device") or [""])[0])
                 names = backup_files()
-                if not names or not self._send_archive(names[-1]):
+                if not names:
+                    self._send(404, {"error": "no backup"}, cache="no-store")
+                    return
+                chosen = newest_from_other(names, mine)
+                if chosen is None:
+                    # Copies exist, but every one of them is this phone's own.
+                    # Its own backup is already in its database, so there is
+                    # nothing here to merge, and saying so is the honest answer.
+                    self._send(404, {"error": "no other device",
+                                     "device": mine,
+                                     "backups": len(names)}, cache="no-store")
+                    return
+                if not self._send_archive(chosen):
                     self._send(404, {"error": "no backup"}, cache="no-store")
                 return
             self._send(404, {"error": "not found", "path": path})
@@ -1087,6 +1122,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/gzip")
         self.send_header("Content-Length", str(size))
         self.send_header("Content-Disposition", 'attachment; filename="%s"' % name)
+        # Who wrote it, and when, without making the app open the archive to
+        # find out. An older build sent no label, and an empty header is that
+        # answer rather than a guess.
+        self.send_header("X-Arcanum-Device", device_of(name))
+        when = archive_time(name)
+        self.send_header("X-Arcanum-Written",
+                         when.isoformat() if when else "")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()

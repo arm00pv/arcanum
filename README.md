@@ -133,9 +133,11 @@ Arcanum has no password of its own. The backup token and the price-history key
 live in the Android Keystore, not in the app's preferences.
 
 **Other devices** — The companion records which device wrote each backup, so a
-second phone is visible rather than invisible: Arcanum shows what merging the
-other copy would add before it adds it, and merging never removes anything,
-never lowers a count and never overwrites what you paid.
+second phone is visible rather than invisible: Arcanum asks it for the newest
+copy that is *not* this phone's own, names the device it came from, and shows
+what merging it would add before it adds it. Merging never removes anything,
+never lowers a count and never overwrites what you paid. When the server holds
+only this phone's copies it says so rather than comparing the phone with itself.
 
 **The vault in a browser** — The same companion serves a read-only page of the
 newest backup at `/vault`, behind the same token: cards, printings, value at the

@@ -32,9 +32,14 @@ class SyncScreen extends ConsumerStatefulWidget {
 class _SyncScreenState extends ConsumerState<SyncScreen> {
   BackupStatus? _status;
   MergePlan? _plan;
-  BackupArchive? _archive;
+  RemoteCopy? _copy;
   MergeReport? _report;
   String? _error;
+
+  /// True when the server answered that every copy it holds came from this
+  /// phone. Shown as a sentence, because nothing is wrong: one phone is the
+  /// normal case, and a plan against its own backup would be a fiction.
+  bool _alone = false;
   bool _looking = false;
   bool _applying = false;
   String _version = '';
@@ -70,22 +75,32 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
     }
   }
 
-  /// Downloads the newest archive and works out what it would add.
+  /// Downloads another device's newest copy and works out what it would add.
   Future<void> _look() async {
     setState(() {
       _looking = true;
       _error = null;
       _plan = null;
       _report = null;
+      _alone = false;
     });
     try {
-      final (MergePlan plan, BackupArchive archive) = await ref
+      final (MergePlan plan, RemoteCopy copy) = await ref
           .read(backupServiceProvider)
-          .planSync(appVersion: _version);
+          .planSync(
+            appVersion: _version,
+            notDevice: ref.read(settingsProvider).deviceLabel,
+          );
       if (!mounted) return;
       setState(() {
         _plan = plan;
-        _archive = archive;
+        _copy = copy;
+        _looking = false;
+      });
+    } on NoOtherDeviceException {
+      if (!mounted) return;
+      setState(() {
+        _alone = true;
         _looking = false;
       });
     } catch (error) {
@@ -99,7 +114,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
 
   /// Adds what the other device has, and nothing else.
   Future<void> _apply() async {
-    final BackupArchive? archive = _archive;
+    final BackupArchive? archive = _copy?.archive;
     if (archive == null) return;
     setState(() {
       _applying = true;
@@ -113,6 +128,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
       setState(() {
         _report = report;
         _plan = null;
+        _copy = null;
         _applying = false;
       });
       // The collection changed under every screen that was showing it.
@@ -206,6 +222,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
             const SectionHeader(title: 'What the merge did'),
             _group(child: Text(_report!.summary, style: context.t.bodyMedium)),
           ],
+          if (_alone) ...<Widget>[_aloneCard(settings.deviceLabel)],
           if (_plan != null) ...<Widget>[
             const SectionHeader(
               title: 'What it would add',
@@ -252,7 +269,7 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
                         ? null
                         : () => setState(() {
                             _plan = null;
-                            _archive = null;
+                            _copy = null;
                           }),
                     child: const Text('Leave it alone'),
                   ),
@@ -274,8 +291,55 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
     );
   }
 
+  /// What the collector sees when the server holds only this phone's copies.
+  Widget _aloneCard(String mine) {
+    final c = context.c;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SectionHeader(
+          title: 'Nothing to add yet',
+          subtitle: 'One phone, one copy',
+        ),
+        _group(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Icon(
+                    Icons.check_circle_outline_rounded,
+                    size: 20,
+                    color: c.positive,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Only this device has written',
+                      style: context.t.titleMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Every copy on your server was uploaded by '
+                '${mine.isEmpty ? "this phone" : mine}, and this phone already '
+                'holds what it sent. The first time a second device backs up, '
+                'what it has and this phone does not will be listed here before '
+                'anything is added.',
+                style: context.t.bodySmall?.copyWith(color: c.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _planCard(MergePlan plan) {
     final c = context.c;
+    final RemoteCopy? copy = _copy;
     return _group(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -297,8 +361,11 @@ class _SyncScreenState extends ConsumerState<SyncScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'That copy was written by Arcanum ${plan.remoteAppVersion} '
-            '${Fmt.ago(plan.remoteCreated)}.',
+            copy == null || copy.device.isEmpty
+                ? 'That copy carries no device name; it was written by Arcanum '
+                      '${plan.remoteAppVersion} ${Fmt.ago(plan.remoteCreated)}.'
+                : 'That copy came from ${copy.device}, written by Arcanum '
+                      '${plan.remoteAppVersion} ${Fmt.ago(plan.remoteCreated)}.',
             style: context.t.labelSmall?.copyWith(color: c.textTertiary),
           ),
           if (plan.freshPricePoints > 0) ...<Widget>[

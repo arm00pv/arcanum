@@ -886,7 +886,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _busy = _BackupAction.restore);
     BackupArchive? archive;
     try {
-      archive = await ref.read(backupServiceProvider).downloadLatest();
+      archive =
+          (await ref.read(backupServiceProvider).downloadLatest()).archive;
     } catch (error) {
       if (mounted) _snack('Could not read the backup: $error', error: true);
       if (mounted) setState(() => _busy = null);
