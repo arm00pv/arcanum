@@ -14,6 +14,9 @@ import 'package:arcanum/data/db/alert_dao.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/data/db/collection_dao.dart';
+import 'package:arcanum/data/db/lots_dao.dart';
+import 'package:arcanum/domain/portfolio/lots.dart';
+import 'package:arcanum/domain/portfolio/realised.dart';
 import 'package:arcanum/data/db/deck_dao.dart';
 import 'package:arcanum/data/db/history_dao.dart';
 import 'package:arcanum/data/db/sealed_dao.dart';
@@ -79,6 +82,7 @@ class Bootstrap {
     required this.settings,
     required this.catalogDao,
     required this.collectionDao,
+    required this.lotsDao,
     required this.historyDao,
     required this.alertDao,
     required this.historyService,
@@ -92,6 +96,9 @@ class Bootstrap {
   final AppSettings settings;
   final CatalogDao catalogDao;
   final CollectionDao collectionDao;
+
+  /// The purchases behind the stacks, and the sales matched against them.
+  final LotsDao lotsDao;
   final HistoryDao historyDao;
   final PriceHistoryService historyService;
   final CatalogRepository catalog;
@@ -119,6 +126,7 @@ class Bootstrap {
   }) {
     final catalogDao = CatalogDao(database.db);
     final collectionDao = CollectionDao(database.db);
+    final lotsDao = LotsDao(database.db);
     final historyDao = HistoryDao(database.db);
     final alertDao = AlertDao(database.db);
     final historyService = PriceHistoryService(
@@ -151,6 +159,7 @@ class Bootstrap {
         game: CollectionRepository(
           game: game,
           collectionDao: collectionDao,
+          lotsDao: lotsDao,
           catalogDao: catalogDao,
           historyDao: historyDao,
           history: historyService,
@@ -164,6 +173,7 @@ class Bootstrap {
       settings: settings,
       catalogDao: catalogDao,
       collectionDao: collectionDao,
+      lotsDao: lotsDao,
       historyDao: historyDao,
       alertDao: alertDao,
       historyService: historyService,
@@ -579,6 +589,77 @@ final wantedCountProvider = FutureProvider.family<int, CardGame>((
   ref.watch(wantedRevisionProvider);
   return ref.watch(wantedDaoProvider).count(game);
 });
+
+// ------------------------------------------------------------------ cost basis
+
+/// Bumped whenever a sale is recorded or undone.
+///
+/// The purchases screen, the card screen and the tax-year export all read the
+/// same ledger, and a bump is cheaper and less error-prone than every caller
+/// knowing which three providers to invalidate.
+class CostBasisRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  /// Signals that the sales ledger changed.
+  void bump() => state = state + 1;
+}
+
+final costBasisRevisionProvider = NotifierProvider<CostBasisRevision, int>(
+  CostBasisRevision.new,
+);
+
+/// Everything sold in one game, grouped by tax year, with the names attached.
+///
+/// The names come from the local catalogue: a sale of a card from a set that
+/// has since been removed from the phone still has to be readable on a tax
+/// sheet, so the id is the fallback rather than an empty cell.
+final realisedProvider = FutureProvider.family<Realised, CardGame>((
+  ref,
+  game,
+) async {
+  ref.watch(costBasisRevisionProvider);
+  final sales = await ref.watch(bootstrapProvider).collectionFor(game).sales();
+  if (sales.isEmpty) return Realised.of(const <SaleRow>[]);
+  final byId = await ref
+      .watch(catalogRepositoryProvider)
+      .cardsByIds(
+        game,
+        <String>{for (final sale in sales) sale.cardId}.toList(),
+      );
+  return Realised.of(<SaleRow>[
+    for (final sale in sales)
+      SaleRow(
+        sale: sale,
+        name: byId[sale.cardId]?.name ?? sale.cardId,
+        setCode: byId[sale.cardId]?.setCode ?? '',
+        setName: byId[sale.cardId]?.setName ?? '',
+      ),
+  ]);
+});
+
+/// A printing's own purchases and sales, for the card screen.
+final cardCostBasisProvider =
+    FutureProvider.family<CardCostBasis, (CardGame, String)>((ref, key) async {
+      ref.watch(costBasisRevisionProvider);
+      final repository = ref.watch(bootstrapProvider).collectionFor(key.$1);
+      return CardCostBasis(
+        lots: await repository.lotsForCard(key.$2),
+        sales: await repository.salesForCard(key.$2),
+      );
+    });
+
+/// What one printing's purchases and sales are.
+class CardCostBasis {
+  /// Creates the pair.
+  const CardCostBasis({required this.lots, required this.sales});
+
+  /// The purchases behind it, oldest first.
+  final List<CardLot> lots;
+
+  /// What has been sold out of it, newest first.
+  final List<CardSale> sales;
+}
 
 // -------------------------------------------------------------- sealed product
 

@@ -38,7 +38,11 @@ class AppDatabase {
   ///      downloaded the set.
   /// v10 - a sealed_products table, so a booster box is a holding like any
   ///      other and reaches the valuation instead of being a note in a drawer.
-  static const _version = 10;
+  /// v11 - card_lots and card_sales. A stack knows what it cost on average and
+  ///      not what each purchase cost, which is enough to value a collection
+  ///      and not enough to say what a part of it realised when part of it was
+  ///      sold, which is what a tax year is asked for.
+  static const _version = 11;
 
   static AppDatabase? _instance;
 
@@ -66,6 +70,7 @@ class AppDatabase {
         if (from < 8) await addForTrade(d);
         if (from < 9) await addAlertLabels(d);
         if (from < 10) await createSealedProducts(d);
+        if (from < 11) await createLotsAndSales(d, backfill: true);
       },
     );
     _instance = AppDatabase._(db);
@@ -246,6 +251,18 @@ class AppDatabase {
     batch.execute(
       'CREATE INDEX idx_entries_binder ON collection_entries(game, binder)',
     );
+
+    // ---------------------------------------------------------- cost basis
+    batch.execute(_lotsSql);
+    batch.execute(_salesSql);
+    batch.execute(
+      'CREATE INDEX idx_lots_card ON card_lots(game, card_id, acquired_on)',
+    );
+    batch.execute('CREATE INDEX idx_lots_entry ON card_lots(entry_id)');
+    batch.execute(
+      'CREATE INDEX idx_sales_game ON card_sales(game, sold_on DESC)',
+    );
+    batch.execute('CREATE INDEX idx_sales_card ON card_sales(game, card_id)');
 
     // ------------------------------------------------------- price history
     batch.execute('''
@@ -447,6 +464,77 @@ class AppDatabase {
       created_at    INTEGER NOT NULL
     )
   ''';
+
+  /// The cost-basis tables, shared by [_createSchema] and the v11 upgrade so
+  /// there is one definition of them.
+  static const _lotsSql = '''
+    CREATE TABLE card_lots (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      game        TEXT NOT NULL DEFAULT 'mtg',
+      card_id     TEXT NOT NULL,
+      entry_id    INTEGER,
+      quantity    INTEGER NOT NULL DEFAULT 0,
+      unit_cost   REAL,
+      acquired_on INTEGER,
+      note        TEXT NOT NULL DEFAULT '',
+      created_at  INTEGER NOT NULL
+    )
+  ''';
+
+  static const _salesSql = '''
+    CREATE TABLE card_sales (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      game       TEXT NOT NULL DEFAULT 'mtg',
+      card_id    TEXT NOT NULL,
+      quantity   INTEGER NOT NULL DEFAULT 1,
+      unit_price REAL NOT NULL DEFAULT 0,
+      fees       REAL NOT NULL DEFAULT 0,
+      finish     TEXT NOT NULL DEFAULT 'nonfoil',
+      condition  TEXT NOT NULL DEFAULT 'near_mint',
+      sold_on    INTEGER NOT NULL,
+      platform   TEXT NOT NULL DEFAULT '',
+      note       TEXT NOT NULL DEFAULT '',
+      entry_id   INTEGER,
+      language   TEXT NOT NULL DEFAULT 'en',
+      binder     TEXT NOT NULL DEFAULT '',
+      matches    TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL
+    )
+  ''';
+
+  /// v11: what each purchase cost, and what each sale realised against it.
+  ///
+  /// The tables are created empty on a new install. An existing collection is
+  /// converted rather than left behind: every stack becomes one lot at the
+  /// price the stack already carries, which is exactly what the app knew about
+  /// it - a stack bought in one go is one purchase, and one bought in two was
+  /// already blended into a single average price before this version existed.
+  /// A stack with no recorded price becomes a lot with no recorded price, and
+  /// the tax sheet reports it as an unknown cost rather than as a gain.
+  static Future<void> createLotsAndSales(
+    DatabaseExecutor d, {
+    bool backfill = false,
+  }) async {
+    await d.execute(_lotsSql);
+    await d.execute(_salesSql);
+    await d.execute(
+      'CREATE INDEX idx_lots_card ON card_lots(game, card_id, acquired_on)',
+    );
+    await d.execute('CREATE INDEX idx_lots_entry ON card_lots(entry_id)');
+    await d.execute(
+      'CREATE INDEX idx_sales_game ON card_sales(game, sold_on DESC)',
+    );
+    await d.execute('CREATE INDEX idx_sales_card ON card_sales(game, card_id)');
+    if (!backfill) return;
+    await d.rawInsert(
+      'INSERT INTO card_lots '
+      '(game, card_id, entry_id, quantity, unit_cost, acquired_on, note, '
+      'created_at) '
+      'SELECT game, card_id, id, quantity, purchase_price, purchase_date, '
+      "'', ? FROM collection_entries WHERE quantity > 0",
+      <Object?>[DateTime.now().millisecondsSinceEpoch],
+    );
+  }
 
   /// v10: sealed product is tracked as a holding.
   ///

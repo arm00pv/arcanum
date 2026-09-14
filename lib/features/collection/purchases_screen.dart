@@ -9,6 +9,7 @@ import 'package:arcanum/data/repositories/collection_repository.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/features/card/card_detail_screen.dart';
+import 'package:arcanum/features/collection/realised_screen.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
 import 'package:arcanum/widgets/common.dart';
@@ -74,6 +75,17 @@ class _PurchasesScreenState extends ConsumerState<PurchasesScreen> {
                       ),
                     ],
                   ),
+                  actions: <Widget>[
+                    IconButton(
+                      tooltip: 'What has actually been sold',
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const RealisedScreen(),
+                        ),
+                      ),
+                      icon: const Icon(Icons.receipt_long_outlined),
+                    ),
+                  ],
                 ),
               ),
               SliverAsyncView<CollectionOverview>(

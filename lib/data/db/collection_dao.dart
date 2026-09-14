@@ -1,8 +1,10 @@
 import 'package:sqflite/sqflite.dart';
 
 import 'package:arcanum/core/theme/mana.dart';
+import 'package:arcanum/data/db/lots_dao.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
+import 'package:arcanum/domain/portfolio/lots.dart';
 
 /// Reads and writes the user's collection.
 ///
@@ -162,9 +164,25 @@ class CollectionDao {
           where: 'id = ?',
           whereArgs: [id],
         );
+        // The stack keeps the blended average, which is the number the
+        // valuation and the purchases screen want. The purchase itself is kept
+        // as a lot of its own, because what a *part* of the stack cost is a
+        // different question and the average cannot answer it.
+        await LotsDao.insertLot(
+          txn,
+          CardLot(
+            game: game,
+            cardId: cardId,
+            entryId: id,
+            quantity: quantity,
+            unitCost: purchasePrice,
+            acquiredOn: purchaseDate ?? now,
+            note: notes ?? '',
+          ),
+        );
         return id;
       }
-      return txn.insert('collection_entries', {
+      final id = await txn.insert('collection_entries', {
         'game': game.id,
         'card_id': cardId,
         'finish': finish.code,
@@ -178,6 +196,19 @@ class CollectionDao {
         'created_at': now.millisecondsSinceEpoch,
         'updated_at': now.millisecondsSinceEpoch,
       });
+      await LotsDao.insertLot(
+        txn,
+        CardLot(
+          game: game,
+          cardId: cardId,
+          entryId: id,
+          quantity: quantity,
+          unitCost: purchasePrice,
+          acquiredOn: purchaseDate ?? now,
+          note: notes ?? '',
+        ),
+      );
+      return id;
     });
   }
 
@@ -185,20 +216,57 @@ class CollectionDao {
       v is int ? DateTime.fromMillisecondsSinceEpoch(v) : null;
 
   /// Sets an entry's quantity, deleting the row when it reaches zero.
+  /// Sets an entry's quantity, deleting the row when it reaches zero.
+  ///
+  /// The lots follow: copies added by hand become a lot of their own at the
+  /// stack's own price, and copies taken off the shelf are disposed of oldest
+  /// first without realising anything. Nothing here is a sale - the app has not
+  /// been told what became of the cards - so the tax sheet counts only what was
+  /// sold, and the screen says how many copies left without one.
   Future<void> setQuantity(int id, int quantity) async {
     if (quantity <= 0) {
       await delete(id);
       return;
     }
-    await _db.update(
-      'collection_entries',
-      {
-        'quantity': quantity,
-        'updated_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    await _db.transaction((txn) async {
+      final rows = await txn.query(
+        'collection_entries',
+        where: 'id = ?',
+        whereArgs: <Object?>[id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final row = rows.first;
+      final game = CardGame.fromId(row['game'] as String?);
+      final before = (row['quantity'] as num?)?.toInt() ?? 0;
+      final added = quantity - before;
+
+      await txn.update(
+        'collection_entries',
+        {
+          'quantity': quantity,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      if (added > 0) {
+        await LotsDao.insertLot(
+          txn,
+          CardLot(
+            game: game,
+            cardId: row['card_id'] as String? ?? '',
+            entryId: id,
+            quantity: added,
+            unitCost: (row['purchase_price'] as num?)?.toDouble(),
+            acquiredOn: _dateFrom(row['purchase_date']) ?? DateTime.now(),
+          ),
+        );
+      } else if (added < 0) {
+        await LotsDao.dispose(txn, game: game, entryId: id, quantity: -added);
+      }
+    });
   }
 
   /// Removes [quantity] copies, deleting the row if it hits zero.
@@ -239,28 +307,69 @@ class CollectionDao {
     );
   }
 
+  /// Removes a stack, and its lots with it.
+  ///
+  /// A deleted stack is a disposal the app knows nothing about: the copies are
+  /// off the shelf and the purchases behind them go with them, so the cost
+  /// basis does not sit there waiting to be matched against a sale that was
+  /// never recorded. Whatever was sold is recorded as a sale, and that is what
+  /// survives.
   Future<void> delete(int id) async {
-    await _db.delete('collection_entries', where: 'id = ?', whereArgs: [id]);
+    await _db.transaction((txn) async {
+      final rows = await txn.query(
+        'collection_entries',
+        columns: ['game'],
+        where: 'id = ?',
+        whereArgs: <Object?>[id],
+        limit: 1,
+      );
+      final game = rows.isEmpty
+          ? null
+          : CardGame.fromId(rows.first['game'] as String?);
+      if (game != null) {
+        await txn.delete(
+          'card_lots',
+          where: 'entry_id = ?',
+          whereArgs: <Object?>[id],
+        );
+      }
+      await txn.delete('collection_entries', where: 'id = ?', whereArgs: [id]);
+    });
   }
 
   Future<void> deleteAllForCard(CardGame game, String cardId) async {
-    await _db.delete(
-      'collection_entries',
-      where: 'game = ? AND card_id = ?',
-      whereArgs: [game.id, cardId],
-    );
+    await _db.transaction((txn) async {
+      await txn.delete(
+        'card_lots',
+        where: 'game = ? AND card_id = ?',
+        whereArgs: <Object?>[game.id, cardId],
+      );
+      await txn.delete(
+        'collection_entries',
+        where: 'game = ? AND card_id = ?',
+        whereArgs: [game.id, cardId],
+      );
+    });
   }
 
   /// Clears one game's collection, or every game when [game] is null.
   Future<void> clear({CardGame? game}) async {
-    if (game == null) {
-      await _db.delete('collection_entries');
-    } else {
-      await _db.delete(
-        'collection_entries',
-        where: 'game = ?',
-        whereArgs: [game.id],
-      );
-    }
+    await _db.transaction((txn) async {
+      if (game == null) {
+        await txn.delete('card_lots');
+        await txn.delete('collection_entries');
+      } else {
+        await txn.delete(
+          'card_lots',
+          where: 'game = ?',
+          whereArgs: <Object?>[game.id],
+        );
+        await txn.delete(
+          'collection_entries',
+          where: 'game = ?',
+          whereArgs: [game.id],
+        );
+      }
+    });
   }
 }

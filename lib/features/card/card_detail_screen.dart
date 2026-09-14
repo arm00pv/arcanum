@@ -14,6 +14,7 @@ import 'package:arcanum/domain/quant/quant.dart';
 import 'package:arcanum/features/alerts/alerts_screen.dart'
     show showSetAlertSheet;
 import 'package:arcanum/features/card/add_to_collection_sheet.dart';
+import 'package:arcanum/features/collection/sale_sheet.dart';
 import 'package:arcanum/features/card/owned_finishes.dart';
 import 'package:arcanum/features/card/price_chart.dart';
 import 'package:arcanum/features/collection/want_button.dart';
@@ -494,6 +495,12 @@ class _OwnedSection extends ConsumerWidget {
                           ),
                       ],
                     ),
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Record a sale from this stack',
+                    onPressed: () => showSaleSheet(context, ref, card, e),
+                    icon: const Icon(Icons.sell_outlined, size: 20),
                   ),
                   IconButton(
                     visualDensity: VisualDensity.compact,

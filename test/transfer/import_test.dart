@@ -8,6 +8,7 @@ import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/data/db/collection_dao.dart';
+import 'package:arcanum/data/db/lots_dao.dart';
 import 'package:arcanum/data/db/history_dao.dart';
 import 'package:arcanum/data/history/price_history_service.dart';
 import 'package:arcanum/data/repositories/catalog_repository.dart';
@@ -136,6 +137,7 @@ void main() {
     collection = CollectionRepository(
       game: CardGame.mtg,
       collectionDao: entries,
+      lotsDao: LotsDao(db.db),
       catalogDao: catalogDao,
       historyDao: HistoryDao(db.db),
       history: PriceHistoryService(dao: HistoryDao(db.db), settings: settings),

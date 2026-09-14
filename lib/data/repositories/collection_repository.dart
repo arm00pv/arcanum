@@ -4,13 +4,16 @@ import 'package:arcanum/core/theme/mana.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/data/db/collection_dao.dart';
+import 'package:arcanum/data/db/lots_dao.dart';
 import 'package:arcanum/data/db/history_dao.dart';
 import 'package:arcanum/data/history/price_history_service.dart';
 import 'package:arcanum/data/repositories/catalog_repository.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
+import 'package:arcanum/domain/portfolio/lots.dart';
 import 'package:arcanum/domain/portfolio/portfolio_change.dart';
+import 'package:arcanum/domain/portfolio/realised.dart';
 import 'package:arcanum/domain/quant/quant.dart';
 
 /// Aggregated view of everything the user owns in one game.
@@ -111,6 +114,7 @@ class CollectionRepository {
   CollectionRepository({
     required this.game,
     required CollectionDao collectionDao,
+    required LotsDao lotsDao,
     required CatalogDao catalogDao,
     required HistoryDao historyDao,
     required PriceHistoryService history,
@@ -118,6 +122,7 @@ class CollectionRepository {
     required AppSettings settings,
   }) : _catalogs = catalogs,
        _col = collectionDao,
+       _lots = lotsDao,
        _cat = catalogDao,
        _hist = historyDao,
        _history = history,
@@ -128,6 +133,7 @@ class CollectionRepository {
 
   final CatalogRepository _catalogs;
   final CollectionDao _col;
+  final LotsDao _lots;
   final CatalogDao _cat;
   final HistoryDao _hist;
   final PriceHistoryService _history;
@@ -177,6 +183,43 @@ class CollectionRepository {
   ) => _col.forCards(game, ids);
 
   Future<List<String>> binders() => _col.binders(game);
+
+  /// Records a sale out of one stack and realises what it came out of.
+  ///
+  /// The lots are matched oldest first and the sale keeps the breakdown, so the
+  /// figure it reports today is the figure it reported the day it was written.
+  Future<CardSale> recordSale({
+    required CollectionEntry entry,
+    required int quantity,
+    required double unitPrice,
+    required DateTime soldOn,
+    double fees = 0,
+    String platform = '',
+    String note = '',
+  }) => _lots.recordSale(
+    game: game,
+    entry: entry,
+    quantity: quantity,
+    unitPrice: unitPrice,
+    soldOn: soldOn,
+    fees: fees,
+    platform: platform,
+    note: note,
+  );
+
+  /// Undoes a sale, putting the copies and their purchases back.
+  Future<void> undoSale(CardSale sale) => _lots.undoSale(sale);
+
+  /// Every sale recorded for this game, newest first.
+  Future<List<CardSale>> sales() => _lots.sales(game);
+
+  /// The sales of one printing, newest first.
+  Future<List<CardSale>> salesForCard(String cardId) =>
+      _lots.salesForCard(game, cardId);
+
+  /// The purchases behind a printing, oldest first.
+  Future<List<CardLot>> lotsForCard(String cardId) =>
+      _lots.forCard(game, cardId);
 
   Future<int> totalCardCount() => _col.totalCardCount(game);
 
