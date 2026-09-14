@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/core/utils/formatters.dart';
+import 'package:arcanum/data/sealed/sealed_lookup.dart';
+import 'package:arcanum/data/sealed/sealed_refresh.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/sealed_product.dart';
 import 'package:arcanum/features/sealed/sealed_sheet.dart';
@@ -26,6 +28,7 @@ class SealedScreen extends ConsumerStatefulWidget {
 
 class _SealedScreenState extends ConsumerState<SealedScreen> {
   late CardGame _game;
+  bool _refreshing = false;
 
   @override
   void initState() {
@@ -74,6 +77,23 @@ class _SealedScreenState extends ConsumerState<SealedScreen> {
               label: const Text('Add sealed product'),
             ),
           ),
+          if (data != null && data.holdings.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+              child: OutlinedButton.icon(
+                onPressed: _refreshing ? null : () => _refresh(data),
+                icon: _refreshing
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh_rounded, size: 18),
+                label: Text(
+                  _refreshing ? 'Asking the price list...' : 'Refresh prices',
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
             child: Text(
@@ -206,6 +226,31 @@ class _SealedScreenState extends ConsumerState<SealedScreen> {
       ],
     ),
   );
+
+  /// Asks the price list what the shelf is worth now.
+  ///
+  /// A figure written once and never revisited is a figure that ages in place,
+  /// which is the one thing a valuation must not do quietly.
+  Future<void> _refresh(SealedPortfolio portfolio) async {
+    setState(() => _refreshing = true);
+    try {
+      final settings = ref.read(settingsProvider);
+      final SealedRefresh report = await refreshSealedPrices(
+        game: _game,
+        holdings: portfolio.holdings,
+        source: CompanionSealedSource(endpoint: settings.historyEndpoint),
+        dao: ref.read(sealedDaoProvider),
+      );
+      ref.read(sealedRevisionProvider.notifier).bump();
+      if (!mounted) return;
+      _snack(report.summary);
+    } catch (error) {
+      if (!mounted) return;
+      _snack('Could not refresh: $error');
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
 
   Future<void> _add() async {
     final SealedSheetResult? result =
