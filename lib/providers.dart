@@ -19,6 +19,7 @@ import 'package:arcanum/data/db/sealed_dao.dart';
 import 'package:arcanum/data/db/wanted_dao.dart';
 import 'package:arcanum/data/decks/ban_list_service.dart';
 import 'package:arcanum/data/history/price_history_service.dart';
+import 'package:arcanum/data/identity/identity_service.dart';
 import 'package:arcanum/data/repositories/alert_repository.dart';
 import 'package:arcanum/data/repositories/catalog_repository.dart';
 import 'package:arcanum/data/repositories/collection_repository.dart';
@@ -199,6 +200,16 @@ final backupServiceProvider = Provider<BackupService>((ref) {
     database: bootstrap.database,
     settings: bootstrap.settings,
   );
+});
+
+/// Signing in to the collector's own server, without a password.
+///
+/// A provider of its own for the same reason the backup service has one:
+/// nothing here happens unless the collector presses a button, and the one
+/// thing it writes is the token the rest of the app already uses.
+final identityServiceProvider = Provider<IdentityService>((ref) {
+  final bootstrap = ref.watch(bootstrapProvider);
+  return IdentityService(settings: bootstrap.settings);
 });
 
 // --------------------------------------------------------------------- alerts

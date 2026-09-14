@@ -19,6 +19,7 @@ import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/data/update/update_service.dart';
 import 'package:arcanum/features/report/forecast_audit_screen.dart';
+import 'package:arcanum/features/settings/account_screen.dart';
 import 'package:arcanum/features/settings/sync_screen.dart';
 import 'package:arcanum/features/report/valuation_report_screen.dart';
 import 'package:arcanum/features/transfer/transfer_screen.dart';
@@ -712,7 +713,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               helperText:
                   'the token your companion was given in '
                   '~/arcanum/backup.token - without it the server refuses '
-                  'every write, which is deliberate',
+                  'every write, which is deliberate. Account below trades an '
+                  'email code for a token of this phone\'s own instead',
               suffixIcon: IconButton(
                 tooltip: _obscureBackupToken ? 'Show token' : 'Hide token',
                 icon: Icon(
@@ -774,16 +776,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // that has to be read before anything is written.
           Row(
             children: <Widget>[
-              OutlinedButton.icon(
-                onPressed: ready
-                    ? () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const SyncScreen(),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: ready
+                      ? () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const SyncScreen(),
+                          ),
+                        )
+                      : null,
+                  icon: const Icon(Icons.devices_rounded, size: 18),
+                  label: const Text('Other devices'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // The account is the way in without a token: a code by email
+              // buys this phone one of its own. Enabled with only an endpoint
+              // named, because asking for a code is exactly what a phone
+              // without a token is for.
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: settings.backupEndpoint.trim().isEmpty
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const AccountScreen(),
+                          ),
                         ),
-                      )
-                    : null,
-                icon: const Icon(Icons.devices_rounded, size: 18),
-                label: const Text('Other devices'),
+                  icon: const Icon(Icons.person_outline_rounded, size: 18),
+                  label: const Text('Account'),
+                ),
               ),
             ],
           ),

@@ -72,6 +72,23 @@ abstract final class Fmt {
     return '${(diff.inDays / 365).toStringAsFixed(1)} y ago';
   }
 
+  /// Relative time in the other direction, e.g. `in 6 d`.
+  ///
+  /// [ago] reads a moment that has passed, and a moment still to come handed to
+  /// it comes back as "just now" - which is how a link that lasts a week came
+  /// to say it expired the minute it was made.
+  static String away(DateTime? d) {
+    if (d == null) return 'never';
+    final diff = d.difference(DateTime.now());
+    if (diff.inSeconds <= 0) return 'now';
+    if (diff.inSeconds < 60) return 'in ${diff.inSeconds} s';
+    if (diff.inMinutes < 60) return 'in ${diff.inMinutes} min';
+    if (diff.inHours < 24) return 'in ${diff.inHours} h';
+    if (diff.inDays < 30) return 'in ${diff.inDays} d';
+    if (diff.inDays < 365) return 'in ${(diff.inDays / 30).round()} mo';
+    return 'in ${(diff.inDays / 365).toStringAsFixed(1)} y';
+  }
+
   /// Turns a Scryfall set_type into something readable.
   static String setType(String raw) {
     switch (raw) {

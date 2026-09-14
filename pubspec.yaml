@@ -1,7 +1,7 @@
 name: arcanum
 description: "Arcanum - a precision Magic: The Gathering collection vault with on-device price analytics."
 publish_to: 'none'
-version: 1.16.0+26
+version: 1.17.0+27
 
 environment:
   sdk: ^3.13.1
