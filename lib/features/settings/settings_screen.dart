@@ -18,6 +18,7 @@ import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/data/update/update_service.dart';
+import 'package:arcanum/features/report/forecast_audit_screen.dart';
 import 'package:arcanum/features/report/valuation_report_screen.dart';
 import 'package:arcanum/features/transfer/transfer_screen.dart';
 import 'package:arcanum/providers.dart';
@@ -97,6 +98,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   bool _obscureKey = true;
   bool _obscureBackupToken = true;
+
+  /// True while the phone is being asked whether it is its owner.
+  bool _checkingLock = false;
 
   /// Which backup action is in flight, if any.
   ///
@@ -219,15 +223,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _collection(context, settings, game),
           SectionHeader(
             title: 'Report',
-            subtitle: 'A PDF of what the ${game.shortLabel} vault is worth',
+            subtitle:
+                'What the ${game.shortLabel} vault is worth, and whether the '
+                'forecast holds up',
           ),
           _report(context, game),
+          const SizedBox(height: 12),
+          _forecastAccuracy(context),
           const SectionHeader(
             title: 'Backup',
             subtitle:
                 'Your data stays on this phone; keep a copy on your server',
           ),
           _backup(context, settings),
+          const SectionHeader(
+            title: 'Lock',
+            subtitle: 'Who can open the collection on this phone',
+          ),
+          _lock(context, settings),
           SectionHeader(
             title: 'Data',
             subtitle: 'On this device only - ${game.shortLabel} figures',
@@ -498,6 +511,147 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  /// The audit of the app's own forecast, beside the valuation it feeds.
+  ///
+  /// Every other figure Arcanum shows is a measurement. This one is a claim
+  /// about the future, so it is the one that needs a page saying how it has
+  /// actually done.
+  Widget _forecastAccuracy(BuildContext context) {
+    final c = context.c;
+    return _group(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('Forecast accuracy', style: context.t.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'Rewinds the trend reading and the forecast over the price history '
+            'this phone recorded, judges every prediction against what followed '
+            'it, and compares the score with what knowing nothing would have '
+            'won.',
+            style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+          ),
+          const SizedBox(height: 14),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ForecastAuditScreen(),
+              ),
+            ),
+            icon: const Icon(Icons.insights_rounded, size: 18),
+            label: const Text('Check the forecast'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The lock, and where the credentials are kept.
+  ///
+  /// Two separate promises, said separately: the lock is about somebody picking
+  /// the phone up, and the keystore is about somebody reading its files.
+  Widget _lock(BuildContext context, AppSettings settings) {
+    final c = context.c;
+    final bool on = settings.lockEnabled;
+    return _group(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: <Widget>[
+          SwitchListTile(
+            value: on,
+            onChanged: _checkingLock
+                ? null
+                : (bool value) => _setLock(value, settings),
+            contentPadding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
+            title: Text(
+              'Ask for my fingerprint when Arcanum opens',
+              style: context.t.titleSmall,
+            ),
+            subtitle: Text(
+              _checkingLock
+                  ? 'Waiting for the phone...'
+                  : 'Uses the lock your phone already has - fingerprint, face '
+                        'or screen lock. Arcanum asks again when it has been '
+                        'in the background for more than a minute, and never '
+                        'creates a password of its own.',
+              style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+            ),
+            isThreeLine: true,
+          ),
+          Divider(height: 1, color: c.hairline),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(
+                  settings.secretStorageDegraded
+                      ? Icons.warning_amber_rounded
+                      : Icons.enhanced_encryption_outlined,
+                  size: 18,
+                  color: settings.secretStorageDegraded
+                      ? c.warning
+                      : c.textTertiary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    settings.secretStorageDegraded
+                        ? 'This phone would not give Arcanum a keystore key, so '
+                              'the backup token is being kept where it was '
+                              'before. It still works; it is just not encrypted '
+                              'at rest.'
+                        : 'The backup token and the price-history key are held '
+                              'in the phone\'s keystore, not in the app\'s '
+                              'preferences, so a copy of the app\'s files '
+                              'carries nothing usable.',
+                    style: context.t.labelSmall?.copyWith(
+                      color: settings.secretStorageDegraded
+                          ? c.warning
+                          : c.textTertiary,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Turns the lock on, but only for someone the phone recognises.
+  Future<void> _setLock(bool value, AppSettings settings) async {
+    if (!value) {
+      setState(() => settings.lockEnabled = false);
+      return;
+    }
+    final auth = ref.read(deviceAuthProvider);
+    if (!await auth.isAvailable) {
+      if (!mounted) return;
+      _snack(
+        'This phone has no fingerprint, face or screen lock set up, so there '
+        'is nothing to lock Arcanum with.',
+        error: true,
+      );
+      return;
+    }
+    setState(() => _checkingLock = true);
+    final bool ok = await auth.authenticate('Lock Arcanum');
+    if (!mounted) return;
+    setState(() {
+      _checkingLock = false;
+      settings.lockEnabled = ok;
+    });
+    if (!ok) {
+      _snack(
+        'The phone did not confirm it was you, so the lock is still off.',
+        error: true,
+      );
+    }
   }
 
   Widget _backup(BuildContext context, AppSettings settings) {

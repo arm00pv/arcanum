@@ -2,6 +2,10 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- The lock in Settings is the phone's own authentication. The biometric
+         plugin declares this too; it is repeated here so that a reader of the
+         manifest can see everything Arcanum asks the system for in one place. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <!--

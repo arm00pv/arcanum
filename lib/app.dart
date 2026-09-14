@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/data/backup/backup_worker.dart';
+import 'package:arcanum/features/security/lock_gate.dart';
 import 'package:arcanum/features/shell/home_shell.dart';
 import 'package:arcanum/providers.dart';
 
@@ -86,6 +87,10 @@ class _ArcanumAppState extends ConsumerState<ArcanumApp>
           theme: AppTheme.build(dark: false, accent: accent),
           darkTheme: AppTheme.build(dark: true, accent: accent),
           home: const HomeShell(),
+          // The lock wraps the navigator, not the home screen, so a pushed card
+          // page or an open sheet is behind the cover as well.
+          builder: (BuildContext context, Widget? child) =>
+              LockGate(child: child ?? const SizedBox.shrink()),
         );
       },
     );

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:arcanum/data/backup/backup_schedule.dart';
+import 'package:arcanum/data/security/secret_store.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 
 /// User preferences, backed by SharedPreferences.
@@ -12,9 +15,31 @@ import 'package:arcanum/domain/models/card_game.dart';
 /// Anything that belongs to a single game is namespaced by that game's id, so
 /// switching games never leaks one game's settings into the other.
 class AppSettings extends ChangeNotifier {
-  AppSettings._(this._prefs);
+  AppSettings._(this._prefs, this._secrets);
 
   final SharedPreferences _prefs;
+
+  /// Where the two credentials live: the phone's keystore, not the preferences.
+  final SecretStore _secrets;
+
+  /// The credentials themselves, held in memory so the getters stay synchronous.
+  final Map<String, String> _secretValues = <String, String>{};
+
+  /// True when the keystore refused to store a credential and it had to be kept
+  /// in the plain preferences file instead. Settings says so rather than
+  /// implying a protection the phone did not give.
+  bool _secretFallback = false;
+
+  /// Whether a credential had to be kept outside the keystore.
+  bool get secretStorageDegraded => _secretFallback;
+
+  /// The credentials Arcanum holds, and the preference key each one used to live
+  /// under. The names are the store's, not the preferences': a keystore entry
+  /// outlives the setting it belongs to.
+  static const _secretKeys = <String, String>{
+    'backup_token': _kBackupToken,
+    'justtcg_key': _kJustTcgKey,
+  };
 
   static const _kThemeMode = 'theme_mode';
   static const _kCurrency = 'currency';
@@ -52,14 +77,84 @@ class AppSettings extends ChangeNotifier {
 
   static const _kBackupEndpoint = 'backup_endpoint';
   static const _kBackupToken = 'backup_token';
+  static const _kLockEnabled = 'lock_enabled';
   static const _kLastBackupAt = 'last_backup_at';
   static const _kAutoBackupCadence = 'auto_backup_cadence';
   static const _kLastAutoBackupAt = 'last_auto_backup_at';
   static const _kLastAutoBackupOk = 'last_auto_backup_ok';
   static const _kLastAutoBackupNote = 'last_auto_backup_note';
 
-  static Future<AppSettings> load() async =>
-      AppSettings._(await SharedPreferences.getInstance());
+  /// Reads the preferences and the keystore.
+  ///
+  /// [secrets] exists for tests and for the background isolate; the app itself
+  /// takes the real keystore.
+  static Future<AppSettings> load({SecretStore? secrets}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final settings = AppSettings._(
+      prefs,
+      secrets ?? const KeystoreSecretStore(),
+    );
+    await settings._adoptSecrets();
+    return settings;
+  }
+
+  /// Moves the credentials into the keystore, for installs that had them in the
+  /// preferences file.
+  ///
+  /// Runs on every load and is idempotent: a value already in the keystore wins,
+  /// and only a value that is genuinely absent there is taken from the
+  /// preferences - and then deleted from them. A store that throws is not fatal:
+  /// the value stays where it was, the app keeps working, and
+  /// [secretStorageDegraded] records that the protection was not available.
+  Future<void> _adoptSecrets() async {
+    for (final MapEntry<String, String> entry in _secretKeys.entries) {
+      try {
+        final String? stored = await _secrets.read(entry.key);
+        if (stored != null && stored.isNotEmpty) {
+          _secretValues[entry.key] = stored;
+          // A copy left in the preferences by an older build is removed, because
+          // keeping it would defeat the point of the move.
+          if (_prefs.containsKey(entry.value)) {
+            await _prefs.remove(entry.value);
+          }
+          continue;
+        }
+        final String? legacy = _prefs.getString(entry.value);
+        if (legacy == null || legacy.isEmpty) continue;
+        await _secrets.write(entry.key, legacy);
+        _secretValues[entry.key] = legacy;
+        await _prefs.remove(entry.value);
+      } catch (_) {
+        _secretFallback = true;
+        final String? legacy = _prefs.getString(entry.value);
+        if (legacy != null && legacy.isNotEmpty) {
+          _secretValues[entry.key] = legacy;
+        }
+      }
+    }
+  }
+
+  /// Writes one credential where it belongs, falling back loudly.
+  Future<void> _storeSecret(String key, String value) async {
+    _secretValues[key] = value;
+    final String preferenceKey = _secretKeys[key]!;
+    try {
+      if (value.isEmpty) {
+        await _secrets.delete(key);
+      } else {
+        await _secrets.write(key, value);
+      }
+      if (_prefs.containsKey(preferenceKey)) {
+        await _prefs.remove(preferenceKey);
+      }
+    } catch (_) {
+      // The phone would not take it. Keeping it in the preferences is worse than
+      // the keystore and much better than losing the collector's token, and
+      // Settings says which of the two happened.
+      _secretFallback = true;
+      await _prefs.setString(preferenceKey, value);
+    }
+  }
 
   // ------------------------------------------------------------------ theme
 
@@ -197,10 +292,10 @@ class AppSettings extends ChangeNotifier {
   /// Empty means the app never tries to write, which is also what the server
   /// does when it has no token file of its own: both ends default to refusing
   /// rather than to an unauthenticated write path.
-  String get backupToken => _prefs.getString(_kBackupToken) ?? '';
+  String get backupToken => _secretValues['backup_token'] ?? '';
 
   set backupToken(String v) {
-    _prefs.setString(_kBackupToken, v.trim());
+    unawaited(_storeSecret('backup_token', v.trim()));
     notifyListeners();
   }
 
@@ -277,10 +372,25 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  String get justTcgKey => _prefs.getString(_kJustTcgKey) ?? '';
+  String get justTcgKey => _secretValues['justtcg_key'] ?? '';
 
   set justTcgKey(String v) {
-    _prefs.setString(_kJustTcgKey, v.trim());
+    unawaited(_storeSecret('justtcg_key', v.trim()));
+    notifyListeners();
+  }
+
+  // --------------------------------------------------------------- security
+
+  /// Whether Arcanum asks for the device's own authentication when it opens.
+  ///
+  /// Off by default: this is a collection and a price list, and an app that
+  /// locks itself the first time it is opened is an app that gets deleted.
+  /// Turning it on requires one successful authentication, so it can never be
+  /// switched on for a phone whose owner could not then get back in.
+  bool get lockEnabled => _prefs.getBool(_kLockEnabled) ?? false;
+
+  set lockEnabled(bool v) {
+    _prefs.setBool(_kLockEnabled, v);
     notifyListeners();
   }
 
