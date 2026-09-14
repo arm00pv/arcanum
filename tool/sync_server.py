@@ -1081,6 +1081,32 @@ def _is_sealed(product):
     return any(word in name for word in SEALED_WORDS)
 
 
+def _description(product):
+    """The shop's own copy for a sealed product, cleaned of markup.
+
+    Where a shop writes the size of a box down - "1 Box contains 24 Booster",
+    "Each Booster Pack contains 12 cards" - that sentence is the only public
+    source for it, and it is worth forwarding so the app can offer the numbers
+    for the collector to confirm instead of asking them to count packs off a
+    product page. Most products carry neither field: a TCGplayer product page
+    keeps the copy out of the feed and leaves only the set's own blurb, which
+    states no pack count and is returned so the app can find nothing in it.
+    """
+    fields = {}
+    for entry in product.get("extendedData") or []:
+        fields[str(entry.get("name") or "").strip().lower()] = entry.get("value")
+    for key in ("description", "oracletext"):
+        value = str(fields.get(key) or "")
+        if not value:
+            continue
+        value = re.sub(r"<[^>]*>", " ", value)
+        value = value.replace("&nbsp;", " ").replace("&amp;", "&")
+        value = " ".join(value.split())
+        if value:
+            return value
+    return ""
+
+
 def sealed_for(game, set_code):
     """Sealed product and its prices for one set, or None when unknown.
 
@@ -1130,6 +1156,7 @@ def sealed_for(game, set_code):
             "low": price.get("lowPrice"),
             "mid": price.get("midPrice"),
             "url": product.get("url"),
+            "description": _description(product),
         })
     out.sort(key=lambda p: p.get("market") or 0, reverse=True)
     return {

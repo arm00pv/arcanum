@@ -42,7 +42,10 @@ class AppDatabase {
   ///      not what each purchase cost, which is enough to value a collection
   ///      and not enough to say what a part of it realised when part of it was
   ///      sold, which is what a tax year is asked for.
-  static const _version = 11;
+  /// v12 - box_compositions. What a box holds is the one figure a box's value
+  ///      needs and no feed publishes, so it is stated once per set and kept,
+  ///      rather than typed in every time the question is asked.
+  static const _version = 12;
 
   static AppDatabase? _instance;
 
@@ -71,6 +74,7 @@ class AppDatabase {
         if (from < 9) await addAlertLabels(d);
         if (from < 10) await createSealedProducts(d);
         if (from < 11) await createLotsAndSales(d, backfill: true);
+        if (from < 12) await createBoxCompositions(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -333,6 +337,10 @@ class AppDatabase {
     batch.execute(
       'CREATE INDEX idx_sealed_game ON sealed_products(game, created_at DESC)',
     );
+    batch.execute(_boxSql);
+    batch.execute(
+      'CREATE UNIQUE INDEX idx_box_set ON box_compositions(game, set_code)',
+    );
 
     // ------------------------------------------------------------ metadata
     batch.execute('''
@@ -533,6 +541,32 @@ class AppDatabase {
       'SELECT game, card_id, id, quantity, purchase_price, purchase_date, '
       "'', ? FROM collection_entries WHERE quantity > 0",
       <Object?>[DateTime.now().millisecondsSinceEpoch],
+    );
+  }
+
+  /// v12: what each set's boxes are assumed to hold.
+  ///
+  /// One row per set and not one per box: a print run is one print run, so two
+  /// boxes of the same set hold the same thing, and a composition that had to be
+  /// retyped for every box on the shelf would be retyped wrong. Created empty -
+  /// the app has no source for pull rates and will not invent one, so a set with
+  /// no composition is a set whose boxes are valued as boxes, not as cards.
+  static const _boxSql = '''
+    CREATE TABLE box_compositions (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      game           TEXT NOT NULL DEFAULT 'mtg',
+      set_code       TEXT NOT NULL DEFAULT '',
+      packs          INTEGER NOT NULL DEFAULT 0,
+      cards_per_pack INTEGER NOT NULL DEFAULT 0,
+      slots          TEXT NOT NULL DEFAULT '[]',
+      updated_at     INTEGER NOT NULL
+    )
+  ''';
+
+  static Future<void> createBoxCompositions(DatabaseExecutor d) async {
+    await d.execute(_boxSql);
+    await d.execute(
+      'CREATE UNIQUE INDEX idx_box_set ON box_compositions(game, set_code)',
     );
   }
 

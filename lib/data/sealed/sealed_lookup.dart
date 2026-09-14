@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:arcanum/data/history/price_history_source.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/sealed_product.dart';
+import 'package:arcanum/domain/portfolio/box_ev.dart';
 
 /// One sealed product a price list knows about.
 class SealedOffer {
@@ -15,6 +16,7 @@ class SealedOffer {
     this.low,
     this.mid,
     this.asOf,
+    this.description = '',
   });
 
   /// The product's name, as the price list has it.
@@ -37,6 +39,16 @@ class SealedOffer {
 
   /// When those figures were published.
   final DateTime? asOf;
+
+  /// The shop's own copy for the product, when the companion forwards it.
+  ///
+  /// Kept because a box's description is where its size is written down, and the
+  /// app has no other source for how many packs are in a box.
+  final String description;
+
+  /// What the description says the box holds, or null when it says nothing.
+  BoxComposition? get statedComposition =>
+      BoxComposition.fromDescription(description);
 
   /// Whether the list carries a price for it at all.
   bool get isPriced => market != null && market! > 0;
@@ -135,6 +147,7 @@ List<SealedOffer> parseSealedOffers(Object? body) {
         low: _money(item['low'] ?? item['lowPrice']),
         mid: _money(item['mid'] ?? item['midPrice']),
         asOf: asOf,
+        description: (item['description'] as String?)?.trim() ?? '',
       ),
     );
   }

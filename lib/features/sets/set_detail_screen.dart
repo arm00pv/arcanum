@@ -8,6 +8,7 @@ import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/features/card/card_detail_screen.dart';
+import 'package:arcanum/features/sealed/box_ev_screen.dart';
 import 'package:arcanum/features/sets/printing_groups.dart';
 import 'package:arcanum/features/sets/set_completion_strip.dart';
 import 'package:arcanum/features/sets/set_filter_sheet.dart';
@@ -194,6 +195,20 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                               ? Icons.view_list_rounded
                               : Icons.grid_view_rounded,
                         ),
+                      ),
+                      IconButton(
+                        tooltip: 'Box value',
+                        onPressed: cardsAsync.value == null
+                            ? null
+                            : () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => BoxEvScreen(
+                                    game: widget.game,
+                                    setCode: widget.setCode,
+                                  ),
+                                ),
+                              ),
+                        icon: const Icon(Icons.calculate_outlined),
                       ),
                     ],
                     bottom: PreferredSize(

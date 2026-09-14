@@ -7,6 +7,7 @@ import 'package:arcanum/data/sealed/sealed_lookup.dart';
 import 'package:arcanum/data/sealed/sealed_refresh.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/sealed_product.dart';
+import 'package:arcanum/features/sealed/box_ev_screen.dart';
 import 'package:arcanum/features/sealed/sealed_sheet.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/common.dart';
@@ -219,6 +220,24 @@ class _SealedScreenState extends ConsumerState<SealedScreen> {
                         ),
                     ],
                   ),
+                  // A box of a set the app has cards for can be compared with
+                  // the cards inside it, which is a different question from
+                  // what the box sells for.
+                  if (holding.setCode.isNotEmpty &&
+                      (holding.category == SealedCategory.boosterBox ||
+                          holding.category == SealedCategory.bundle))
+                    IconButton(
+                      tooltip: 'Box value',
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => BoxEvScreen(
+                            game: holding.game,
+                            setCode: holding.setCode,
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.calculate_outlined, size: 20),
+                    ),
                 ],
               ),
             ),

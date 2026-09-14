@@ -19,6 +19,7 @@ import 'package:arcanum/domain/portfolio/lots.dart';
 import 'package:arcanum/domain/portfolio/realised.dart';
 import 'package:arcanum/data/db/deck_dao.dart';
 import 'package:arcanum/data/db/history_dao.dart';
+import 'package:arcanum/data/db/box_dao.dart';
 import 'package:arcanum/data/db/sealed_dao.dart';
 import 'package:arcanum/data/db/wanted_dao.dart';
 import 'package:arcanum/data/decks/ban_list_service.dart';
@@ -37,6 +38,7 @@ import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
 import 'package:arcanum/domain/models/price_alert.dart';
 import 'package:arcanum/domain/models/sealed_product.dart';
+import 'package:arcanum/domain/portfolio/box_ev.dart';
 import 'package:arcanum/domain/models/set_completion.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/domain/portfolio/portfolio_change.dart';
@@ -690,6 +692,35 @@ final sealedPortfolioProvider =
       ref.watch(sealedRevisionProvider);
       return SealedPortfolio.of(await ref.watch(sealedDaoProvider).all(game));
     });
+
+/// Reads and writes what each set's boxes are assumed to hold.
+final boxDaoProvider = Provider<BoxDao>(
+  (ref) => BoxDao(ref.watch(bootstrapProvider).database.db),
+);
+
+/// Bumped whenever a box composition is stated or changed.
+class BoxRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  /// Signals that a composition changed.
+  void bump() => state = state + 1;
+}
+
+final boxRevisionProvider = NotifierProvider<BoxRevision, int>(BoxRevision.new);
+
+/// What a set's boxes are assumed to hold, or null when nobody has said.
+///
+/// Null is not the same as an empty box: it means the app has nothing to value
+/// the box with, and every screen that reads this has to say so rather than
+/// showing a box worth nothing.
+final boxCompositionProvider = FutureProvider.family<BoxComposition?, SetRef>((
+  ref,
+  key,
+) async {
+  ref.watch(boxRevisionProvider);
+  return ref.watch(boxDaoProvider).forSet(key.game, key.code);
+});
 
 /// Sealed products a price list knows about for one set.
 ///

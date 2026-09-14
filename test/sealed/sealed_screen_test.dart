@@ -46,6 +46,12 @@ Future<void> pumpShelf(
   WidgetTester tester,
   List<SealedHolding> holdings,
 ) async {
+  // A tall window: the shelf, the totals and the footer note are one list, and
+  // a lazily built list does not build what is below the fold.
+  tester.view.physicalSize = const Size(900, 3600);
+  tester.view.devicePixelRatio = 2;
+  addTearDown(tester.view.reset);
+
   SharedPreferences.setMockInitialValues(<String, Object>{});
   // A memory store rather than the keystore: the real one is a plugin, and a
   // plugin call inside a widget test is a wait with nothing on the other end.
@@ -135,6 +141,33 @@ void main() {
     expect(find.textContaining('Top shelf'), findsOneWidget);
     // Twice: once as the shelf's total, once as the row's own value.
     expect(find.text(r'$398.70'), findsNWidgets(2), reason: 'two of them');
+  });
+
+  testWidgets('a box offers to be compared with the cards inside it', (
+    tester,
+  ) async {
+    await pumpShelf(tester, <SealedHolding>[
+      box(name: 'Play Booster Display', quantity: 1, unitValue: 199.35),
+      box(
+        name: 'Play Booster Pack',
+        quantity: 3,
+        category: SealedCategory.boosterPack,
+      ),
+    ]);
+
+    // One box, one calculator: a pack is not a box and has no composition to
+    // state, so it does not offer one.
+    expect(find.byTooltip('Box value'), findsOneWidget);
+  });
+
+  testWidgets('a box of a set nobody knows offers nothing to compare', (
+    tester,
+  ) async {
+    await pumpShelf(tester, <SealedHolding>[
+      box(name: 'Some Unlisted Display', quantity: 1, setCode: ''),
+    ]);
+
+    expect(find.byTooltip('Box value'), findsNothing);
   });
 
   testWidgets('the screen explains where its prices come from', (tester) async {
