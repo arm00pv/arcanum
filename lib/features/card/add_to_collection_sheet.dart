@@ -49,6 +49,19 @@ Future<bool> showAddToCollectionSheet(
   return result ?? false;
 }
 
+/// What the sheet says about the copies the user already has.
+///
+/// This line used to read 'Added to your Magic collection' before anything had
+/// been added - the one claim a sheet like this must not make, because the whole
+/// point of it is to say what pressing the button is about to do. [copies] is
+/// null while the count is still being read, which is not the same as none.
+String ownershipNote({required CardGame game, required int? copies}) {
+  if (copies == null) return 'Checking what you already have...';
+  if (copies <= 0) return 'Not in your ${game.shortLabel} collection yet';
+  return 'You already own $copies '
+      '${copies == 1 ? 'copy' : 'copies'} of this printing';
+}
+
 class _AddToCollectionSheet extends ConsumerStatefulWidget {
   const _AddToCollectionSheet({required this.card, this.initialFinish});
 
@@ -104,6 +117,16 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
   /// finish the provider quotes when this game has no price for it.
   double? get _unitPrice =>
       widget.card.prices.priceFor(_finish) ?? widget.card.prices.from;
+
+  /// How many copies of this printing the user already has, or null while the
+  /// count is still being read - which is not the same answer as none.
+  int? get _ownedCopies {
+    final AsyncValue<Map<String, int>> owned = ref.watch(
+      ownedQuantityProvider(widget.card.game),
+    );
+    if (!owned.hasValue) return null;
+    return owned.value?[widget.card.id] ?? 0;
+  }
 
   /// The price subtitle for a finish chip, or null when that finish is not
   /// quoted at all.
@@ -180,7 +203,7 @@ class _AddToCollectionSheetState extends ConsumerState<_AddToCollectionSheet> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Added to your ${game.shortLabel} collection',
+                ownershipNote(game: game, copies: _ownedCopies),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: context.t.labelSmall?.copyWith(color: c.textTertiary),
