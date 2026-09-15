@@ -94,6 +94,18 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
   Widget build(BuildContext context) {
     final c = context.c;
     final game = ref.watch(activeGameProvider);
+
+    // Switching game is not a filter, it swaps the catalogue - so a set type
+    // chosen in one game is dropped when another is opened. The type belongs to
+    // the catalogue it was chosen in, and the next one may not have it at all:
+    // Magic's Token is not a set type in One Piece, and carrying it across left
+    // an empty list under a chip row with nothing selected to explain it.
+    ref.listen<CardGame>(activeGameProvider, (previous, next) {
+      if (previous != next && _typeFilter != null) {
+        setState(() => _typeFilter = null);
+      }
+    });
+
     final setsAsync = ref.watch(setsProvider(game));
     final ownedBySet =
         ref.watch(ownedBySetProvider(game)).value ?? const <String, int>{};
@@ -222,7 +234,10 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
                             selected: _typeFilter == null,
                             onTap: () => setState(() => _typeFilter = null),
                           ),
-                          for (final entry in _topTypes(typeCounts))
+                          for (final entry in _topTypes(
+                            typeCounts,
+                            selected: _typeFilter,
+                          ))
                             _TypeChip(
                               label: Fmt.setType(entry.key),
                               count: entry.value,
@@ -353,11 +368,24 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
     return out;
   }
 
-  /// The most populous set types, so the filter row stays readable.
-  static List<MapEntry<String, int>> _topTypes(Map<String, int> counts) {
+  /// The set types that get a chip: the most populous ones, so the row stays
+  /// readable, plus whichever type is selected.
+  ///
+  /// The selected type is kept even when it falls outside the row - a type that
+  /// dropped below the threshold, or below the nine drawn - because a filter
+  /// that is on has to be visible: an empty list under a chip row with nothing
+  /// selected is a screen that cannot explain itself.
+  static List<MapEntry<String, int>> _topTypes(
+    Map<String, int> counts, {
+    String? selected,
+  }) {
     final entries = counts.entries.where((e) => e.value >= 8).toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    return entries.take(9).toList();
+    final top = entries.take(9).toList();
+    if (selected != null && !top.any((e) => e.key == selected)) {
+      top.insert(0, MapEntry<String, int>(selected, counts[selected] ?? 0));
+    }
+    return top;
   }
 }
 
