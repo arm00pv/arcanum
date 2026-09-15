@@ -24,6 +24,7 @@ import 'package:arcanum/widgets/card_thumbnail.dart';
 import 'package:arcanum/widgets/common.dart';
 import 'package:arcanum/widgets/glass.dart';
 import 'package:arcanum/widgets/mana_pips.dart';
+import 'package:arcanum/widgets/sample_art_note.dart';
 import 'package:arcanum/widgets/trend_gauge.dart';
 
 /// The full detail view for one printing: art, market prices, the user's own
@@ -143,6 +144,13 @@ class _CardDetailScreenState extends ConsumerState<CardDetailScreen> {
                     ),
                   ),
                   SliverToBoxAdapter(child: _Hero(card: card)),
+                  if (SampleArtNote.applies(<TcgCard>[card]))
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 14, 24, 0),
+                        child: SampleArtNote(game: card.game),
+                      ),
+                    ),
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 18, 16, 120),
                     sliver: SliverList.list(

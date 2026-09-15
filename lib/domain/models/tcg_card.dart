@@ -227,6 +227,34 @@ class TcgCard {
 
   bool get isMultiFaced => faces.length > 1;
 
+  /// Whether the art here is the publisher's sample rather than the card.
+  ///
+  /// Bandai serves three of the games here as a press render with SAMPLE across
+  /// the artwork and NOT FOR SALE down one edge: Gundam, One Piece and Digimon.
+  /// It is not the promotional runs only - it is the whole of each of those
+  /// catalogues. Sets from the first printings to the newest were fetched and
+  /// looked at, boosters and starter decks and deck-build boxes and promotional
+  /// runs alike, and the publisher's own card database serves the same picture
+  /// the shop does, in English and in Japanese. No clean picture of a Gundam,
+  /// One Piece or Digimon card is published anywhere.
+  ///
+  /// So a card that looks like a placeholder is not one, and the app says what
+  /// it is looking at instead of leaving a collector to wonder whether the
+  /// download went wrong. Scoped to the titles known to do this: Magic,
+  /// Pokemon, Yu-Gi-Oh!, Lorcana, Star Wars: Unlimited and Bandai's own Dragon
+  /// Ball are ordinary scans, and saying otherwise of them would be inventing a
+  /// fault.
+  bool get hasSampleArt => gameUsesSampleArt(game);
+
+  /// Whether this game's publisher marks its card art as a sample.
+  ///
+  /// A fact about the game, not about a card, because a screen showing a whole
+  /// set has no single printing to ask.
+  static bool gameUsesSampleArt(CardGame game) =>
+      game == CardGame.gundam ||
+      game == CardGame.onePiece ||
+      game == CardGame.digimon;
+
   /// The best image for this card, handling multi-faced cards.
   String? imageUrl({String size = 'normal', int face = 0}) {
     final direct =

@@ -20,6 +20,7 @@ import 'package:arcanum/widgets/common.dart';
 import 'package:arcanum/widgets/glass.dart';
 import 'package:arcanum/widgets/sliver_async.dart';
 import 'package:arcanum/widgets/mana_pips.dart';
+import 'package:arcanum/widgets/sample_art_note.dart';
 
 /// Shows every card in a set, in binder order.
 ///
@@ -254,6 +255,18 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                         owned: owned,
                         game: game,
                       ),
+                    ),
+                  ),
+                // Every card here is published as the publisher's sample art,
+                // so the whole set wears SAMPLE across the picture. Said once,
+                // at the top of the run, rather than leaving a binder that looks
+                // like it failed to download.
+                if (cardsAsync.value != null &&
+                    SampleArtNote.applies(cardsAsync.value!))
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                      child: SampleArtNote(game: game, short: true),
                     ),
                   ),
                 if (_filter.isActive)

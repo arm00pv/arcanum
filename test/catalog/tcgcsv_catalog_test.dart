@@ -269,6 +269,33 @@ const String gundamProductsJson = '''
 ]}
 ''';
 
+/// Gundam's promotional run, which the shop files as a group of its own and
+/// names as what it is.
+const String gundamPromoGroupsJson = '''
+{"results":[
+  {"groupId":24340,"name":"Gundam Promotional Cards",
+   "abbreviation":"GCG-PR","isSupplemental":false,
+   "publishedOn":"2025-03-01T00:00:00"}
+]}
+''';
+
+/// A launch-event printing: the same card a starter deck holds, filed under the
+/// promotional run, carrying the same printed number, and published as the
+/// publisher's sample art rather than as a photograph of the card.
+const String gundamPromoProductsJson = '''
+{"results":[
+  {"productId":646524,"name":"Unicorn Gundam (Unicorn Mode) (Launch Event)",
+   "cleanName":"Unicorn Gundam Unicorn Mode Launch Event",
+   "imageUrl":"https://tcgplayer-cdn.tcgplayer.com/product/646524_200w.jpg",
+   "categoryId":86,"groupId":24340,
+   "extendedData":[
+     {"name":"Rarity","value":"R"},
+     {"name":"Number","value":"GD01-005"},
+     {"name":"CardType","value":"Unit"},
+     {"name":"Color","value":"Purple"}]}
+]}
+''';
+
 /// Serves canned payloads in place of the network.
 class _FakeTcgcsv implements HttpClientAdapter {
   _FakeTcgcsv(this._respond, this.requests);
@@ -727,6 +754,38 @@ void main() {
         );
       },
     );
+
+    test('a promotional printing is marked as one', () async {
+      // The group is named as a promotional run, which is what makes every
+      // printing in it a promotional card. The card has to know, because a
+      // screen has the card in hand and not the set row.
+      final cards = await catalogWith(
+        game: CardGame.gundam,
+        groups: gundamPromoGroupsJson,
+        products: gundamPromoProductsJson,
+        prices: '{"results":[]}',
+      ).fetchCardsInSet('gcgpr');
+
+      final card = cards.single;
+      expect(card.setCode, 'gcgpr');
+      expect(card.collectorNumber, '005');
+      expect(card.promo, isTrue);
+      expect(card.hasSampleArt, isTrue);
+    });
+
+    test('an ordinary printing is not promotional, but is still a sample', () async {
+      // The two are separate facts: a starter deck printing is nobody's promo,
+      // and Bandai still publishes its picture with SAMPLE across the art.
+      final cards = await catalogWith(
+        game: CardGame.gundam,
+        groups: gundamGroupsJson,
+        products: gundamProductsJson,
+        prices: '{"results":[]}',
+      ).fetchCardsInSet('st11');
+
+      expect(cards.single.promo, isFalse);
+      expect(cards.single.hasSampleArt, isTrue);
+    });
 
     test('a plus on a rarity code is a treatment, not a rung', () {
       // Gundam ships C+, U+, R+, LR+ and LR++: the plus marks the parallel or

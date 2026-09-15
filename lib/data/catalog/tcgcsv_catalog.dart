@@ -148,6 +148,7 @@ class TcgcsvCatalog implements CardCatalog {
   // their own and the same abbreviation, so one code can be two groups.
   Map<String, List<int>>? _groups;
   Map<String, String>? _setNames;
+  Map<String, String>? _setTypes;
   Future<Map<String, List<int>>>? _groupsInFlight;
 
   static Dio _client() => Dio(
@@ -187,6 +188,7 @@ class TcgcsvCatalog implements CardCatalog {
     final sets = <TcgSet>[];
     final groups = <String, List<int>>{};
     final names = <String, String>{};
+    final types = <String, String>{};
     // One request carries every set, so a tick means "this set has been read"
     // rather than "this set has been downloaded".
     onProgress?.call(0, raw.length);
@@ -200,6 +202,11 @@ class TcgcsvCatalog implements CardCatalog {
       final code = _setCode(abbreviation, name);
       final known = groups.putIfAbsent(code, () => <int>[]);
       names.putIfAbsent(code, () => name);
+      // Kept for the cards as well as the set row: a printing's own row says
+      // that it came out of a promotional run, which is what tells the app that
+      // the art it is about to show is the publisher's sample rather than a
+      // photograph of the card.
+      types.putIfAbsent(code, () => _setTypeFor(abbreviation, name));
       known.add(id);
       if (known.length > 1) {
         // A second group under a code that is already spoken for. The provider
@@ -232,7 +239,7 @@ class TcgcsvCatalog implements CardCatalog {
     // The list just read is the one every later call needs to turn a set code
     // into a group id, so it is kept here as well: a screen that refreshes the
     // set list should not make the next card download ask for it again.
-    _remember(groups, names);
+    _remember(groups, names, types);
     return sets;
   }
 
@@ -240,9 +247,11 @@ class TcgcsvCatalog implements CardCatalog {
   Map<String, List<int>> _remember(
     Map<String, List<int>> groups,
     Map<String, String> names,
+    Map<String, String> types,
   ) {
     _groups = groups;
     _setNames = names;
+    _setTypes = types;
     _groupsInFlight = null;
     return _groups!;
   }
@@ -518,6 +527,11 @@ class TcgcsvCatalog implements CardCatalog {
       setCode: setCode,
       setName: setName,
       name: name,
+      // A printing filed under a promotional run is a promotional card. The
+      // provider states it as the group's own name, which is what
+      // [TcgSet.setType] is read from, and the flag travels with the card
+      // because the card is what a screen has in hand.
+      promo: _setTypes?[_slug(setCode)] == 'promo',
       collectorNumber: _collectorNumberOf(number),
       rarity: _string(extended['Rarity']) ?? 'unknown',
       typeLine: _typeLine(type, extended),

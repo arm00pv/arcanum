@@ -45,7 +45,13 @@ class AppDatabase {
   /// v12 - box_compositions. What a box holds is the one figure a box's value
   ///      needs and no feed publishes, so it is stated once per set and kept,
   ///      rather than typed in every time the question is asked.
-  static const _version = 12;
+  /// v13 - the promo flag on cards TCGplayer catalogues. A printing filed under a
+  ///      promotional run is a promotional card, and on Gundam that is the
+  ///      difference between a photograph of the card and the publisher's sample
+  ///      image with SAMPLE across it. Sets already on the phone were downloaded
+  ///      before the catalogue wrote the flag, so it is derived here from the
+  ///      set each card belongs to.
+  static const _version = 13;
 
   static AppDatabase? _instance;
 
@@ -75,6 +81,7 @@ class AppDatabase {
         if (from < 10) await createSealedProducts(d);
         if (from < 11) await createLotsAndSales(d, backfill: true);
         if (from < 12) await createBoxCompositions(d);
+        if (from < 13) await markPromotionalPrintings(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -636,6 +643,36 @@ class AppDatabase {
       "  AND name LIKE '%\"' "
       "  AND length(name) - length(replace(name, '\"', '')) = 2",
     );
+  }
+
+  /// v13: marks the printings that came out of a promotional run.
+  ///
+  /// TCGplayer files a run of promotional cards as a group of its own, and the
+  /// catalogue reads that group's name into [TcgSet.setType] - which is already
+  /// on disk for every set, so the flag can be derived from it rather than
+  /// needing a re-download. Only the five games that shop catalogues are
+  /// touched: Magic's promotional printings are marked by Scryfall and always
+  /// have been, and rewriting those rows from a set type would be guessing at a
+  /// fact the catalogue already stated.
+  ///
+  /// Nothing is cleared. No printing of these five games carried the flag
+  /// before this version, so setting it where the set is promotional is the
+  /// whole of the correction.
+  static Future<void> markPromotionalPrintings(DatabaseExecutor d) async {
+    for (final String game in const <String>[
+      'onepiece',
+      'swu',
+      'digimon',
+      'dragonball',
+      'gundam',
+    ]) {
+      await d.execute(
+        'UPDATE cards SET promo = 1 '
+        "WHERE game = ? AND set_code IN "
+        '(SELECT code FROM sets WHERE game = ? AND set_type = ?)',
+        <Object?>[game, game, 'promo'],
+      );
+    }
   }
 
   /// v2 -> v3: alerts learn the price they were armed at.

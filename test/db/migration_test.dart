@@ -519,4 +519,73 @@ void main() {
       },
     );
   });
+
+  group('promotional printings (v13)', () {
+    /// A printing in the named set of the named game.
+    TcgCard printing(CardGame game, String id, String setCode) => TcgCard(
+      game: game,
+      id: id,
+      setCode: setCode,
+      setName: setCode.toUpperCase(),
+      name: 'Card $id',
+      collectorNumber: '1',
+      rarity: 'common',
+    );
+
+    /// A set of the named game and type.
+    TcgSet promoSet(CardGame game, String code, String type) => TcgSet(
+      game: game,
+      id: code,
+      code: code,
+      name: code.toUpperCase(),
+      setType: type,
+    );
+
+    test('are marked from the run they were filed under', () async {
+      // The flag arrives with the catalogue now, but a set already on the phone
+      // was downloaded before it did - and those rows are exactly the ones a
+      // collector is looking at when a card shows SAMPLE across its art.
+      final db = await AppDatabase.openInMemory();
+      final dao = CatalogDao(db.db);
+
+      await dao.upsertSets(CardGame.gundam, <TcgSet>[
+        promoSet(CardGame.gundam, 'gcgpr', 'promo'),
+        promoSet(CardGame.gundam, 'gd01', 'expansion'),
+      ]);
+      await dao.upsertCards(CardGame.gundam, <TcgCard>[
+        printing(CardGame.gundam, 'promo-1', 'gcgpr'),
+        printing(CardGame.gundam, 'booster-1', 'gd01'),
+      ]);
+
+      await AppDatabase.markPromotionalPrintings(db.db);
+
+      expect((await dao.cardById(CardGame.gundam, 'promo-1'))!.promo, isTrue);
+      expect(
+        (await dao.cardById(CardGame.gundam, 'booster-1'))!.promo,
+        isFalse,
+        reason: 'a booster printing of the same card is not promotional',
+      );
+      await db.close();
+    });
+
+    test('leave the games whose catalogue states the flag alone', () async {
+      // Scryfall marks Magic's promotional printings itself, and a set type is
+      // not the same fact: rewriting those rows would replace what the provider
+      // said with what this app guessed.
+      final db = await AppDatabase.openInMemory();
+      final dao = CatalogDao(db.db);
+
+      await dao.upsertSets(CardGame.mtg, <TcgSet>[
+        promoSet(CardGame.mtg, 'plst', 'promo'),
+      ]);
+      await dao.upsertCards(CardGame.mtg, <TcgCard>[
+        printing(CardGame.mtg, 'mtg-1', 'plst'),
+      ]);
+
+      await AppDatabase.markPromotionalPrintings(db.db);
+
+      expect((await dao.cardById(CardGame.mtg, 'mtg-1'))!.promo, isFalse);
+      await db.close();
+    });
+  });
 }
