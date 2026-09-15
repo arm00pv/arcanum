@@ -716,17 +716,18 @@ class _BoxEvScreenState extends ConsumerState<BoxEvScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            "Expected value is each slot valued at the mean price of the set's "
-            'cards in that slot. It assumes every card of a tier is as likely as '
-            'the next, which is the only assumption the prices support.',
+            'Expected value is each slot valued at the mean price of the cards '
+            'that slot can draw from. It assumes every card of a tier is as '
+            'likely as the next, which is the only assumption the prices '
+            'support.',
             style: context.t.bodySmall?.copyWith(color: c.textSecondary),
           ),
           if (ev.unpricedCards > 0) ...<Widget>[
             const SizedBox(height: 8),
             Text(
               '${Fmt.count(ev.unpricedCards)} of ${Fmt.count(ev.cards)} printings '
-              'in this set carry no price at all. They are left out of the means '
-              'rather than counted as nothing.',
+              'a slot can draw from carry no price at all. They are left out of '
+              'the means rather than counted as nothing.',
               style: context.t.bodySmall?.copyWith(color: c.warning),
             ),
           ],
@@ -738,12 +739,31 @@ class _BoxEvScreenState extends ConsumerState<BoxEvScreen> {
   int _unpricedTiers(BoxEv ev) =>
       ev.tiers.where((BoxTierLine line) => line.isUnpriced).length;
 
+  /// What the means were averaged over, said in one line.
+  ///
+  /// A valuation is only as good as the pool it averaged, and the pool is
+  /// narrower than the set whenever the set prints cards a slot cannot hand out.
+  /// Both cases are worth stating: "every printing in the set" and "60 of 398"
+  /// are different claims about the same figure, and a collector reading a
+  /// number is entitled to know which one it is.
+  String _basisLine(BoxEv ev) {
+    if (ev.cards == ev.setPrintings) {
+      return 'Averaged over every one of the set\'s '
+          '${Fmt.count(ev.setPrintings)} printings - a slot can draw any of '
+          'them.';
+    }
+    return 'Averaged over ${ev.basis.label}: ${Fmt.count(ev.cards)} of the '
+        'set\'s ${Fmt.count(ev.setPrintings)} printings. The rest are '
+        'treatments a slot cannot hand out, and averaging those in makes a box '
+        'look several times more valuable than it is.';
+  }
+
   // ------------------------------------------------------------- tiers
 
   Widget _tiers(BoxEv ev) {
     final c = context.c;
     final shown = ev.tiers
-        .where((BoxTierLine line) => line.count > 0 || line.inSet > 0)
+        .where((BoxTierLine line) => line.count > 0 || line.printings > 0)
         .toList();
     if (shown.isEmpty) return const SizedBox.shrink();
 
@@ -752,6 +772,20 @@ class _BoxEvScreenState extends ConsumerState<BoxEvScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text('WHERE IT COMES FROM', style: _labelStyle),
+          const SizedBox(height: 4),
+          Text(
+            _basisLine(ev),
+            style: context.t.bodySmall?.copyWith(color: c.textSecondary),
+          ),
+          if (ev.cards < ev.setPrintings) ...<Widget>[
+            const SizedBox(height: 6),
+            Text(
+              'A box that promises the treatments this set prints - a Collector '
+              'Booster Display, a premium box - holds cards left out here, so '
+              'its contents are worth more than this figure.',
+              style: context.t.bodySmall?.copyWith(color: c.warning),
+            ),
+          ],
           const SizedBox(height: 10),
           for (final BoxTierLine line in shown)
             Padding(
@@ -777,10 +811,11 @@ class _BoxEvScreenState extends ConsumerState<BoxEvScreen> {
                         ),
                         Text(
                           line.mean == null
-                              ? '${Fmt.count(line.inSet)} in the set, none priced'
+                              ? '${Fmt.count(line.printings)} printings, '
+                                    'none priced'
                               : '${Fmt.count(line.priced)} of '
-                                    '${Fmt.count(line.inSet)} priced, '
-                                    '${Fmt.money(line.cheapest)} to '
+                                    '${Fmt.count(line.printings)} printings '
+                                    'priced, ${Fmt.money(line.cheapest)} to '
                                     '${Fmt.money(line.dearest)}, mean '
                                     '${Fmt.money(line.mean)}',
                           style: context.t.labelSmall?.copyWith(
@@ -820,8 +855,8 @@ class _BoxEvScreenState extends ConsumerState<BoxEvScreen> {
           Text('WHAT THE BOX IS OPENED FOR', style: _labelStyle),
           const SizedBox(height: 4),
           Text(
-            'The dearest cards in the set. One of them does not pay for a box - '
-            'that is what the figure above is for.',
+            'The dearest cards a slot can hand you. One of them does not pay for '
+            'a box - that is what the figure above is for.',
             style: context.t.bodySmall?.copyWith(color: c.textSecondary),
           ),
           const SizedBox(height: 8),

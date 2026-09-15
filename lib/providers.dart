@@ -369,6 +369,17 @@ final setCardsProvider = FutureProvider.family<List<TcgCard>, SetRef>((
   return ref.watch(catalogRepositoryProvider).cardsInSet(ref0.game, ref0.code);
 });
 
+/// Whether the shop has been asked for a set's cards and answered nothing.
+///
+/// The answer separates two sets that look the same on screen: one nothing has
+/// downloaded yet, which a pull fixes, and one the shop has not published cards
+/// for, which nothing does. Only read for a set whose list came back empty.
+final setAskedProvider = FutureProvider.family<bool, SetRef>((ref, ref0) async {
+  return ref
+      .watch(catalogRepositoryProvider)
+      .askedForCards(ref0.game, ref0.code);
+});
+
 /// Identifies a printing within a game.
 typedef CardRef = ({CardGame game, String id});
 

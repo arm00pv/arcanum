@@ -244,13 +244,43 @@ class BoxComposition {
       'BoxComposition($packs packs of $cardsPerPack, ${slots.join(', ')})';
 }
 
+/// Which printings a slot's mean is taken over.
+///
+/// A slot hands out one card, and a set can print that card several ways. A mean
+/// over every printing a set holds is not the mean of what a pack can hand you:
+/// Bloomburrow prints 129 rares, and the ones a Play Booster cannot contain are
+/// the expensive ones - borderless and extended treatments - so averaging all
+/// 129 put a $199.35 box at $861.79 of cards. Whichever rule is in force is on
+/// [BoxEv.basis] and is said on screen, because a valuation is only as good as
+/// the pool it averaged.
+enum BoxBasis {
+  /// The catalogue states which printings a booster holds, and only those
+  /// count. Scryfall publishes exactly that for Magic, so this is a fact the
+  /// provider states rather than a rule the app chose.
+  booster('the printings a booster can hold', 'a booster printing'),
+
+  /// The catalogue does not say, so one printing per card number counts, at the
+  /// cheapest way to own it. A pack hands out one card of a number whatever
+  /// treatment it happens to be, and the cheapest printing of a number is the
+  /// one it usually hands out.
+  perNumber('one printing per card number, at its cheapest', 'one a number');
+
+  const BoxBasis(this.label, this.short);
+
+  /// How the rule reads, in full.
+  final String label;
+
+  /// The same rule, short enough for a tier line.
+  final String short;
+}
+
 /// One tier's line in the answer.
 class BoxTierLine {
   /// Creates a line.
   const BoxTierLine({
     required this.rarity,
     required this.count,
-    required this.inSet,
+    required this.printings,
     required this.priced,
     required this.mean,
     required this.cheapest,
@@ -263,8 +293,13 @@ class BoxTierLine {
   /// How many cards of it the composition promises.
   final int count;
 
-  /// How many printings of it the set holds, and how many of those are priced.
-  final int inSet;
+  /// How many printings of it a slot can draw from, and how many of those are
+  /// priced.
+  ///
+  /// Not the number of printings the set holds: a treatment no booster contains
+  /// is not something a slot can hand out, and counting it in the mean is what
+  /// made boxes look several times more valuable than they are.
+  final int printings;
   final int priced;
 
   /// The mean price of the priced printings, and the cheapest and dearest of
@@ -303,6 +338,8 @@ class BoxChase {
 class BoxEv {
   const BoxEv._({
     required this.cards,
+    required this.setPrintings,
+    required this.basis,
     required this.composition,
     required this.tiers,
     required this.expected,
@@ -316,20 +353,27 @@ class BoxEv {
 
   /// Works out what a box is worth from a composition and the set's prices.
   ///
-  /// Each slot is valued at the mean price of the set's printings at that tier,
-  /// which is the honest way to price a card you do not know the identity of.
-  /// Anything unpriced is left out of the mean rather than counted as zero: a
-  /// printing nobody quotes is not a printing worth nothing, and a box whose
-  /// rares are unpriced reports an incomplete figure rather than a cheap one.
+  /// Each slot is valued at the mean price of the printings a slot can draw
+  /// from at that tier, which is the honest way to price a card you do not know
+  /// the identity of. Anything unpriced is left out of the mean rather than
+  /// counted as zero: a printing nobody quotes is not a printing worth nothing,
+  /// and a box whose rares are unpriced reports an incomplete figure rather than
+  /// a cheap one.
+  ///
+  /// The pool is not the whole set. [BoxBasis] says which rule narrowed it and
+  /// why, and the narrowing is the difference between a believable figure and an
+  /// absurd one - see that enum for the box it was measured on.
   factory BoxEv.of({
     required List<TcgCard> cards,
     required BoxComposition composition,
     double? boxPrice,
   }) {
+    final basis = _basisFor(cards);
+    final pool = _pool(cards, basis);
     final pricedByTier = <CardRarity, List<double>>{};
     final everyPrice = <double>[];
     var pricedCards = 0;
-    for (final TcgCard card in cards) {
+    for (final TcgCard card in pool) {
       final price = card.prices.from;
       if (price == null || price <= 0) continue;
       pricedCards++;
@@ -343,7 +387,7 @@ class BoxEv {
     var expected = 0.0;
     var complete = true;
     for (final CardRarity tier in CardRarity.values) {
-      final inSet = cards
+      final printings = pool
           .where((TcgCard card) => CardRarity.fromCode(card.rarity) == tier)
           .length;
       final prices = pricedByTier[tier] ?? const <double>[];
@@ -360,7 +404,7 @@ class BoxEv {
         BoxTierLine(
           rarity: tier,
           count: count,
-          inSet: inSet,
+          printings: printings,
           priced: prices.length,
           mean: mean,
           cheapest: sorted.isEmpty ? null : sorted.first,
@@ -379,7 +423,7 @@ class BoxEv {
       ceiling = mean * composition.cards;
     }
 
-    final dearest = <TcgCard>[...cards]
+    final dearest = <TcgCard>[...pool]
       ..sort(
         (TcgCard a, TcgCard b) =>
             (b.prices.from ?? -1).compareTo(a.prices.from ?? -1),
@@ -397,7 +441,9 @@ class BoxEv {
     ];
 
     return BoxEv._(
-      cards: cards.length,
+      cards: pool.length,
+      setPrintings: cards.length,
+      basis: basis,
       composition: composition,
       tiers: tiers,
       expected: expected,
@@ -406,12 +452,76 @@ class BoxEv {
       boxPrice: boxPrice,
       chase: chase,
       pricedCards: pricedCards,
-      unpricedCards: cards.length - pricedCards,
+      unpricedCards: pool.length - pricedCards,
     );
   }
 
-  /// Every printing the set holds, which is what the means were taken over.
+  /// Which rule this set's prices can support.
+  ///
+  /// A catalogue that states booster legality states it on every printing, so
+  /// one true flag is enough to know the field is published. A set where nothing
+  /// carries it is a catalogue that does not publish the field at all - a run of
+  /// promos, or any of the games TCGplayer mirrors - and for those the count
+  /// rule stands in. Both narrow the pool to one card a slot, which is the point
+  /// they share; which one is in force is reported rather than assumed.
+  static BoxBasis _basisFor(List<TcgCard> cards) =>
+      cards.any((TcgCard card) => card.booster)
+      ? BoxBasis.booster
+      : BoxBasis.perNumber;
+
+  /// The printings one slot can realistically hand out.
+  static List<TcgCard> _pool(List<TcgCard> cards, BoxBasis basis) {
+    if (basis == BoxBasis.booster) {
+      final booster = <TcgCard>[
+        for (final TcgCard card in cards)
+          if (card.booster) card,
+      ];
+      // A set whose printings all say no to a booster is a catalogue using the
+      // field for something else; the count rule is still true of it, and an
+      // empty pool would report a box nobody can value as one holding nothing.
+      if (booster.isNotEmpty) return booster;
+    }
+    return _onePerNumber(cards);
+  }
+
+  /// One printing per card number, at the cheapest way to own that number.
+  ///
+  /// A number the provider prints twice over - Gundam ships a base card and an
+  /// R+ or LR+ treatment of the same number as two products at two prices - is
+  /// one card a slot hands out. The cheapest printing is the one it hands out,
+  /// because the treatment is the scarcer of the two by construction.
+  static List<TcgCard> _onePerNumber(List<TcgCard> cards) {
+    final chosen = <String, TcgCard>{};
+    final order = <String>[];
+    for (final TcgCard card in cards) {
+      final number = card.collectorNumber.trim();
+      // A printing with no number is not comparable to anything, so it stands on
+      // its own rather than sharing the key every other numberless row would.
+      final key = number.isEmpty ? 'id:${card.id}' : number;
+      final held = chosen[key];
+      if (held == null) {
+        chosen[key] = card;
+        order.add(key);
+        continue;
+      }
+      final price = card.prices.from;
+      if (price == null) continue;
+      final heldPrice = held.prices.from;
+      if (heldPrice == null || price < heldPrice) chosen[key] = card;
+    }
+    return <TcgCard>[for (final String key in order) chosen[key]!];
+  }
+
+  /// The printings a slot can draw from, which is what the means were taken
+  /// over. Narrower than [setPrintings] whenever the set prints treatments a
+  /// slot cannot hand out.
   final int cards;
+
+  /// Every printing the set holds, whether a slot can draw it or not.
+  final int setPrintings;
+
+  /// Which rule narrowed the pool, and so what the means are means of.
+  final BoxBasis basis;
 
   /// The composition the figure came from.
   final BoxComposition composition;

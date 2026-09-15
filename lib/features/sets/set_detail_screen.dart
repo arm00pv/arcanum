@@ -276,11 +276,13 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                   value: cardsAsync,
                   loadingHeight: 420,
                   onRetry: () => ref.invalidate(setCardsProvider(_ref)),
-                  isEmpty: (cards) => cards.isEmpty,
-                  emptyTitle: 'No cards cached',
-                  emptyMessage:
-                      'Pull down to download this set from ${game.dataSource}.',
                   builder: (cards) {
+                    // An empty set is handed to a widget of its own, because
+                    // which kind of empty it is takes a second question: the
+                    // shop either was never asked or answered nothing.
+                    if (cards.isEmpty) {
+                      return _NothingHere(ref0: _ref, game: game);
+                    }
                     // One tile per binder slot, not per printing: the provider
                     // lists a Yu-Gi-Oh! card several times over - by rarity and
                     // by region - and three tiles that differ only in small
@@ -361,6 +363,72 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A set with nothing in it, and which kind of nothing it is.
+///
+/// A catalogue lists sets before it has cards for them: TCGplayer opens a group
+/// page the moment a set is announced, and Gundam's Blazing Fist sits there today
+/// with a release date and no products at all. Opening one used to say "pull down
+/// to download this set", which is advice that can never work - pulling downloads
+/// the same nothing. The shop was asked; the answer was nothing; the screen says
+/// so, and says when the cards are expected if the set has a date.
+class _NothingHere extends ConsumerWidget {
+  const _NothingHere({required this.ref0, required this.game});
+
+  /// The set being looked at.
+  final SetRef ref0;
+
+  /// The game it belongs to, for the source's name.
+  final CardGame game;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final asked = ref.watch(setAskedProvider(ref0));
+    if (asked.isLoading && !asked.hasValue) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 40, 16, 0),
+          child: LoadingShimmer(height: 96),
+        ),
+      );
+    }
+    final set = ref.watch(setProvider(ref0)).value;
+    final released = set?.releasedAt;
+    final ahead = released != null && released.isAfter(DateTime.now());
+    if (asked.value ?? false) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 60),
+          child: EmptyState(
+            icon: Icons.event_available_rounded,
+            title: 'Not published yet',
+            message: ahead
+                ? '${game.dataSource} lists this set for ${Fmt.date(released)} '
+                      'and has no cards on it yet. They appear here once the '
+                      'shop publishes them.'
+                : '${game.dataSource} lists this set and has published no cards '
+                      'for it. Every set here comes from that shop, so there is '
+                      'nothing this screen can show until it does.',
+          ),
+        ),
+      );
+    }
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.only(top: 60),
+        child: EmptyState(
+          icon: Icons.inbox_rounded,
+          title: 'No cards cached',
+          message: 'Nothing has been downloaded for this set yet.',
+          action: FilledButton.tonal(
+            onPressed: () => ref.invalidate(setCardsProvider(ref0)),
+            child: const Text('Download it'),
+          ),
+        ),
       ),
     );
   }

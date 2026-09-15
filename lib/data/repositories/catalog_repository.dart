@@ -106,8 +106,13 @@ class CatalogRepository {
         // does not - only reveals the size here, so the set row learns it the
         // first time the set is opened rather than claiming to hold no cards.
         await _dao.setCardCount(game, code, cards.length);
-        await _dao.markCatalogued(game, code);
       }
+      // The question was asked and answered either way, and "nothing" is an
+      // answer worth keeping: it is what a set the shop has not published yet
+      // returns, and a set that returned nothing is not a set to re-download on
+      // every visit. [CatalogDao.isCatalogued] re-asks once a day, so a set that
+      // is empty today because it is unreleased fills in when it is released.
+      await _dao.markCatalogued(game, code);
     } catch (_) {
       // A network failure is only fatal when nothing is cached; otherwise the
       // user keeps browsing the copy we already have.
@@ -124,6 +129,15 @@ class CatalogRepository {
 
   Future<bool> isCatalogued(CardGame game, String setCode) =>
       _dao.isCatalogued(game, setCode.toLowerCase());
+
+  /// Whether the shop has been asked for this set's printings at all.
+  ///
+  /// A set the shop lists but has published no cards for - a group page opened
+  /// before the set is out - is an empty list, exactly like a set that has never
+  /// been downloaded. The two call for different words on screen, and this is
+  /// what tells them apart.
+  Future<bool> askedForCards(CardGame game, String setCode) async =>
+      await _dao.cataloguedAt(game, setCode.toLowerCase()) != null;
 
   Future<TcgCard?> cardById(CardGame game, String id) =>
       _dao.cardById(game, id);

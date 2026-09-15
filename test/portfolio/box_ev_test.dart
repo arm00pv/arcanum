@@ -18,6 +18,41 @@ TcgCard card(String id, String rarity, [double? price]) => TcgCard(
       : TcgPrices(byFinish: <String, double?>{'nonfoil': price}),
 );
 
+/// A printing that states whether a booster holds it.
+TcgCard boosterCard(
+  String id,
+  String rarity,
+  double? price, {
+  required bool booster,
+}) => TcgCard(
+  game: CardGame.mtg,
+  id: id,
+  setCode: 'tst',
+  setName: 'Test Set',
+  name: 'Card $id',
+  collectorNumber: id,
+  rarity: rarity,
+  booster: booster,
+  prices: price == null
+      ? TcgPrices.empty
+      : TcgPrices(byFinish: <String, double?>{'nonfoil': price}),
+);
+
+/// A printing with a printed number, which is what a slot is a position in.
+TcgCard numbered(String name, String number, String rarity, double? price) =>
+    TcgCard(
+      game: CardGame.gundam,
+      id: '$name-$number',
+      setCode: 'st01',
+      setName: 'Starter Deck 01',
+      name: name,
+      collectorNumber: number,
+      rarity: rarity,
+      prices: price == null
+          ? TcgPrices.empty
+          : TcgPrices(byFinish: <String, double?>{'nonfoil': price}),
+    );
+
 SealedHolding box({
   String setCode = 'tst',
   String name = 'Test Set Booster Box',
@@ -201,7 +236,7 @@ void main() {
       );
       expect(commons.count, 10);
       expect(commons.priced, 3);
-      expect(commons.inSet, 3);
+      expect(commons.printings, 3);
       expect(commons.mean, closeTo(0.20, 0.0001));
       expect(commons.cheapest, 0.10);
       expect(commons.dearest, 0.30);
@@ -261,6 +296,96 @@ void main() {
       expect(ev.complete, isFalse);
       expect(ev.chase, isEmpty);
     });
+
+    test('a slot does not price the treatments it cannot hand out', () {
+      // The bug this rule exists for, at the scale it was found on: a set prints
+      // a base rare and a borderless one at the same tier, the borderless costs
+      // fifty times as much, and a mean over both is a mean of nothing a pack
+      // holds. Scryfall states which printings a booster carries, so the flagged
+      // ones are the whole pool.
+      final set = <TcgCard>[
+        boosterCard('b1', 'rare', 2.00, booster: true),
+        boosterCard('b2', 'rare', 4.00, booster: true),
+        boosterCard('x1', 'rare', 300.00, booster: false),
+        boosterCard('x2', 'rare', 400.00, booster: false),
+      ];
+      final ev = BoxEv.of(
+        cards: set,
+        composition: const BoxComposition(
+          packs: 1,
+          cardsPerPack: 1,
+          slots: <BoxSlot>[BoxSlot(CardRarity.rare, 2)],
+        ),
+        boxPrice: 10,
+      );
+
+      expect(ev.basis, BoxBasis.booster);
+      expect(ev.setPrintings, 4);
+      expect(ev.cards, 2);
+      final rares = ev.tiers.firstWhere(
+        (BoxTierLine line) => line.rarity == CardRarity.rare,
+      );
+      expect(rares.printings, 2);
+      expect(rares.mean, closeTo(3.00, 0.0001));
+      expect(rares.dearest, 4.00);
+      expect(ev.expected, closeTo(6.00, 0.0001));
+      expect(ev.chase.length, 2);
+      expect(ev.chase.first.price, 4.00);
+    });
+
+    test('a number a set prints twice over is one card a slot hands out', () {
+      // Gundam ships ST01-001 as 'Gundam' and as 'Gundam (LR+)': two products,
+      // one printed number, two prices. A pack hands out one card of that
+      // number, and the cheaper printing is the base one.
+      final set = <TcgCard>[
+        numbered('Gundam', 'ST01-001', 'Legend Rare', 12.00),
+        numbered('Gundam (LR+)', 'ST01-001', 'LR+', 90.00),
+        numbered('Zaku', 'ST01-002', 'Common', 0.20),
+      ];
+      final ev = BoxEv.of(
+        cards: set,
+        composition: const BoxComposition(
+          packs: 1,
+          cardsPerPack: 1,
+          slots: <BoxSlot>[BoxSlot(CardRarity.mythic, 1)],
+        ),
+        boxPrice: 5,
+      );
+
+      expect(ev.basis, BoxBasis.perNumber);
+      expect(ev.setPrintings, 3);
+      expect(ev.cards, 2, reason: 'two numbers, not three products');
+      final mythics = ev.tiers.firstWhere(
+        (BoxTierLine line) => line.rarity == CardRarity.mythic,
+      );
+      expect(mythics.printings, 1);
+      expect(mythics.mean, closeTo(12.00, 0.0001));
+    });
+
+    test(
+      'a set whose printings all say no to a booster is not an empty pool',
+      () {
+        // A promo run states false on every row. Reading the field literally would
+        // leave nothing to average and report a box nobody can value.
+        final set = <TcgCard>[
+          boosterCard('p1', 'rare', 3.00, booster: false),
+          boosterCard('p2', 'rare', 5.00, booster: false),
+        ];
+        final ev = BoxEv.of(
+          cards: set,
+          composition: const BoxComposition(
+            packs: 1,
+            cardsPerPack: 1,
+            slots: <BoxSlot>[BoxSlot(CardRarity.rare, 1)],
+          ),
+          boxPrice: 4,
+        );
+        expect(ev.basis, BoxBasis.perNumber);
+        expect(ev.cards, 2);
+        expect(ev.expected, closeTo(4.00, 0.0001));
+        expect(ev.isComputable, isTrue);
+      },
+    );
 
     test('a composition of nothing is not computable either', () {
       final ev = BoxEv.of(cards: cards, composition: BoxComposition.none);

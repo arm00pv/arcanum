@@ -361,10 +361,31 @@ class CatalogDao {
     );
   }
 
+  /// When the shop was last asked for this set's printings, or null if never.
+  ///
+  /// The answer is what tells a set the shop has published nothing for apart
+  /// from one that has never been looked up. They look identical on screen and
+  /// are not the same problem: one is a tap away from being solved and the other
+  /// is nobody's to solve.
+  Future<DateTime?> cataloguedAt(CardGame game, String setCode) async {
+    final rows = await _db.query(
+      'sets',
+      columns: <String>['catalogued_at'],
+      where: 'game = ? AND code = ?',
+      whereArgs: <Object?>[game.id, setCode],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    // The column is a counter defaulting to zero, not a nullable timestamp, so
+    // zero is "never" rather than the first second of 1970.
+    final at = (rows.first['catalogued_at'] as num?)?.toInt() ?? 0;
+    return at <= 0 ? null : DateTime.fromMillisecondsSinceEpoch(at);
+  }
+
   /// True when every printing of a set is already stored.
   Future<bool> isCatalogued(CardGame game, String setCode) async {
     final r = await _db.rawQuery(
-      'SELECT s.card_count AS expected, '
+      'SELECT s.card_count AS expected, s.catalogued_at AS asked, '
       '  (SELECT COUNT(*) FROM cards c WHERE c.game = s.game AND c.set_code = s.code) AS actual '
       'FROM sets s WHERE s.game = ? AND s.code = ?',
       [game.id, setCode],
@@ -379,7 +400,20 @@ class CatalogDao {
     // A set whose provider publishes no count at all is catalogued as soon as
     // anything from it is stored: expecting zero cards forever would mean
     // re-downloading the set on every visit.
-    if (expected <= 0) return actual > 0;
+    if (expected <= 0) {
+      if (actual > 0) return true;
+      // Nothing stored, and nothing expected. If the shop was asked and answered
+      // nothing - an unreleased group page, a run of promos it has never stocked
+      // - that answer stands for a day rather than being asked again on every
+      // visit. A day is the interval because a group page with no products on it
+      // is exactly what a set about to be released looks like.
+      final asked = (r.first['asked'] as num?)?.toInt() ?? 0;
+      if (asked <= 0) return false;
+      return DateTime.now().difference(
+            DateTime.fromMillisecondsSinceEpoch(asked),
+          ) <
+          const Duration(days: 1);
+    }
     return actual >= (expected * 0.98).floor();
   }
 

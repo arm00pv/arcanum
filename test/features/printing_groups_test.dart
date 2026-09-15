@@ -125,6 +125,53 @@ void main() {
       expect(slots, hasLength(1));
     });
 
+    test('collapses a card and its parallel treatment into one slot', () {
+      // The real Gundam shape, and the bug it caused: TCGplayer lists GD05-002
+      // three times over - the base card, an LR+ and an LR++ - as three products
+      // with the treatment in brackets. Grouped by name they were three tiles at
+      // three prices, which reads as a catalogue listing one card three times.
+      final slots = groupIntoSlots(<TcgCard>[
+        printing(
+          id: 'a',
+          name: 'Strike Freedom Gundam',
+          number: 'GD05-002',
+          price: 4.20,
+        ),
+        printing(
+          id: 'b',
+          name: 'Strike Freedom Gundam (LR+)',
+          number: 'GD05-002',
+          price: 61.00,
+        ),
+        printing(
+          id: 'c',
+          name: 'Strike Freedom Gundam (LR++)',
+          number: 'GD05-002',
+          price: 210.00,
+        ),
+      ]);
+
+      expect(slots, hasLength(1));
+      expect(slots.single.versionCount, 3);
+      expect(slots.single.collectorNumber, 'GD05-002');
+      // Named for the card rather than for the treatment, and priced at the
+      // version a pack usually hands out.
+      expect(slots.single.name, 'Strike Freedom Gundam');
+      expect(slots.single.printings.first.prices.from, 4.20);
+      expect(slots.single.lowestPrice, 4.20);
+      expect(slots.single.highestPrice, 210.00);
+    });
+
+    test('a bracketed name that is a different number stays a different slot', () {
+      // Gundam brackets are not always treatments: 'Gundam (MA Form)' is its own
+      // card at its own number, and merging it with 'Gundam' would hide a card.
+      final slots = groupIntoSlots(<TcgCard>[
+        printing(id: 'a', name: 'Gundam', number: 'ST01-001'),
+        printing(id: 'b', name: 'Gundam (MA Form)', number: 'ST01-002'),
+      ]);
+      expect(slots, hasLength(2));
+    });
+
     test('preserves the order the set arrived in', () {
       final slots = groupIntoSlots(<TcgCard>[
         printing(id: 'a', number: '003'),

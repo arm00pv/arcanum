@@ -34,6 +34,26 @@ TcgCard card(String id, String rarity, [double? price]) => TcgCard(
       : TcgPrices(byFinish: <String, double?>{'nonfoil': price}),
 );
 
+/// A printing that states whether a booster holds it.
+TcgCard flagged(
+  String id,
+  String rarity,
+  double? price, {
+  required bool booster,
+}) => TcgCard(
+  game: CardGame.mtg,
+  id: id,
+  setCode: 'tst',
+  setName: 'Test Set',
+  name: 'Card $id',
+  collectorNumber: id,
+  rarity: rarity,
+  booster: booster,
+  prices: price == null
+      ? TcgPrices.empty
+      : TcgPrices(byFinish: <String, double?>{'nonfoil': price}),
+);
+
 /// Three commons at a mean of $0.20, two rares at $1.00, one unpriced mythic.
 final List<TcgCard> set = <TcgCard>[
   card('c1', 'common', 0.10),
@@ -335,6 +355,51 @@ void main() {
       find.text(r'The box is $175.00, so opening pays back 2% of it'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('the screen says what the mean was averaged over', (
+    tester,
+  ) async {
+    // Three commons, two of them in boosters and one a treatment no booster
+    // carries. The mean has to be of the two, and the screen has to say so:
+    // the same figure over all three is a different claim about a different
+    // pool, and it is the one that made a $199 box look like $861 of cards.
+    await pumpScreen(
+      tester,
+      cards: <TcgCard>[
+        flagged('b1', 'common', 0.10, booster: true),
+        flagged('b2', 'common', 0.20, booster: true),
+        flagged('x1', 'common', 9.00, booster: false),
+      ],
+      offers: <SealedOffer>[offer()],
+    );
+
+    expect(
+      find.textContaining('Averaged over the printings a booster can hold'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('2 of the set\'s 3 printings'), findsOneWidget);
+    expect(
+      find.textContaining('holds cards left out here'),
+      findsOneWidget,
+      reason: 'a box that promises treatments is worth more than the figure',
+    );
+    // 10 commons at the mean of the two a booster can hold: $0.15 each. The
+    // subtotal and the answer are the same number here, so both are on screen.
+    expect(find.text(r'$1.50'), findsWidgets);
+    expect(find.text(r'$90.00'), findsNothing, reason: 'the treatment is out');
+  });
+
+  testWidgets('a set with nothing left out says the pool is the set', (
+    tester,
+  ) async {
+    await pumpScreen(tester, offers: <SealedOffer>[offer()]);
+
+    expect(
+      find.textContaining('Averaged over every one of the set\'s 6 printings'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('left out here'), findsNothing);
   });
 
   testWidgets('the set not being downloaded is said in words', (tester) async {

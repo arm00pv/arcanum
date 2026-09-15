@@ -96,15 +96,24 @@ class PrintingSlot {
 ///
 /// Order is preserved from the input rather than recomputed, because a set
 /// arrives already sorted by collector number and a slot should sit where its
-/// first printing sat. Two printings share a slot when their names normalise
-/// the same way and their collector numbers match, which is the same identity a
+/// first printing sat. Two printings share a slot when their numbers match and
+/// one name is the other with a treatment on it, which is the identity a
 /// collector uses when filing them.
+///
+/// The number alone is not the identity, because a number is not always one
+/// card: Gundam's ST01-002 is 'Gundam (MA Form)' and nothing else shares it,
+/// while Yu-Gi-Oh! reuses a number across regions for the same card. And the
+/// name alone is not the identity either, which is the bug this key fixes:
+/// TCGplayer lists Gundam's parallel treatments as separate products with the
+/// treatment in brackets - 'V2 Gundam' and 'V2 Gundam (LR+)' are both GD05-001 -
+/// so a set read 202 rows wide showed two tiles for one slot in the binder, at
+/// two prices, and looked like a catalogue listing the same card twice.
 List<PrintingSlot> groupIntoSlots(List<TcgCard> cards) {
   final slots = <String, List<TcgCard>>{};
   final order = <String>[];
 
   for (final card in cards) {
-    final key = '${TcgCard.normaliseName(card.name)}#${card.collectorNumber}';
+    final key = '${_baseName(card.name)}#${card.collectorNumber}';
     final bucket = slots.putIfAbsent(key, () {
       order.add(key);
       return <TcgCard>[];
@@ -115,11 +124,30 @@ List<PrintingSlot> groupIntoSlots(List<TcgCard> cards) {
   return <PrintingSlot>[
     for (final key in order)
       PrintingSlot(
-        name: slots[key]!.first.name,
+        // The slot is named by the version leading it, which is the cheapest
+        // priced one: a slot headed 'V2 Gundam (LR+)' would name the treatment
+        // as though it were the card.
+        name: _cheapestFirst(slots[key]!).first.name,
         collectorNumber: slots[key]!.first.collectorNumber,
         printings: _cheapestFirst(slots[key]!),
       ),
   ];
+}
+
+/// A card's name with its treatment taken off, normalised for comparison.
+///
+/// Providers write a treatment in brackets after the card's own name -
+/// 'Gundam (LR+)', 'Trafalgar Law (002) (Parallel)', 'Solemn Judgment (Quarter
+/// Century Secret Rare)'. The bracketed part is what makes two rows different
+/// products; the part before it is what makes them the same card. Stripping it
+/// is what lets two treatments of one number share a binder slot, and it never
+/// merges two numbers, which is the boundary that keeps different cards apart.
+///
+/// A name that is nothing but brackets keeps them: '()' is not a card name, and
+/// an empty key would file it with every other unnamed row.
+String _baseName(String name) {
+  final stripped = name.replaceAll(RegExp(r'\s*\([^)]*\)'), ' ').trim();
+  return TcgCard.normaliseName(stripped.isEmpty ? name : stripped);
 }
 
 /// Orders a slot's versions from cheapest to dearest.
