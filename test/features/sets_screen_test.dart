@@ -44,6 +44,20 @@ final List<TcgSet> onePieceSets = <TcgSet>[
   aSet(CardGame.onePiece, 'OP18', 'The Dominance of God', 'expansion'),
 ];
 
+/// Digimon keeps its codes without the hyphen the boxes are printed with.
+final List<TcgSet> digimonSets = <TcgSet>[
+  aSet(CardGame.digimon, 'BT26', 'Timeless Bonds', 'expansion'),
+  aSet(CardGame.digimon, 'BT27', 'Ignition of X', 'expansion'),
+  aSet(CardGame.digimon, 'ST23', 'Starter Deck 23: Beatbreak', 'starter'),
+];
+
+List<TcgSet> catalogFor(CardGame game) => switch (game) {
+  CardGame.mtg => mtgSets,
+  CardGame.onePiece => onePieceSets,
+  CardGame.digimon => digimonSets,
+  _ => const <TcgSet>[],
+};
+
 /// Magic's own set types: promos, tokens, expansions.
 final Map<String, int> mtgCounts = <String, int>{
   'promo': 296,
@@ -57,6 +71,11 @@ final Map<String, int> onePieceCounts = <String, int>{
   'starter': 37,
   'expansion': 31,
   'promo': 20,
+};
+
+final Map<String, int> digimonCounts = <String, int>{
+  'expansion': 63,
+  'starter': 27,
 };
 
 /// Builds the screen over two catalogues with no database behind it.
@@ -77,7 +96,7 @@ Future<ProviderContainer> pumpSets(
   addTearDown(tester.view.reset);
 
   SharedPreferences.setMockInitialValues(<String, Object>{
-    'activeGame': game.id,
+    'active_game': game.id,
   });
   final AppSettings settings = await AppSettings.load(
     secrets: MemorySecretStore(),
@@ -87,9 +106,7 @@ Future<ProviderContainer> pumpSets(
     ProviderScope(
       overrides: [
         settingsProvider.overrideWithValue(settings),
-        setsProvider.overrideWith(
-          (ref, CardGame g) async => g == CardGame.mtg ? mtgSets : onePieceSets,
-        ),
+        setsProvider.overrideWith((ref, CardGame g) async => catalogFor(g)),
         setTypeCountsProvider.overrideWith(
           (ref, CardGame g) async => counts(g),
         ),
@@ -199,5 +216,38 @@ void main() {
     expect(find.text('Promo'), findsOneWidget, reason: 'the active chip stays');
     expect(find.text('MagicFest 2026'), findsOneWidget);
     expect(find.text('Bloomburrow'), findsNothing, reason: 'still filtering');
+  });
+
+  testWidgets('a set is found by the code printed on the box', (tester) async {
+    await pumpSets(
+      tester,
+      game: CardGame.digimon,
+      counts: (CardGame g) => digimonCounts,
+    );
+
+    // Digimon prints "BT-26" and the catalogue keeps "BT26": typing what is on
+    // the box used to answer "No sets match".
+    await tester.enterText(find.byType(TextField), 'BT-26');
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+
+    expect(find.text('Timeless Bonds'), findsOneWidget);
+    expect(find.text('No sets match'), findsNothing);
+
+    // And the form the app itself shows still works.
+    await tester.enterText(find.byType(TextField), 'ST23');
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(find.text('Starter Deck 23: Beatbreak'), findsOneWidget);
+    expect(find.text('Timeless Bonds'), findsNothing);
+
+    // A code that is not there is still not there.
+    await tester.enterText(find.byType(TextField), 'BT-28');
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(find.text('No sets match'), findsOneWidget);
   });
 }

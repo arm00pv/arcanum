@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/core/theme/mana.dart';
+import 'package:arcanum/core/utils/codes.dart';
 import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/data/repositories/collection_repository.dart';
 import 'package:arcanum/domain/models/card_game.dart';
@@ -313,12 +314,15 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
   ) {
     final q = _query.trim().toLowerCase();
     if (q.isEmpty) return entries;
+    // The code as printed too: a card filed under "ST23" answers to "ST-23".
+    final folded = Codes.fold(_query);
     return entries.where((v) {
       final card = cards[v.entry.cardId];
       if (card == null) return false;
       return card.name.toLowerCase().contains(q) ||
           card.setName.toLowerCase().contains(q) ||
           card.setCode.toLowerCase().contains(q) ||
+          Codes.matches(card.setCode, folded) ||
           v.entry.binder.toLowerCase().contains(q);
     }).toList();
   }

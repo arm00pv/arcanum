@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'package:arcanum/core/theme/app_theme.dart';
+import 'package:arcanum/core/utils/codes.dart';
 import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/domain/models/card_game.dart';
@@ -327,11 +328,17 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
       out = out.where((s) => s.setType == _typeFilter).toList();
     }
     if (q.isNotEmpty) {
+      // The code as printed as well as the code as stored: Bandai prints
+      // "BT-26" where the catalogue keeps "BT26", and typing what is on the box
+      // should find the set (see Codes). A query of nothing but punctuation
+      // folds away to nothing and is compared as typed instead.
+      final folded = Codes.fold(_query);
       out = out
           .where(
             (s) =>
                 s.name.toLowerCase().contains(q) ||
-                s.code.toLowerCase().contains(q),
+                s.code.toLowerCase().contains(q) ||
+                Codes.matches(s.code, folded),
           )
           .toList();
     }

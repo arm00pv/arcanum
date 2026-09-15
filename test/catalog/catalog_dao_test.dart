@@ -359,4 +359,52 @@ void main() {
       expect(pokemon.single.game, CardGame.pokemon);
     });
   });
+
+  group('finding a set by the code on its box', () {
+    setUp(() async {
+      await dao.upsertSets(CardGame.digimon, <TcgSet>[
+        TcgSet(
+          game: CardGame.digimon,
+          id: '24623',
+          code: 'BT26',
+          name: 'Timeless Bonds',
+          setType: 'expansion',
+          releasedAt: DateTime(2026, 9, 4),
+        ),
+        TcgSet(
+          game: CardGame.digimon,
+          id: '24865',
+          code: 'BT27',
+          name: 'Ignition of X',
+          setType: 'expansion',
+          releasedAt: DateTime(2026, 12, 11),
+        ),
+      ]);
+    });
+
+    test('the printed code finds the stored one', () async {
+      // Digimon prints "BT-26"; the catalogue keeps "BT26".
+      final hits = await dao.sets(CardGame.digimon, search: 'BT-26');
+
+      expect(hits.map((s) => s.code), <String>['BT26']);
+    });
+
+    test('the stored form and the name still work', () async {
+      expect(
+        (await dao.sets(CardGame.digimon, search: 'bt26')).map((s) => s.code),
+        <String>['BT26'],
+      );
+      expect(
+        (await dao.sets(
+          CardGame.digimon,
+          search: 'Timeless',
+        )).map((s) => s.code),
+        <String>['BT26'],
+      );
+    });
+
+    test('a code that is not there is still not there', () async {
+      expect(await dao.sets(CardGame.digimon, search: 'BT-28'), isEmpty);
+    });
+  });
 }

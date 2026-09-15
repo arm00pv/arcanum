@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
 
+import 'package:arcanum/core/utils/codes.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/set_completion.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -116,11 +117,26 @@ class CatalogDao {
     final where = <String>['game = ?'];
     final args = <Object?>[game.id];
     if (search != null && search.trim().isNotEmpty) {
-      where.add('(name LIKE ? OR code LIKE ?)');
       final like = '%${search.trim()}%';
-      args
-        ..add(like)
-        ..add(like);
+      final folded = Codes.fold(search);
+      if (folded.isEmpty) {
+        where.add('(name LIKE ? OR code LIKE ?)');
+        args
+          ..add(like)
+          ..add(like);
+      } else {
+        // The code as printed, as well as the code as stored: SQLite has no
+        // regular expressions to fold with, so the column is rebuilt without
+        // its separators one replace() at a time (see Codes).
+        where.add(
+          '(name LIKE ? OR code LIKE ? '
+          'OR ${Codes.foldedSql('code')} LIKE ?)',
+        );
+        args
+          ..add(like)
+          ..add(like)
+          ..add('%$folded%');
+      }
     }
     if (types != null && types.isNotEmpty) {
       where.add('set_type IN (${List.filled(types.length, '?').join(',')})');
