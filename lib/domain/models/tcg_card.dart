@@ -227,30 +227,37 @@ class TcgCard {
 
   bool get isMultiFaced => faces.length > 1;
 
-  /// Whether the art here is the publisher's sample rather than the card.
+  /// Whether the art here may carry the publisher's mark rather than being a
+  /// photograph of the card.
   ///
-  /// Bandai serves three of the games here as a press render with SAMPLE across
-  /// the artwork and NOT FOR SALE down one edge: Gundam, One Piece and Digimon.
-  /// It is not the promotional runs only - it is the whole of each of those
-  /// catalogues. Sets from the first printings to the newest were fetched and
-  /// looked at, boosters and starter decks and deck-build boxes and promotional
-  /// runs alike, and the publisher's own card database serves the same picture
-  /// the shop does, in English and in Japanese. No clean picture of a Gundam,
-  /// One Piece or Digimon card is published anywhere.
+  /// Bandai serves a good part of three of the games here as a press render
+  /// with SAMPLE across the artwork and NOT FOR SALE down one edge: Gundam, One
+  /// Piece, and much of Digimon. It is not the promotional runs only - boosters,
+  /// starter decks, deck-build boxes and promotional runs were all fetched and
+  /// looked at, in English and in Japanese, and the publisher's own card
+  /// database serves what the shop serves.
   ///
-  /// So a card that looks like a placeholder is not one, and the app says what
-  /// it is looking at instead of leaving a collector to wonder whether the
-  /// download went wrong. Scoped to the titles known to do this: Magic,
-  /// Pokemon, Yu-Gi-Oh!, Lorcana, Star Wars: Unlimited and Bandai's own Dragon
-  /// Ball are ordinary scans, and saying otherwise of them would be inventing a
-  /// fault.
-  bool get hasSampleArt => gameUsesSampleArt(game);
+  /// It is not the whole of any of those catalogues, though, and 1.24.0 said it
+  /// was. Digimon's original EX-03 run is an ordinary clean scan with no mark on
+  /// it at all, and the RPC revision packs carry NOT FOR SALE with no SAMPLE
+  /// across the art. Nothing in a card's row says which of the three it is, so
+  /// this stays a fact about the game and never a claim about the card in hand:
+  /// a screen asks it to decide whether marked art is something this catalogue
+  /// has to explain at all.
+  ///
+  /// A card that looks like a placeholder is not one, and the app says so
+  /// instead of leaving a collector to wonder whether the download went wrong.
+  /// Scoped to the titles known to do this: Magic, Pokemon, Yu-Gi-Oh!, Lorcana,
+  /// Star Wars: Unlimited and Bandai's own Dragon Ball are ordinary scans, and
+  /// saying otherwise of them would be inventing a fault.
+  bool get artMayBeMarked => gameMarksSomeArt(game);
 
-  /// Whether this game's publisher marks its card art as a sample.
+  /// Whether this game's publisher marks some of its card art, rather than
+  /// photographing every card.
   ///
   /// A fact about the game, not about a card, because a screen showing a whole
   /// set has no single printing to ask.
-  static bool gameUsesSampleArt(CardGame game) =>
+  static bool gameMarksSomeArt(CardGame game) =>
       game == CardGame.gundam ||
       game == CardGame.onePiece ||
       game == CardGame.digimon;

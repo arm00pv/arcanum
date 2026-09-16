@@ -269,7 +269,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               onSubmitted: _submit,
               decoration: InputDecoration(
                 hintText: switch (game) {
-                  CardGame.mtg => 'Card name, set or oracle text',
+                  CardGame.mtg => 'Name, set, number or oracle text',
                   CardGame.pokemon ||
                   CardGame.yugioh ||
                   CardGame.lorcana ||
@@ -277,7 +277,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   CardGame.starWarsUnlimited ||
                   CardGame.digimon ||
                   CardGame.dragonBall ||
-                  CardGame.gundam => 'Card name, set or card text',
+                  CardGame.gundam => 'Name, set, number or card text',
                 },
                 prefixIcon: Icon(
                   Icons.search_rounded,
@@ -341,8 +341,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           CardGame.gundam => 'Search every Gundam set',
         },
         message:
-            'Type at least two characters - card names, set names and '
-            '$textNoun all work. '
+            'Type at least two characters - card names, set names, card '
+            'numbers and $textNoun all work. '
             '${_searchScope(game)}',
       ),
       SectionHeader(
@@ -372,6 +372,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              _SearchTip(
+                icon: Icons.tag_rounded,
+                label: 'Numbers',
+                // The number is the one query that identifies a printing
+                // rather than a card, and it is the one nobody thinks to try,
+                // so it is said first and said plainly: the screen runs no
+                // provider search for a number, and it answers out of the
+                // catalogue on this phone.
+                detail:
+                    'A card prints the code of its set and its own number. '
+                    'The two together find one printing, and the number on its '
+                    'own is answered from every set here that has one - each '
+                    'hit keeps its set, so a screen of "001"s reads as the '
+                    'answer rather than as a fault.',
+              ),
               _SearchTip(
                 icon: Icons.text_fields_rounded,
                 label: 'Names',
@@ -570,7 +585,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  '${Fmt.count(cards.length)} cards',
+                  _resultSummary(cards),
                   style: context.t.labelSmall?.copyWith(color: c.textTertiary),
                 ),
               ),
@@ -588,6 +603,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         ),
       ),
     ];
+  }
+
+  /// "12 cards", and how many sets they are spread over when that is more than
+  /// one.
+  ///
+  /// A collector number is only unique inside its set, so a search for "001"
+  /// comes back with the #001 of every set in the game. Saying how many sets
+  /// that is, at the top, is the difference between a list that reads as a
+  /// mistake and one that reads as the answer - and it costs a line.
+  static String _resultSummary(List<TcgCard> cards) {
+    final int sets = <String>{for (final TcgCard c in cards) c.setCode}.length;
+    final String count = Fmt.countOf(cards.length, 'card');
+    return sets > 1 ? '$count · across ${Fmt.countOf(sets, 'set')}' : count;
   }
 
   /// Placeholder rows shown while a query is in flight.

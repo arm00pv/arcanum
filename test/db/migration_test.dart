@@ -588,4 +588,151 @@ void main() {
       await db.close();
     });
   });
+
+  group('card identity scoped to the game (v14)', () {
+    /// The cards table as it stood before v14: the id was the whole primary
+    /// key, and the game was only a column on the row.
+    const String v13Cards = '''
+  CREATE TABLE cards (
+    id                  TEXT PRIMARY KEY,
+    game                TEXT NOT NULL DEFAULT 'mtg',
+    oracle_id           TEXT,
+    set_code            TEXT NOT NULL,
+    set_name            TEXT,
+    name                TEXT NOT NULL,
+    collector_number    TEXT NOT NULL,
+    collector_sort      INTEGER NOT NULL DEFAULT 0,
+    rarity              TEXT NOT NULL DEFAULT 'unknown',
+    layout              TEXT,
+    type_line           TEXT,
+    oracle_text         TEXT,
+    mana_cost           TEXT,
+    cmc                 REAL,
+    colors              TEXT NOT NULL DEFAULT '',
+    color_identity      TEXT NOT NULL DEFAULT '',
+    artist              TEXT,
+    flavor_text         TEXT,
+    image_small         TEXT,
+    image_normal        TEXT,
+    image_large         TEXT,
+    image_art_crop      TEXT,
+    image_png           TEXT,
+    back_image_small    TEXT,
+    back_image_normal   TEXT,
+    prices_json         TEXT,
+    prices_updated_at   INTEGER,
+    digital             INTEGER NOT NULL DEFAULT 0,
+    promo               INTEGER NOT NULL DEFAULT 0,
+    reprint             INTEGER NOT NULL DEFAULT 0,
+    reserved            INTEGER NOT NULL DEFAULT 0,
+    full_art            INTEGER NOT NULL DEFAULT 0,
+    booster             INTEGER NOT NULL DEFAULT 0,
+    foil                INTEGER NOT NULL DEFAULT 0,
+    nonfoil             INTEGER NOT NULL DEFAULT 0,
+    edhrec_rank         INTEGER,
+    released_at         TEXT,
+    extras_json         TEXT
+  )
+  ''';
+
+    late Database db;
+
+    setUp(() async {
+      db = await databaseFactory.openDatabase(inMemoryDatabasePath);
+      await db.execute(v13Cards);
+    });
+
+    tearDown(() async => db.close());
+
+    test('keeps every printing and everything it knew', () async {
+      await db.insert('cards', <String, Object?>{
+        'id': 'bt26-001',
+        'game': 'digimon',
+        'set_code': 'BT26',
+        'set_name': 'Timeless Bonds',
+        'name': 'Yokomon',
+        'collector_number': '001',
+        'collector_sort': 1,
+        'rarity': 'common',
+        'prices_json': '{"byFinish":{"normal":0.09}}',
+        'extras_json': '{"number":"BT26-001"}',
+        'released_at': '2026-09-04',
+      });
+
+      await AppDatabase.scopeCardIdsToGame(db);
+
+      final rows = await db.query('cards');
+      expect(rows, hasLength(1));
+      expect(rows.single['name'], 'Yokomon');
+      expect(rows.single['game'], 'digimon');
+      expect(rows.single['collector_number'], '001');
+      expect(rows.single['collector_sort'], 1);
+      expect(rows.single['prices_json'], '{"byFinish":{"normal":0.09}}');
+      expect(rows.single['extras_json'], '{"number":"BT26-001"}');
+      expect(rows.single['released_at'], '2026-09-04');
+      // A column nothing wrote keeps its default rather than arriving null.
+      expect(rows.single['digital'], 0);
+    });
+
+    test('before v14 the second game using an id took the first row', () async {
+      // Not a wish, a record: it is what the old key did, and it is the reason
+      // the table is rebuilt. It also holds the fixture above to being the
+      // shape it claims to be - a v13 table with a single-column key would
+      // refuse the second insert outright.
+      await db.insert('cards', <String, Object?>{
+        'id': '1',
+        'game': 'mtg',
+        'set_code': 'blb',
+        'name': "Innkeeper's Talent",
+        'collector_number': '1',
+      });
+      await db.insert('cards', <String, Object?>{
+        'id': '1',
+        'game': 'digimon',
+        'set_code': 'BT26',
+        'name': 'Yokomon',
+        'collector_number': '001',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      final rows = await db.query('cards');
+      expect(rows, hasLength(1));
+      expect(rows.single['game'], 'digimon');
+      expect(
+        rows.single['name'],
+        'Yokomon',
+        reason: 'the id was the whole key, so the second write won',
+      );
+    });
+
+    test('after v14 the same id in two games is two printings', () async {
+      await db.insert('cards', <String, Object?>{
+        'id': '1',
+        'game': 'mtg',
+        'set_code': 'blb',
+        'name': "Innkeeper's Talent",
+        'collector_number': '1',
+      });
+
+      await AppDatabase.scopeCardIdsToGame(db);
+
+      await db.insert('cards', <String, Object?>{
+        'id': '1',
+        'game': 'digimon',
+        'set_code': 'BT26',
+        'name': 'Yokomon',
+        'collector_number': '001',
+      });
+
+      final rows = await db.query('cards', orderBy: 'game');
+      expect(rows, hasLength(2));
+      expect(rows.first['game'], 'digimon');
+      expect(rows.first['name'], 'Yokomon');
+      expect(rows.last['game'], 'mtg');
+      expect(
+        rows.last['name'],
+        "Innkeeper's Talent",
+        reason: 'the row that was there first kept its game',
+      );
+    });
+  });
 }

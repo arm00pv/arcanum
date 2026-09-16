@@ -478,7 +478,8 @@ final ownedBySetProvider = FutureProvider.family<Map<String, int>, CardGame>((
   await ref.watch(collectionOverviewProvider(game).future);
   final rows = await ref.watch(bootstrapProvider).database.db.rawQuery(
     'SELECT c.set_code AS code, SUM(e.quantity) AS n '
-    'FROM collection_entries e JOIN cards c ON c.id = e.card_id '
+    'FROM collection_entries e '
+    'JOIN cards c ON c.id = e.card_id AND c.game = e.game '
     'WHERE e.game = ? GROUP BY c.set_code',
     [game.id],
   );

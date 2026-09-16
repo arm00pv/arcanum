@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 
 import 'package:arcanum/core/utils/codes.dart';
+import 'package:arcanum/core/utils/collector_query.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/set_completion.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -552,6 +553,79 @@ class CatalogDao {
       [game.id, '%$q%', '%$q%', '$q%', '%$q%', limit],
     );
     return rows.map((r) => _cardFromRow(game, r)).toList();
+  }
+
+  /// Printings named by their collector number, or null when [query] is not a
+  /// number query at all.
+  ///
+  /// Null is the answer for "Charizard", and it is what keeps the caller on the
+  /// name-and-text path. A number is only believed when the query is nothing but
+  /// the number, or when the part in front of it turns out to be a set code this
+  /// game actually has - the catalogue is the only thing that knows, which is
+  /// why the parse happens here rather than in the caller.
+  ///
+  /// Scoped to one game, like every other read of this table: "#001" means a
+  /// different card in Digimon, in Magic and in Yu-Gi-Oh!, and the same id in
+  /// two games is two printings, not one.
+  ///
+  /// A bare number is matched across the whole game and comes back ordered by
+  /// set, newest first. That is not a tidy answer, and it is the true one: the
+  /// number is not unique by itself, so the caller is given every printing that
+  /// carries it, each labelled with the set it is in.
+  Future<List<TcgCard>?> searchByNumber(
+    CardGame game,
+    String query, {
+    int limit = 80,
+  }) async {
+    final CollectorQuery? parsed = CollectorQuery.parse(query);
+    if (parsed == null) return null;
+
+    String? code;
+    for (final String candidate in parsed.codeCandidates) {
+      code = await _setCodeMatching(game, candidate);
+      if (code != null) break;
+    }
+    if (code == null && !parsed.standalone) return null;
+
+    final where = <String>['game = ?'];
+    final args = <Object?>[game.id];
+    if (code != null) {
+      where.add('${Codes.foldedSql('set_code')} = ?');
+      args.add(Codes.fold(code));
+    }
+    // Padded or not: Digimon prints "001" where Magic prints "1", and a
+    // collector asking for #1 means the same card in both. Separators are
+    // already gone, so the fold here is only about the leading zeroes.
+    where.add(
+      "(collector_number = ? COLLATE NOCASE "
+      "OR ltrim(collector_number, '0') = ltrim(?, '0') COLLATE NOCASE)",
+    );
+    args
+      ..add(parsed.number)
+      ..add(parsed.number);
+
+    final rows = await _db.rawQuery(
+      'SELECT * FROM cards WHERE ${where.join(' AND ')} '
+      'ORDER BY (collector_number = ? COLLATE NOCASE) DESC, '
+      '  released_at DESC NULLS LAST, set_code, collector_sort, '
+      '  collector_number '
+      'LIMIT ?',
+      <Object?>[...args, parsed.number, limit],
+    );
+    return rows.map((r) => _cardFromRow(game, r)).toList();
+  }
+
+  /// The stored code of the set whose folded code is [foldedCode], or null.
+  ///
+  /// The fold is the same one set search uses, so a query naming "BT-26" finds
+  /// the set stored as "BT26" (see [Codes]).
+  Future<String?> _setCodeMatching(CardGame game, String foldedCode) async {
+    final rows = await _db.rawQuery(
+      'SELECT code FROM sets WHERE game = ? AND ${Codes.foldedSql('code')} = ? '
+      'LIMIT 1',
+      <Object?>[game.id, foldedCode],
+    );
+    return rows.isEmpty ? null : rows.first['code'] as String;
   }
 
   /// How many printings of a game are cached.

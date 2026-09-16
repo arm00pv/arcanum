@@ -59,10 +59,10 @@ void main() {
     // Not "this card has a watermark" - the collector can see that. What they
     // cannot see is whether the download failed, so the note says it did not.
     expect(
-      find.textContaining('This is the publisher\'s sample image'),
+      find.textContaining('A mark across Gundam art is the publisher\'s own'),
       findsOneWidget,
     );
-    expect(find.textContaining('nothing failed to load'), findsOneWidget);
+    expect(find.textContaining('not a failed download'), findsOneWidget);
     expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
   });
 
@@ -70,10 +70,7 @@ void main() {
     // The same fact in three vaults reads as three different sentences, and a
     // One Piece screen must not be told about Gundam.
     await pumpNote(tester, game: CardGame.onePiece);
-    expect(
-      find.textContaining('Bandai serves every One Piece card'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Bandai serves some cards'), findsOneWidget);
     expect(find.textContaining('Gundam'), findsNothing);
   });
 
@@ -83,10 +80,10 @@ void main() {
     await pumpNote(tester, game: CardGame.digimon, short: true);
 
     expect(
-      find.textContaining('Bandai publishes Digimon cards'),
+      find.textContaining('Bandai serves some Digimon art'),
       findsOneWidget,
     );
-    expect(find.textContaining('nothing failed to load'), findsNothing);
+    expect(find.textContaining('failed download'), findsNothing);
   });
 
   test('a set with no pictures yet has nothing to explain', () {

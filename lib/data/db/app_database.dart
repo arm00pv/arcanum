@@ -46,12 +46,22 @@ class AppDatabase {
   ///      needs and no feed publishes, so it is stated once per set and kept,
   ///      rather than typed in every time the question is asked.
   /// v13 - the promo flag on cards TCGplayer catalogues. A printing filed under a
-  ///      promotional run is a promotional card, and on Gundam that is the
-  ///      difference between a photograph of the card and the publisher's sample
-  ///      image with SAMPLE across it. Sets already on the phone were downloaded
+  ///      promotional run is a promotional card, and on Gundam that separates the
+  ///      promotional runs from the ordinary sets - it is not the difference
+  ///      between a photograph and the publisher's marked press image, since
+  ///      Gundam starter decks are nobody's promo and are still marked. Sets
+  ///      already on the phone were downloaded
   ///      before the catalogue wrote the flag, so it is derived here from the
   ///      set each card belongs to.
-  static const _version = 13;
+  /// v14 - a printing is identified by its game as well as its id. Every read of
+  ///      the cards table already filters on the game, but the primary key was the
+  ///      id alone, so a provider numbering its cards "1", "2", "3" would have
+  ///      overwritten another game's row on insert, taking its game column with
+  ///      it. The ids in use come from five different providers and do not in fact
+  ///      collide, so this makes an existing guarantee structural rather than
+  ///      repairing a fault - and it is cheap now, while a search is about to
+  ///      start leaning on it.
+  static const _version = 14;
 
   static AppDatabase? _instance;
 
@@ -82,6 +92,7 @@ class AppDatabase {
         if (from < 11) await createLotsAndSales(d, backfill: true);
         if (from < 12) await createBoxCompositions(d);
         if (from < 13) await markPromotionalPrintings(d);
+        if (from < 14) await scopeCardIdsToGame(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -184,7 +195,7 @@ class AppDatabase {
     // --------------------------------------------------------------- cards
     batch.execute('''
       CREATE TABLE cards (
-        id                  TEXT PRIMARY KEY,
+        id                  TEXT NOT NULL,
         game                TEXT NOT NULL DEFAULT 'mtg',
         oracle_id           TEXT,
         set_code            TEXT NOT NULL,
@@ -221,7 +232,8 @@ class AppDatabase {
         nonfoil             INTEGER NOT NULL DEFAULT 0,
         edhrec_rank         INTEGER,
         released_at         TEXT,
-        extras_json         TEXT
+        extras_json         TEXT,
+        PRIMARY KEY (game, id)
       )
     ''');
     batch.execute(
@@ -643,6 +655,86 @@ class AppDatabase {
       "  AND name LIKE '%\"' "
       "  AND length(name) - length(replace(name, '\"', '')) = 2",
     );
+  }
+
+  /// v14: scopes a printing's identity to its game.
+  ///
+  /// SQLite cannot alter a primary key in place, so the table is rebuilt. The
+  /// columns are named on both sides of the copy rather than selected with `*`:
+  /// a database that started at v1 has extra price columns that no longer exist
+  /// and a different column order from a fresh one, and naming them is what
+  /// makes both of them arrive here whole.
+  ///
+  /// Nothing is dropped but the old table. Rows can only have been unique by id
+  /// before this, so the insert cannot collide with itself.
+  static Future<void> scopeCardIdsToGame(DatabaseExecutor d) async {
+    const String columns =
+        'id, game, oracle_id, set_code, set_name, name, collector_number, '
+        'collector_sort, rarity, layout, type_line, oracle_text, mana_cost, cmc, '
+        'colors, color_identity, artist, flavor_text, image_small, image_normal, '
+        'image_large, image_art_crop, image_png, back_image_small, '
+        'back_image_normal, prices_json, prices_updated_at, digital, promo, '
+        'reprint, reserved, full_art, booster, foil, nonfoil, edhrec_rank, '
+        'released_at, extras_json';
+
+    final batch = d.batch();
+    batch.execute('''
+      CREATE TABLE cards_v14 (
+        id                  TEXT NOT NULL,
+        game                TEXT NOT NULL DEFAULT 'mtg',
+        oracle_id           TEXT,
+        set_code            TEXT NOT NULL,
+        set_name            TEXT,
+        name                TEXT NOT NULL,
+        collector_number    TEXT NOT NULL,
+        collector_sort      INTEGER NOT NULL DEFAULT 0,
+        rarity              TEXT NOT NULL DEFAULT 'unknown',
+        layout              TEXT,
+        type_line           TEXT,
+        oracle_text         TEXT,
+        mana_cost           TEXT,
+        cmc                 REAL,
+        colors              TEXT NOT NULL DEFAULT '',
+        color_identity      TEXT NOT NULL DEFAULT '',
+        artist              TEXT,
+        flavor_text         TEXT,
+        image_small         TEXT,
+        image_normal        TEXT,
+        image_large         TEXT,
+        image_art_crop      TEXT,
+        image_png           TEXT,
+        back_image_small    TEXT,
+        back_image_normal   TEXT,
+        prices_json         TEXT,
+        prices_updated_at   INTEGER,
+        digital             INTEGER NOT NULL DEFAULT 0,
+        promo               INTEGER NOT NULL DEFAULT 0,
+        reprint             INTEGER NOT NULL DEFAULT 0,
+        reserved            INTEGER NOT NULL DEFAULT 0,
+        full_art            INTEGER NOT NULL DEFAULT 0,
+        booster             INTEGER NOT NULL DEFAULT 0,
+        foil                INTEGER NOT NULL DEFAULT 0,
+        nonfoil             INTEGER NOT NULL DEFAULT 0,
+        edhrec_rank         INTEGER,
+        released_at         TEXT,
+        extras_json         TEXT,
+        PRIMARY KEY (game, id)
+      )
+    ''');
+    batch.execute(
+      'INSERT INTO cards_v14 ($columns) SELECT $columns FROM cards',
+    );
+    batch.execute('DROP TABLE cards');
+    batch.execute('ALTER TABLE cards_v14 RENAME TO cards');
+    batch.execute(
+      'CREATE INDEX idx_cards_set ON cards(game, set_code, collector_sort, collector_number)',
+    );
+    batch.execute(
+      'CREATE INDEX idx_cards_name ON cards(game, name COLLATE NOCASE)',
+    );
+    batch.execute('CREATE INDEX idx_cards_oracle ON cards(game, oracle_id)');
+    batch.execute('CREATE INDEX idx_cards_rarity ON cards(game, rarity)');
+    await batch.commit(noResult: true);
   }
 
   /// v13: marks the printings that came out of a promotional run.

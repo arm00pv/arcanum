@@ -407,4 +407,132 @@ void main() {
       expect(await dao.sets(CardGame.digimon, search: 'BT-28'), isEmpty);
     });
   });
+
+  group('a printing named by its number', () {
+    TcgCard printing(String id, String set, String number, String name) =>
+        TcgCard(
+          game: CardGame.digimon,
+          id: id,
+          setCode: set,
+          setName: set == 'BT26' ? 'Timeless Bonds' : 'Starter Deck 23',
+          name: name,
+          collectorNumber: number,
+          rarity: 'common',
+          releasedAt: DateTime(2026, 5, 15),
+        );
+
+    setUp(() async {
+      await dao.upsertSets(CardGame.digimon, <TcgSet>[
+        TcgSet(
+          game: CardGame.digimon,
+          id: '24623',
+          code: 'BT26',
+          name: 'Timeless Bonds',
+          setType: 'expansion',
+          releasedAt: DateTime(2026, 9, 4),
+        ),
+        TcgSet(
+          game: CardGame.digimon,
+          id: '24618',
+          code: 'ST23',
+          name: 'Starter Deck 23: Beatbreak',
+          setType: 'starter',
+          releasedAt: DateTime(2026, 5, 15),
+        ),
+      ]);
+      await dao.upsertCards(CardGame.digimon, <TcgCard>[
+        printing('bt26-001', 'BT26', '001', 'Yokomon'),
+        printing('bt26-002', 'BT26', '002', 'Budmon'),
+        printing('st23-01', 'ST23', '01', 'Kekkomon'),
+      ]);
+      // The same id in another game. Under the primary key this table had
+      // before v14 that was one row, and the second write took the first row's
+      // game column with it.
+      await dao.upsertCards(CardGame.mtg, <TcgCard>[
+        const TcgCard(
+          game: CardGame.mtg,
+          id: 'bt26-001',
+          setCode: 'blb',
+          setName: 'Bloomburrow',
+          name: "Innkeeper's Talent",
+          collectorNumber: '1',
+          rarity: 'rare',
+        ),
+      ]);
+    });
+
+    test('the code as printed and the number find the printing', () async {
+      final hits = await dao.searchByNumber(CardGame.digimon, 'BT-26-001');
+
+      expect(hits!.map((c) => c.name), <String>['Yokomon']);
+    });
+
+    test('the code as stored finds it too', () async {
+      expect(
+        (await dao.searchByNumber(
+          CardGame.digimon,
+          'bt26-001',
+        ))!.map((c) => c.name),
+        <String>['Yokomon'],
+      );
+      // And with a space where the hyphen was.
+      expect(
+        (await dao.searchByNumber(
+          CardGame.digimon,
+          'BT26 001',
+        ))!.map((c) => c.name),
+        <String>['Yokomon'],
+      );
+    });
+
+    test('a number on its own comes back from every set that has it', () async {
+      // #001 and #01 are the same number written differently, and both are in
+      // the game: the answer is both printings, each still labelled by its set.
+      final hits = (await dao.searchByNumber(CardGame.digimon, '001'))!;
+
+      expect(
+        hits.map((c) => c.name),
+        containsAll(<String>['Yokomon', 'Kekkomon']),
+      );
+      expect(hits.where((c) => c.name == 'Budmon'), isEmpty);
+    });
+
+    test('naming a set keeps the answer to that set', () async {
+      final hits = (await dao.searchByNumber(CardGame.digimon, 'ST23-01'))!;
+
+      expect(hits.map((c) => c.name), <String>['Kekkomon']);
+    });
+
+    test('the number is answered inside one game only', () async {
+      final mtg = await dao.searchByNumber(CardGame.mtg, '001');
+
+      expect(mtg!.map((c) => c.name), <String>["Innkeeper's Talent"]);
+      expect(mtg.every((c) => c.game == CardGame.mtg), isTrue);
+
+      final digimon = (await dao.searchByNumber(CardGame.digimon, '1'))!;
+      expect(digimon.every((c) => c.game == CardGame.digimon), isTrue);
+      expect(digimon.map((c) => c.name), contains('Yokomon'));
+    });
+
+    test('a number no set has answers nothing', () async {
+      expect(await dao.searchByNumber(CardGame.digimon, 'BT26-999'), isEmpty);
+    });
+
+    test('a name is left to the name search', () async {
+      // Null, not empty: the caller has to be able to tell "no such number"
+      // from "that was never a number".
+      expect(await dao.searchByNumber(CardGame.digimon, 'Kekkomon'), isNull);
+      expect(await dao.searchByNumber(CardGame.digimon, 'Mewtwo 2'), isNull);
+    });
+
+    test('the same id in two games is two printings', () async {
+      final digimon = await dao.cardById(CardGame.digimon, 'bt26-001');
+      final mtg = await dao.cardById(CardGame.mtg, 'bt26-001');
+
+      expect(digimon!.name, 'Yokomon');
+      expect(digimon.game, CardGame.digimon);
+      expect(mtg!.name, "Innkeeper's Talent");
+      expect(mtg.game, CardGame.mtg);
+    });
+  });
 }

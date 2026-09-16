@@ -770,10 +770,10 @@ void main() {
       expect(card.setCode, 'gcgpr');
       expect(card.collectorNumber, '005');
       expect(card.promo, isTrue);
-      expect(card.hasSampleArt, isTrue);
+      expect(card.artMayBeMarked, isTrue);
     });
 
-    test('an ordinary printing is not promotional, but is still a sample', () async {
+    test('an ordinary printing is not promotional, but is still marked', () async {
       // The two are separate facts: a starter deck printing is nobody's promo,
       // and Bandai still publishes its picture with SAMPLE across the art.
       final cards = await catalogWith(
@@ -784,7 +784,7 @@ void main() {
       ).fetchCardsInSet('st11');
 
       expect(cards.single.promo, isFalse);
-      expect(cards.single.hasSampleArt, isTrue);
+      expect(cards.single.artMayBeMarked, isTrue);
     });
 
     test('a plus on a rarity code is a treatment, not a rung', () {

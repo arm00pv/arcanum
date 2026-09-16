@@ -257,10 +257,11 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                       ),
                     ),
                   ),
-                // Every card here is published as the publisher's sample art,
-                // so the whole set wears SAMPLE across the picture. Said once,
-                // at the top of the run, rather than leaving a binder that looks
-                // like it failed to download.
+                // A good part of this game's art is the publisher's press
+                // image rather than a photograph, so a run of these cards wears
+                // SAMPLE across the picture. Said once, at the top of the run,
+                // rather than leaving a binder that looks like it failed to
+                // download.
                 if (cardsAsync.value != null &&
                     SampleArtNote.applies(cardsAsync.value!))
                   SliverToBoxAdapter(

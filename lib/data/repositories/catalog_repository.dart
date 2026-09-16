@@ -186,6 +186,15 @@ class CatalogRepository {
   }) async {
     final q = query.trim();
     if (q.isEmpty) return const [];
+    // A number names a printing rather than a word. There is nothing for the
+    // provider to be asked - its search takes names and rules text - and a
+    // name search for "001" would answer with every card that mentions it.
+    final List<TcgCard>? byNumber = await _dao.searchByNumber(
+      game,
+      q,
+      limit: limit,
+    );
+    if (byNumber != null) return byNumber;
     final local = await _dao.searchCached(game, q, limit: limit);
     if (local.length >= 12) return local;
     try {
