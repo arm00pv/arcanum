@@ -17,7 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// A provider that answers one card and counts what it was asked.
-class _RecordingCatalog implements CardCatalog {
+class _RecordingCatalog extends CardCatalog {
   _RecordingCatalog(this.game, this.answering);
 
   @override

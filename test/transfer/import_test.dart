@@ -20,7 +20,7 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// A catalogue that answers from memory, so import matching is tested without a
 /// network and deterministically.
-class _FakeCatalog implements CardCatalog {
+class _FakeCatalog extends CardCatalog {
   _FakeCatalog(this.game, this.cards);
 
   @override

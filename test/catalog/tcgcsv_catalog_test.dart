@@ -801,6 +801,138 @@ void main() {
     });
   });
 
+  group('fetching a collection in one go', () {
+    test('reads a group once, whatever the number of cards wanted', () async {
+      final requests = <Uri>[];
+      final catalog = catalogWith(requests: requests);
+      // The set list is one request for every group the app will need and it is
+      // remembered, so what is counted here is the card reads.
+      await catalog.fetchAllSets();
+      requests.clear();
+
+      final cards = await catalog.fetchCardsByIds(<String>[
+        '3188-453505',
+        '3188-453506',
+        '3188-453600',
+        // Ids from the same group that the shop has never listed, which is what
+        // a collection that has been pruned in the app and not at the shop
+        // looks like.
+        for (var i = 0; i < 17; i++) '3188-${900000 + i}',
+      ]);
+
+      // Twenty printings out of one set: a product list and the price list
+      // behind it, asked for once each. A card at a time this was forty paced
+      // requests; a collection of five hundred was a thousand, which is the run
+      // this call exists to collapse.
+      expect(requests.map((Uri u) => u.path), <String>[
+        '/tcgplayer/68/3188/products',
+        '/tcgplayer/68/3188/prices',
+      ]);
+      // Every card is whole - code, name and the prices that came with the set
+      // - and each is keyed by the id it was asked about.
+      expect(cards.keys, <String>['3188-453505', '3188-453506', '3188-453600']);
+      final leader = cards['3188-453505']!;
+      expect(leader.setCode, 'op01');
+      expect(leader.setName, 'Romance Dawn');
+      expect(leader.prices.nonfoil, 2.14);
+      expect(leader.prices.foil, 3.46);
+    });
+
+    test('reads every group its ids name, and each of them once', () async {
+      final requests = <Uri>[];
+      final catalog = TcgcsvCatalog.digimon(
+        dio: Dio(BaseOptions(baseUrl: 'https://tcgcsv.com/tcgplayer'))
+          ..httpClientAdapter = _FakeTcgcsv((Uri uri) {
+            if (uri.path.endsWith('/groups')) return sharedCodeGroupsJson;
+            if (uri.path.contains('/63/24824/products')) {
+              return releaseEventProductsJson;
+            }
+            if (uri.path.endsWith('/products')) return digimonProductsJson;
+            if (uri.path.endsWith('/prices')) return '{"results":[]}';
+            return null;
+          }, requests),
+      );
+      await catalog.fetchAllSets();
+      requests.clear();
+
+      final cards = await catalog.fetchCardsByIds(<String>[
+        '24623-900001',
+        '24824-900002',
+        // Named twice, as a collection does: one printing held in two finishes.
+        '24623-900001',
+      ]);
+
+      expect(requests.map((Uri u) => u.path), <String>[
+        '/tcgplayer/63/24623/products',
+        '/tcgplayer/63/24623/prices',
+        '/tcgplayer/63/24824/products',
+        '/tcgplayer/63/24824/prices',
+      ]);
+      expect(
+        cards.values.map((TcgCard c) => c.extras['printedNumber']).toSet(),
+        <Object?>{'BT26-052 C', 'BT26-010 C'},
+      );
+      // The release event run is filed under a group of its own and is still
+      // the set its cards print, because the code is what a scan matches on.
+      expect(cards.values.map((TcgCard c) => c.setCode).toSet(), <String>{
+        'bt26',
+      });
+      expect(cards.values.map((TcgCard c) => c.setName).toSet(), <String>{
+        'Timeless Bonds',
+      });
+    });
+
+    test('does not lose a group because another one cannot be read', () async {
+      // The same tolerance the set download shows: a group the provider has
+      // dropped is an empty group, not a reason to leave the rest of a
+      // collection unnamed.
+      final catalog = TcgcsvCatalog.digimon(
+        dio: Dio(BaseOptions(baseUrl: 'https://tcgcsv.com/tcgplayer'))
+          ..httpClientAdapter = _FakeTcgcsv((Uri uri) {
+            if (uri.path.endsWith('/groups')) return sharedCodeGroupsJson;
+            if (uri.path.contains('/63/24623/')) return null;
+            if (uri.path.endsWith('/products')) return releaseEventProductsJson;
+            if (uri.path.endsWith('/prices')) return '{"results":[]}';
+            return null;
+          }, <Uri>[]),
+      );
+
+      final cards = await catalog.fetchCardsByIds(<String>[
+        '24623-900001',
+        '24824-900002',
+      ]);
+
+      expect(cards.keys, <String>['24824-900002']);
+    });
+
+    test('asks for nothing at all when no id names a printing', () async {
+      final requests = <Uri>[];
+      final catalog = catalogWith(requests: requests);
+
+      // An id the provider did not write - an older row, another game's card -
+      // names no group and is not worth a request to find that out.
+      expect(await catalog.fetchCardsByIds(<String>['not-an-id', '']), isEmpty);
+      expect(requests, isEmpty);
+
+      // A well-formed id is one request for the group it claims, and the price
+      // list is left alone when the group does not hold it.
+      expect(await catalog.fetchCardsByIds(<String>['3188-999999']), isEmpty);
+      expect(requests.map((Uri u) => u.path), <String>[
+        '/tcgplayer/68/3188/products',
+      ]);
+    });
+
+    test('does not turn the sealed product sharing the group into a card', () async {
+      // A booster box sits in the same product list as the cards and carries no
+      // collector number, which is the structural test that keeps it out of a
+      // binder whether it arrives with its set or on its own.
+      final cards = await catalogWith().fetchCardsByIds(<String>[
+        '3188-450085',
+      ]);
+      expect(cards, isEmpty);
+    });
+  });
+
   group('search and printings', () {
     test('are answered from the phone, because the provider has no index', () async {
       // tcgcsv republishes a shop's catalogue and answers no query about a card

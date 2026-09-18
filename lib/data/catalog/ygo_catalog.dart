@@ -50,7 +50,7 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 /// ceiling is twenty: the limit could not be reproduced under test, the
 /// documented penalty for breaching it is an hour-long ban, and a catalogue
 /// download is a background cost the user never waits on twice.
-class YgoCatalog implements CardCatalog {
+class YgoCatalog extends CardCatalog {
   YgoCatalog({Dio? dio})
     : _dio =
           dio ??

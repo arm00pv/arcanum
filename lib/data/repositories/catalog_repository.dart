@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/domain/models/card_game.dart';
@@ -25,14 +27,16 @@ class CatalogRepository {
   /// Sets are re-fetched when the cache is older than this.
   static const setCacheTtl = Duration(days: 7);
 
-  /// How many of [resolveMissingCards]' requests are in flight at once.
+  /// How many missing printings are asked about, and stored, in one go.
   ///
-  /// The same small number the other bulk readers in the app use: enough to
-  /// keep a patient shop busy, few enough that none of them is being hammered.
-  static const _resolveConcurrency = 4;
-
-  /// How many resolved cards are written before the run carries on.
-  static const _resolveFlushSize = 200;
+  /// A chunk is both the unit a request is made in and the unit that reaches
+  /// disk, and the number is the same one it always was: a sign-in on a browser
+  /// that has never downloaded the sets behind a collection is minutes of work,
+  /// so what has arrived is written every couple of hundred cards rather than
+  /// at the end. Handing the catalogue a chunk rather than a card is the
+  /// difference that matters - it is the catalogue that knows a whole set can
+  /// be read at once, and it cannot say so about an id it is given alone.
+  static const _resolveChunk = 200;
 
   /// The catalogue backing a game.
   CardCatalog catalogFor(CardGame game) => _catalogs[game]!;
@@ -187,10 +191,13 @@ class CatalogRepository {
   /// not a catalogue sync: it asks for the cards a collection is already
   /// holding and for nothing else.
   ///
-  /// Only a few requests are in flight at a time, the way the catalogue
-  /// providers pace their own bulk reads, because a collection can name
-  /// thousands of cards and a device that has none of them would otherwise open
-  /// thousands of requests at once.
+  /// The missing ids travel to the catalogue in chunks rather than one at a
+  /// time, and [CardCatalog.fetchCardsByIds] is where the cost of a chunk is
+  /// decided. Every catalogue can answer a chunk - the ones with nothing clever
+  /// to do with it ask about each id in turn, which is what this method used to
+  /// do itself - and the five tcgcsv games read a whole set per chunk instead,
+  /// which is what turns a browser's first sign-in from a thousand paced
+  /// requests into one per set.
   ///
   /// Returns how many printings were stored. Cards the shop cannot answer for
   /// are left out rather than guessed at - their rows keep the placeholder they
@@ -199,7 +206,6 @@ class CatalogRepository {
   Future<int> resolveMissingCards(
     CardGame game,
     List<String> ids, {
-    int concurrency = _resolveConcurrency,
     void Function(int done, int total)? onProgress,
   }) async {
     if (ids.isEmpty || !supports(game)) return 0;
@@ -213,37 +219,26 @@ class CatalogRepository {
     if (missing.isEmpty) return 0;
 
     final catalog = catalogFor(game);
-    final queue = List<String>.from(missing);
-    final arrived = <TcgCard>[];
-    var done = 0;
     var stored = 0;
-
-    Future<void> worker() async {
-      while (true) {
-        if (queue.isEmpty) return;
-        final id = queue.removeAt(0);
-        TcgCard? card;
-        try {
-          card = await catalog.fetchCardById(id);
-        } catch (_) {
-          // One printing this game's shop cannot answer for is one placeholder
-          // that stays a placeholder. It is not a reason to abandon the rest.
-        }
-        if (card != null) arrived.add(card);
-        done++;
-        onProgress?.call(done, missing.length);
-        if (arrived.length >= _resolveFlushSize) {
-          stored += await _store(game, arrived);
-        }
+    for (var start = 0; start < missing.length; start += _resolveChunk) {
+      final end = math.min(start + _resolveChunk, missing.length);
+      final chunk = missing.sublist(start, end);
+      Map<String, TcgCard> arrived;
+      try {
+        arrived = await catalog.fetchCardsByIds(chunk);
+      } catch (_) {
+        // A catalogue that cannot answer a chunk at all costs that chunk's
+        // cards and none of the ones behind it, which is the same bargain the
+        // per-card version struck.
+        arrived = const <String, TcgCard>{};
       }
+      stored += await _store(game, arrived.values.toList());
+      onProgress?.call(end, missing.length);
     }
-
-    await Future.wait(List.generate(concurrency.clamp(1, 8), (_) => worker()));
-    stored += await _store(game, arrived);
     return stored;
   }
 
-  /// Stores what a run has collected so far, and empties the list.
+  /// Stores one chunk of what a run has collected.
   ///
   /// Written as it arrives rather than once at the end: a first sign-in on a
   /// browser holding a few thousand cards is minutes of requests, and a tab
@@ -251,10 +246,8 @@ class CatalogRepository {
   /// cards that did arrive.
   Future<int> _store(CardGame game, List<TcgCard> arrived) async {
     if (arrived.isEmpty) return 0;
-    final batch = List<TcgCard>.of(arrived);
-    arrived.clear();
-    await _dao.upsertCards(game, batch);
-    return batch.length;
+    await _dao.upsertCards(game, arrived);
+    return arrived.length;
   }
 
   /// Every printing sharing a group id, fetching on demand when unknown.

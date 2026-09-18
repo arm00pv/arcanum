@@ -6,10 +6,8 @@
 // behind those ids is downloaded set by set. Signing in on a browser that has
 // never opened a set therefore lands rows it cannot name, which is what a
 // collection of "--" is. These tests cover the fetch that closes that gap:
-// only what is missing, a few requests at a time, and never a failure that
-// costs the rest of the collection.
-
-import 'dart:async';
+// only what is missing, handed to the catalogue in bulks rather than one card
+// at a time, and never a failure that costs the rest of the collection.
 
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/db/app_database.dart';
@@ -30,11 +28,12 @@ TcgCard _card(String id) => TcgCard(
   rarity: 'common',
 );
 
-/// A provider that answers one printing at a time, counts what it was asked,
-/// and can be made to wait - which is how "a few at a time" is checked rather
-/// than assumed.
-class _PacedCatalog implements CardCatalog {
-  _PacedCatalog(this.game);
+/// A provider with nothing cheaper to offer for a list of ids than one request
+/// per id, which is exactly what the body [CardCatalog] gives it does with
+/// them. It records what it was asked, and in what bulks, so that a test can
+/// see how a run was sliced rather than assume it.
+class _OneAtATimeCatalog extends CardCatalog {
+  _OneAtATimeCatalog(this.game);
 
   @override
   final CardGame game;
@@ -42,10 +41,8 @@ class _PacedCatalog implements CardCatalog {
   /// Every id asked for, in the order the requests were made.
   final List<String> asked = <String>[];
 
-  /// How many requests have been started, and the most that were ever running
-  /// at once.
-  int started = 0;
-  int peak = 0;
+  /// The ids of every bulk call, in the order the run made them.
+  final List<List<String>> bulks = <List<String>>[];
 
   /// Printings this provider answers with nothing, and ones it fails on.
   final Set<String> unknown = <String>{};
@@ -55,40 +52,20 @@ class _PacedCatalog implements CardCatalog {
   /// the run is still going.
   Future<void> Function(String id)? onAsk;
 
-  /// When true, a request waits for [release] instead of answering.
-  bool holding = false;
-
-  int _inFlight = 0;
-  final List<Completer<void>> _gates = <Completer<void>>[];
-
-  /// Lets every waiting request, and every one after it, answer.
-  void release() {
-    holding = false;
-    for (final gate in _gates) {
-      if (!gate.isCompleted) gate.complete();
-    }
-    _gates.clear();
-  }
+  @override
+  String get sourceName => 'one-at-a-time';
 
   @override
-  String get sourceName => 'paced';
+  Future<Map<String, TcgCard>> fetchCardsByIds(List<String> ids) {
+    bulks.add(List<String>.of(ids));
+    return super.fetchCardsByIds(ids);
+  }
 
   @override
   Future<TcgCard?> fetchCardById(String id) async {
     asked.add(id);
-    started++;
-    _inFlight++;
-    if (_inFlight > peak) peak = _inFlight;
-
     await onAsk?.call(id);
 
-    while (holding) {
-      final gate = Completer<void>();
-      _gates.add(gate);
-      await gate.future;
-    }
-
-    _inFlight--;
     if (failing.contains(id)) throw const CatalogException('no answer');
     if (unknown.contains(id)) return null;
     return _card(id);
@@ -117,26 +94,19 @@ class _PacedCatalog implements CardCatalog {
   Future<List<TcgCard>> refreshPrices(List<TcgCard> cards) async => cards;
 }
 
-/// Waits for the workers to reach a state, rather than guessing at a duration.
-Future<void> _until(bool Function() ready) async {
-  for (var i = 0; i < 400 && !ready(); i++) {
-    await Future<void>.delayed(const Duration(milliseconds: 5));
-  }
-}
-
 void main() {
   sqfliteFfiInit();
   databaseFactory = databaseFactoryFfi;
 
   late AppDatabase db;
   late CatalogDao dao;
-  late _PacedCatalog catalog;
+  late _OneAtATimeCatalog catalog;
   late CatalogRepository catalogs;
 
   setUp(() async {
     db = await AppDatabase.openInMemory();
     dao = CatalogDao(db.db);
-    catalog = _PacedCatalog(CardGame.digimon);
+    catalog = _OneAtATimeCatalog(CardGame.digimon);
     catalogs = CatalogRepository(
       catalogs: <CardGame, CardCatalog>{CardGame.digimon: catalog},
       dao: dao,
@@ -218,27 +188,33 @@ void main() {
   });
 
   group('a collection of a few thousand cards', () {
-    test('is not a few thousand requests at once', () async {
-      catalog.holding = true;
-      final ids = <String>[for (var i = 0; i < 12; i++) 'card-$i'];
+    test('is handed to the catalogue in bulks, not a card at a time', () async {
+      final ids = <String>[for (var i = 0; i < 250; i++) 'card-$i'];
 
-      final pending = catalogs.resolveMissingCards(
+      final resolved = await catalogs.resolveMissingCards(
         CardGame.digimon,
         ids,
-        concurrency: 2,
       );
 
-      await _until(() => catalog.started >= 2);
-      expect(catalog.started, 2, reason: 'two workers, two requests');
-
-      catalog.release();
-      expect(await pending, 12);
-      expect(catalog.peak, lessThanOrEqualTo(2));
+      expect(resolved, 250);
+      // What a bulk costs is the catalogue's to decide - a set at a time for
+      // the games whose ids carry their set - and it can only decide it if it
+      // is handed more than one id. Two hundred is where a run is written, so
+      // it is also where a run is asked.
+      expect(catalog.bulks.map((List<String> bulk) => bulk.length), <int>[
+        200,
+        50,
+      ]);
+      expect(catalog.bulks.first.first, 'card-0');
+      expect(catalog.bulks.last.last, 'card-249');
+      // Every one of them still reaches the source, in the order the collection
+      // held them.
+      expect(catalog.asked.length, 250);
     });
 
     test('is written as it arrives, not once at the end', () async {
-      // Minutes of requests can end in a closed tab or an expired session, and
-      // what did arrive should survive that.
+      // Minutes can end in a closed tab or an expired session, and what did
+      // arrive should survive that.
       final ids = <String>[for (var i = 0; i < 250; i++) 'card-$i'];
       final storedWhenAsked = <int>[];
       catalog.onAsk = (String id) async =>
@@ -247,7 +223,6 @@ void main() {
       final resolved = await catalogs.resolveMissingCards(
         CardGame.digimon,
         ids,
-        concurrency: 1,
       );
 
       expect(resolved, 250);
@@ -255,8 +230,7 @@ void main() {
       expect(
         storedWhenAsked[200],
         200,
-        reason:
-            'the first two hundred are on disk while the rest are asked for',
+        reason: 'the first bulk is on disk before the second is asked for',
       );
     });
 

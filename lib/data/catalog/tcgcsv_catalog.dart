@@ -45,7 +45,7 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 /// guidelines ask for a named User-Agent, a pause between requests and no more
 /// than a synchronisation a day. This class sends the first, paces itself with
 /// the second, and the repository's seven-day set cache covers the third.
-class TcgcsvCatalog implements CardCatalog {
+class TcgcsvCatalog extends CardCatalog {
   TcgcsvCatalog._({
     required this.game,
     required this.categoryId,
@@ -412,6 +412,54 @@ class TcgcsvCatalog implements CardCatalog {
         source: sourceName,
       );
     }
+  }
+
+  @override
+  Future<Map<String, TcgCard>> fetchCardsByIds(List<String> ids) async {
+    // A card's id carries the group it came from and there is no endpoint for a
+    // single product, so the ids are sorted into their groups before anything
+    // is asked for: one product list and one price list answer for every card a
+    // group holds. A collection that names five hundred printings out of one
+    // set is two requests here rather than a thousand, which is the difference
+    // between a first sign-in that takes a moment and one that takes minutes.
+    final byGroup = <int, Set<int>>{};
+    for (final id in ids) {
+      final split = _splitId(id);
+      if (split == null) continue;
+      byGroup.putIfAbsent(split.$1, () => <int>{}).add(split.$2);
+    }
+
+    final cards = <String, TcgCard>{};
+    for (final entry in byGroup.entries) {
+      final group = entry.key;
+      final wanted = entry.value;
+      try {
+        final products = _results(await _get('/$categoryId/$group/products'));
+        final found = <Map<dynamic, dynamic>>[
+          for (final item in products)
+            if (item is Map && wanted.contains(_int(item['productId']))) item,
+        ];
+        // A group holding none of the ids it was asked about - a printing the
+        // shop has since dropped - is not worth its price list as well.
+        if (found.isEmpty) continue;
+
+        final prices = _results(await _get('/$categoryId/$group/prices'));
+        final byProduct = _pricesByProduct(prices);
+        final setCode = await _setCodeForGroup(group);
+        final setName = await _setNameFor(setCode);
+        for (final product in found) {
+          // The card writes its own id - the group it was filed under and the
+          // product it is - which is the id it was asked about.
+          final card = _cardFrom(product, byProduct, setCode, setName, group);
+          if (card != null) cards[card.id] = card;
+        }
+      } on DioException {
+        // The same tolerance the set download shows: a group the provider has
+        // dropped is an empty group rather than an error, and one group that
+        // cannot be read is not the rest of the collection's problem.
+      }
+    }
+    return cards;
   }
 
   @override

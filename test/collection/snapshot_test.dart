@@ -18,7 +18,7 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// A catalogue whose live price can be moved, so a snapshot can be shown to
 /// record today's price rather than whatever happened to be cached.
-class _MovableCatalog implements CardCatalog {
+class _MovableCatalog extends CardCatalog {
   _MovableCatalog(this.game);
 
   @override

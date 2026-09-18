@@ -8,7 +8,12 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 /// different collector-number formats, different price vocabularies, different
 /// rate limits. Everything above this interface works in [TcgCard] and [TcgSet]
 /// and never has to care which game it is looking at.
-abstract interface class CardCatalog {
+///
+/// It is an abstract class rather than an interface class because one of the
+/// methods below carries a body. Dart hands a body to subclasses and to nobody
+/// else, and the default it holds is the one a catalogue with no cheaper way to
+/// answer several ids should not have to write out.
+abstract class CardCatalog {
   /// The game this catalogue serves.
   CardGame get game;
 
@@ -31,6 +36,40 @@ abstract interface class CardCatalog {
 
   /// A single printing by provider id. Null when it does not exist.
   Future<TcgCard?> fetchCardById(String id);
+
+  /// Several printings by provider id, asked for together.
+  ///
+  /// This exists for the one caller that has a list rather than a card: a
+  /// collection names its holdings by id while the catalogue behind them is
+  /// downloaded set by set, so a browser that has just signed in on an account
+  /// asks about hundreds of printings it has never seen. Which of those ids can
+  /// be answered in one request is something only the source knows - for the
+  /// tcgcsv games, a whole set's worth of them - and a caller holding the list
+  /// is in no position to find out.
+  ///
+  /// The answer is keyed by the id that was asked about, so a caller that
+  /// holds a list of ids - several of them naming the same printing, as a
+  /// collection does - can put each answer back where it came from without
+  /// trusting the order it gets them in. Printings the source cannot answer for
+  /// are simply absent rather than guessed at, because the caller is filling in
+  /// rows that already exist and a printing nobody knows is a row that keeps
+  /// the placeholder it had.
+  ///
+  /// The body here is what a source can do when its ids address nothing shared:
+  /// ask one at a time.
+  Future<Map<String, TcgCard>> fetchCardsByIds(List<String> ids) async {
+    final cards = <String, TcgCard>{};
+    for (final id in ids) {
+      try {
+        final card = await fetchCardById(id);
+        if (card != null) cards[id] = card;
+      } catch (_) {
+        // A source that answers one id at a time fails one id at a time as
+        // well; the ids after this one still have an answer coming.
+      }
+    }
+    return cards;
+  }
 
   /// Free-text search. Implementations should return printings, not rollups,
   /// because the printing is what carries the price.

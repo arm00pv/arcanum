@@ -32,7 +32,7 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 /// decimal *strings* under `usd` and `usd_foil`, which is exactly the pair of
 /// finishes Lorcana physically prints, so the mapping onto [CardFinish] is
 /// direct.
-class LorcanaCatalog implements CardCatalog {
+class LorcanaCatalog extends CardCatalog {
   LorcanaCatalog({Dio? dio})
     : _dio =
           dio ??

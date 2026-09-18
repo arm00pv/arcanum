@@ -15,7 +15,7 @@ import 'package:arcanum/features/transfer/transfer_screen.dart';
 import 'package:arcanum/providers.dart';
 
 /// A catalogue that answers from memory, so the screen never touches a network.
-class _FakeCatalog implements CardCatalog {
+class _FakeCatalog extends CardCatalog {
   _FakeCatalog(this.game);
 
   @override

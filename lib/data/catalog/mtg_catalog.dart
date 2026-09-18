@@ -5,7 +5,7 @@ import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// Magic: The Gathering card data, served by Scryfall.
-class MtgCatalog implements CardCatalog {
+class MtgCatalog extends CardCatalog {
   MtgCatalog({ScryfallClient? client}) : _client = client ?? ScryfallClient();
 
   final ScryfallClient _client;

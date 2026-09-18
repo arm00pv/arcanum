@@ -22,7 +22,7 @@ typedef _CardStub = ({String id, String localId, String name});
 /// prices require one call per card. That is a one-time cost per set — the
 /// results are cached in SQLite forever — and it is reported through
 /// [onProgress] so the UI can show a real progress bar rather than a spinner.
-class PokemonCatalog implements CardCatalog {
+class PokemonCatalog extends CardCatalog {
   PokemonCatalog({Dio? dio})
     : _dio =
           dio ??
