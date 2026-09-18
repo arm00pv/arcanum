@@ -516,6 +516,34 @@ class CatalogDao {
     return out;
   }
 
+  /// The ids in [ids] that no printing is stored for.
+  ///
+  /// A collection names its cards by id while the catalogue arrives set by set,
+  /// so the two only line up once something has asked for the printing. This is
+  /// how a caller about to spend requests on the network finds out what to ask
+  /// for, and it answers from one query rather than a read per id: on a device
+  /// that has just signed in the answer is usually every id, and on one that has
+  /// been used for a while it is none of them.
+  Future<List<String>> missingCardIds(CardGame game, List<String> ids) async {
+    if (ids.isEmpty) return const [];
+    final known = <String>{};
+    for (var i = 0; i < ids.length; i += 400) {
+      final chunk = ids.sublist(i, i + 400 > ids.length ? ids.length : i + 400);
+      final marks = List.filled(chunk.length, '?').join(',');
+      final rows = await _db.rawQuery(
+        'SELECT id FROM cards WHERE game = ? AND id IN ($marks)',
+        [game.id, ...chunk],
+      );
+      for (final r in rows) {
+        known.add(r['id'] as String);
+      }
+    }
+    return <String>[
+      for (final id in ids)
+        if (!known.contains(id)) id,
+    ];
+  }
+
   /// Every printing sharing a group id (all reprints of a card).
   Future<List<TcgCard>> printingsOf(CardGame game, String groupId) async {
     final rows = await _db.query(

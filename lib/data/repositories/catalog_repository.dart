@@ -25,6 +25,15 @@ class CatalogRepository {
   /// Sets are re-fetched when the cache is older than this.
   static const setCacheTtl = Duration(days: 7);
 
+  /// How many of [resolveMissingCards]' requests are in flight at once.
+  ///
+  /// The same small number the other bulk readers in the app use: enough to
+  /// keep a patient shop busy, few enough that none of them is being hammered.
+  static const _resolveConcurrency = 4;
+
+  /// How many resolved cards are written before the run carries on.
+  static const _resolveFlushSize = 200;
+
   /// The catalogue backing a game.
   CardCatalog catalogFor(CardGame game) => _catalogs[game]!;
 
@@ -166,6 +175,86 @@ class CatalogRepository {
     final remote = await catalogFor(game).fetchCardById(id);
     if (remote != null) await _dao.upsertCards(game, [remote]);
     return remote;
+  }
+
+  /// Fetches the printings among [ids] this device has no row for.
+  ///
+  /// A collection and the catalogue behind it travel separately. The account
+  /// holds holdings, which name their cards by id, while the catalogue is
+  /// downloaded set by set - so a browser that has just signed in on an account
+  /// holds rows it cannot name, and a collection of "--" is exactly that. This
+  /// is the one-off cost of making those rows readable, and it is deliberately
+  /// not a catalogue sync: it asks for the cards a collection is already
+  /// holding and for nothing else.
+  ///
+  /// Only a few requests are in flight at a time, the way the catalogue
+  /// providers pace their own bulk reads, because a collection can name
+  /// thousands of cards and a device that has none of them would otherwise open
+  /// thousands of requests at once.
+  ///
+  /// Returns how many printings were stored. Cards the shop cannot answer for
+  /// are left out rather than guessed at - their rows keep the placeholder they
+  /// already had - and a printing nobody knows is asked again next time rather
+  /// than remembered as unanswerable.
+  Future<int> resolveMissingCards(
+    CardGame game,
+    List<String> ids, {
+    int concurrency = _resolveConcurrency,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    if (ids.isEmpty || !supports(game)) return 0;
+
+    final seen = <String>{};
+    final wanted = <String>[
+      for (final id in ids)
+        if (id.isNotEmpty && seen.add(id)) id,
+    ];
+    final missing = await _dao.missingCardIds(game, wanted);
+    if (missing.isEmpty) return 0;
+
+    final catalog = catalogFor(game);
+    final queue = List<String>.from(missing);
+    final arrived = <TcgCard>[];
+    var done = 0;
+    var stored = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        if (queue.isEmpty) return;
+        final id = queue.removeAt(0);
+        TcgCard? card;
+        try {
+          card = await catalog.fetchCardById(id);
+        } catch (_) {
+          // One printing this game's shop cannot answer for is one placeholder
+          // that stays a placeholder. It is not a reason to abandon the rest.
+        }
+        if (card != null) arrived.add(card);
+        done++;
+        onProgress?.call(done, missing.length);
+        if (arrived.length >= _resolveFlushSize) {
+          stored += await _store(game, arrived);
+        }
+      }
+    }
+
+    await Future.wait(List.generate(concurrency.clamp(1, 8), (_) => worker()));
+    stored += await _store(game, arrived);
+    return stored;
+  }
+
+  /// Stores what a run has collected so far, and empties the list.
+  ///
+  /// Written as it arrives rather than once at the end: a first sign-in on a
+  /// browser holding a few thousand cards is minutes of requests, and a tab
+  /// that is closed, or a session that ends, halfway through should keep the
+  /// cards that did arrive.
+  Future<int> _store(CardGame game, List<TcgCard> arrived) async {
+    if (arrived.isEmpty) return 0;
+    final batch = List<TcgCard>.of(arrived);
+    arrived.clear();
+    await _dao.upsertCards(game, batch);
+    return batch.length;
   }
 
   /// Every printing sharing a group id, fetching on demand when unknown.
