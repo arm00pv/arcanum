@@ -13,9 +13,22 @@ import 'package:arcanum/features/auth/sign_in_screen.dart';
 /// confirmation link opened in another tab - closes the vault by itself. The
 /// screen never has to tell the gate that it succeeded.
 class AccountGate extends StatefulWidget {
-  const AccountGate({super.key, required this.service, required this.child});
+  const AccountGate({
+    super.key,
+    required this.service,
+    required this.child,
+    this.onSignedIn,
+  });
 
   final AccountService service;
+
+  /// Called when a session appears, including one restored on launch.
+  ///
+  /// This is the moment the vault stops being this browser's and starts being
+  /// the account's, so it is where the two are reconciled. Deliberately not
+  /// awaited: a collection of a few thousand cards takes a moment to travel,
+  /// and the collector should be looking at their cards while it does.
+  final Future<void> Function()? onSignedIn;
 
   /// The vault, shown once somebody is signed in.
   final Widget child;
@@ -35,8 +48,16 @@ class _AccountGateState extends State<AccountGate> {
       final bool signedIn = state.session != null;
       if (signedIn != _signedIn && mounted) {
         setState(() => _signedIn = signedIn);
+        if (signedIn) {
+          unawaited(widget.onSignedIn?.call() ?? Future<void>.value());
+        }
       }
     });
+    // A session restored on launch never fires a change, so the same work has
+    // to be started here or a returning collector would sync never.
+    if (_signedIn) {
+      unawaited(widget.onSignedIn?.call() ?? Future<void>.value());
+    }
   }
 
   @override

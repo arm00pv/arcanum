@@ -2,11 +2,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:arcanum/app.dart';
 import 'package:arcanum/core/platform/web_database.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/auth/account_service.dart';
+import 'package:arcanum/data/sync/account_table.dart';
+import 'package:arcanum/data/sync/collection_sync.dart';
+import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/features/auth/account_gate.dart';
 import 'package:arcanum/features/auth/account_providers.dart';
 import 'package:arcanum/data/backup/backup_scheduler.dart';
@@ -78,7 +82,15 @@ Future<void> main() async {
     if (kIsWeb) {
       bootStep.value = 'checking your account';
       account = await AccountService.start();
-      app = AccountGate(service: account, child: app);
+      final CollectionSync collection = CollectionSync(
+        table: SupabaseAccountTable(Supabase.instance.client),
+        db: database.db,
+      );
+      app = AccountGate(
+        service: account,
+        onSignedIn: () => _reconcile(collection),
+        child: app,
+      );
     }
 
     runApp(
@@ -97,6 +109,25 @@ Future<void> main() async {
     debugPrint('[boot] $error');
     debugPrint('$stack');
     runApp(BootFailure(error: '$error', detail: '$stack'));
+  }
+}
+
+/// Brings every game's collection into step with the account.
+///
+/// Every game, not just the one on screen: a collector who signs in on a new
+/// browser should find all of their vaults, not the one they happened to be
+/// looking at. One query per game, once per sign-in.
+///
+/// A failure is logged and not thrown. The browser still holds everything it
+/// held a moment ago, so a sync that did not happen is a delay rather than a
+/// loss - and there is nothing here a collector could usefully do about it.
+Future<void> _reconcile(CollectionSync sync) async {
+  for (final CardGame game in CardGame.values) {
+    try {
+      await sync.sync(game);
+    } catch (error) {
+      debugPrint('[sync] $game did not reconcile: $error');
+    }
   }
 }
 
