@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 
 import 'package:arcanum/core/theme/mana.dart';
 import 'package:arcanum/data/api/ygo_models.dart';
+import 'package:arcanum/data/catalog/card_art.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -219,7 +220,7 @@ class YgoCatalog extends CardCatalog {
     // YGOPRODeck serves a raster JPG set image or nothing at all; there is
     // no SVG symbol in the payload, so the UI draws its own glyph.
     iconSvgUri: null,
-    logoUri: set.imageUrl,
+    logoUri: set.imageUrl == null ? null : CardArt.host(set.imageUrl!),
     collectorNumberStart: 1,
   );
 
@@ -766,12 +767,14 @@ class YgoCatalog extends CardCatalog {
     final image = card.primaryImage;
     if (image == null) return const <String, String>{};
     return <String, String>{
-      if (image.imageUrlSmall.isNotEmpty) 'small': image.imageUrlSmall,
+      if (image.imageUrlSmall.isNotEmpty)
+        'small': CardArt.host(image.imageUrlSmall),
       if (image.imageUrl.isNotEmpty) ...{
-        'normal': image.imageUrl,
-        'large': image.imageUrl,
+        'normal': CardArt.host(image.imageUrl),
+        'large': CardArt.host(image.imageUrl),
       },
-      if (image.imageUrlCropped.isNotEmpty) 'art_crop': image.imageUrlCropped,
+      if (image.imageUrlCropped.isNotEmpty)
+        'art_crop': CardArt.host(image.imageUrlCropped),
     };
   }
 

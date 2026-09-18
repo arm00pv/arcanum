@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
+import 'package:arcanum/data/catalog/card_art.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -714,9 +715,9 @@ class TcgcsvCatalog extends CardCatalog {
   /// the same product at other widths by naming convention - which is what the
   /// other catalogue in this app that uses this CDN already relies on.
   static Map<String, String> _images(int productId) => <String, String>{
-    'small': '$_imageCdn/${productId}_200w.jpg',
-    'normal': '$_imageCdn/${productId}_400w.jpg',
-    'large': '$_imageCdn/${productId}_in_1000x1000.jpg',
+    'small': CardArt.host('$_imageCdn/${productId}_200w.jpg'),
+    'normal': CardArt.host('$_imageCdn/${productId}_400w.jpg'),
+    'large': CardArt.host('$_imageCdn/${productId}_in_1000x1000.jpg'),
   };
 
   /// The position within the set, from the number the provider prints.

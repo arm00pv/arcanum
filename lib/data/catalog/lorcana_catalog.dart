@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 
 import 'package:arcanum/core/theme/mana.dart';
+import 'package:arcanum/data/catalog/card_art.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -420,7 +421,7 @@ class LorcanaCatalog extends CardCatalog {
     String? tcgplayerId,
   ) {
     if (tcgplayerId != null) {
-      final base = '$_imageCdn/$tcgplayerId';
+      final base = CardArt.host('$_imageCdn/$tcgplayerId');
       return {
         'small': '${base}_200w.jpg',
         'normal': '${base}_400w.jpg',
@@ -434,7 +435,7 @@ class LorcanaCatalog extends CardCatalog {
       final out = <String, String>{};
       for (final size in const ['small', 'normal', 'large']) {
         final url = _string(digital[size]);
-        if (url != null) out[size] = url;
+        if (url != null) out[size] = CardArt.host(url);
       }
       if (out.isNotEmpty) return out;
     }

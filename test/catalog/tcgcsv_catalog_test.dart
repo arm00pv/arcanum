@@ -18,6 +18,7 @@
 import 'dart:typed_data';
 
 import 'package:arcanum/core/theme/mana.dart';
+import 'package:arcanum/data/catalog/card_art.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/catalog/tcgcsv_catalog.dart';
 import 'package:arcanum/domain/models/card_game.dart';
@@ -499,6 +500,26 @@ void main() {
       expect(cards.first.imageUrl(), contains('/453505_400w.jpg'));
       expect(cards.first.imageUrl(size: 'small'), contains('_200w.jpg'));
       expect(cards.first.imageUrl(size: 'large'), contains('_in_1000x1000'));
+    });
+
+    test('and a browser is handed Arcanum for the same picture', () async {
+      // The shop's CDN is one of the hosts a page is not allowed the bytes of
+      // its own picture from, so a web build is handed the relay with the
+      // shop's path kept behind its host key. What a card carries here is the
+      // phone's address, because this run is not a browser; the browser's is
+      // what the chooser makes of that address, which is what stops the two
+      // from drifting apart.
+      final cards = await catalogWith().fetchCardsInSet('op01');
+      final normal = cards.first.imageUrl(size: 'normal')!;
+
+      expect(
+        normal,
+        'https://tcgplayer-cdn.tcgplayer.com/product/453505_400w.jpg',
+      );
+      expect(
+        CardArt.host(normal, web: true),
+        'https://marquezhv.com/arcanumweb-api/art/tcgplayer/product/453505_400w.jpg',
+      );
     });
 
     test(

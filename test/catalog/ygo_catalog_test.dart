@@ -17,6 +17,7 @@
 import 'dart:typed_data';
 
 import 'package:arcanum/core/theme/mana.dart';
+import 'package:arcanum/data/catalog/card_art.dart';
 import 'package:arcanum/data/catalog/ygo_catalog.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -210,6 +211,18 @@ void main() {
       },
     );
 
+    test('and a browser is sent to Arcanum for that image', () async {
+      // YGOPRODeck's image host answers with no CORS header at all, so the
+      // set's own picture is the same broken promise the card art is and is
+      // fetched the same way.
+      final sets = await catalogWith().fetchAllSets();
+
+      expect(
+        CardArt.host(sets[0].logoUri!, web: true),
+        'https://marquezhv.com/arcanumweb-api/art/ygoprodeck/images/sets/LOB.jpg',
+      );
+    });
+
     test('keeps every set when Konami reuses a set code', () async {
       final sets = await catalogWith().fetchAllSets();
 
@@ -341,6 +354,32 @@ void main() {
         expect(card.oracleText, contains('legendary dragon'));
       },
     );
+
+    test('and a browser is sent to Arcanum for every size of it', () async {
+      // These four URLs are the provider's own, taken out of the payload
+      // untouched - which is exactly why the rule has to be applied to each of
+      // them and cannot be a base address this adapter composes.
+      final catalog = catalogWith(
+        bySetName: <String, String>{
+          'Legend of Blue Eyes White Dragon': lobBody,
+        },
+      );
+      final card = (await catalog.fetchCardsInSet('lob'))
+          .firstWhere((c) => c.name == 'Blue-Eyes White Dragon');
+
+      expect(
+        card.imageUris.map(
+          (String size, String url) =>
+              MapEntry<String, String>(size, CardArt.host(url, web: true)),
+        ),
+        <String, String>{
+          'small': 'https://marquezhv.com/arcanumweb-api/art/ygoprodeck/images/cards_small/89631139.jpg',
+          'normal': 'https://marquezhv.com/arcanumweb-api/art/ygoprodeck/images/cards/89631139.jpg',
+          'large': 'https://marquezhv.com/arcanumweb-api/art/ygoprodeck/images/cards/89631139.jpg',
+          'art_crop': 'https://marquezhv.com/arcanumweb-api/art/ygoprodeck/images/cards_cropped/89631139.jpg',
+        },
+      );
+    });
   });
 
   group('prices', () {

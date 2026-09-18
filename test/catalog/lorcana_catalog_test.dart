@@ -18,6 +18,7 @@
 import 'dart:typed_data';
 
 import 'package:arcanum/core/theme/mana.dart';
+import 'package:arcanum/data/catalog/card_art.dart';
 import 'package:arcanum/data/catalog/lorcana_catalog.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -524,6 +525,27 @@ void main() {
         'https://tcgplayer-cdn.tcgplayer.com/product/673302_in_1000x1000.jpg',
       );
       expect(elsa.imageUrl(size: 'normal'), isNot(contains('.avif')));
+    });
+
+    test('and sends a browser to Arcanum for either source of it', () async {
+      // Both hosts Lorcana's art can come from leave a browser without it - the
+      // shop's CDN by policy, Lorcast's card store by saying nothing at all -
+      // so a web build is handed the relay for the JPEG and for the promo AVIF
+      // alike, query string and all.
+      final illustrated = await catalogWith().fetchCardsInSet('11');
+      final elsa = illustrated.firstWhere((c) => c.id == elsaId);
+      final promos = await catalogWith().fetchCardsInSet('cp');
+      final promo = promos.firstWhere((c) => c.id == promoId);
+
+      expect(
+        CardArt.host(elsa.imageUrl(size: 'normal')!, web: true),
+        'https://marquezhv.com/arcanumweb-api/art/tcgplayer/product/673302_400w.jpg',
+      );
+      expect(
+        CardArt.host(promo.imageUrl(size: 'normal')!, web: true),
+        'https://marquezhv.com/arcanumweb-api/art/lorcast/card/digital/normal/'
+        '$promoId.avif?1755566321',
+      );
     });
 
     test('falls back to the provider URL for a promo with no TCGplayer id', () async {

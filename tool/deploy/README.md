@@ -143,6 +143,43 @@ It takes the token as a query parameter as well as a header, because a browser
 navigating to a URL cannot send a header — which does put it in the browser's
 history, so treat the URL as the secret it is.
 
+## What a browser cannot fetch for itself
+
+The web build asks Arcanum's own relay for two things, and asks a CDN for
+nothing it is not allowed to read.
+
+`tcgcsv_proxy.py` runs on the docker bridge at `172.19.0.1:8098`, reachable
+only through Caddy, and answers two routes:
+
+| Route | What it answers |
+| --- | --- |
+| `/arcanumweb-api/tcgcsv/...` | the catalogue for the five games TCGplayer publishes |
+| `/arcanumweb-api/art/<host>/...` | one card's picture, from the CDN the catalogue points at |
+
+The two routes exist for one reason twice over, which is that a browser reads an
+image by fetching its bytes and decoding them itself and so holds a picture to
+the same rule it holds JSON to. tcgcsv sends no CORS headers and asks callers to
+name themselves, which a page can do neither of; YGOPRODeck's image host and
+Lorcast's card store send no `Access-Control-Allow-Origin` at all, and the
+shop's CDN sends a wildcard that is the shop's to withdraw. The relay fetches the
+path with a real User-Agent and hands the answer back with the header the
+browser is waiting for, from an allow-list of origins rather than a wildcard, so
+a page on the internet cannot spend this host's address.
+
+Art is handed over with `Cache-Control: public, max-age=31536000, immutable` -
+a product's picture is never rewritten under the same name, so the browser keeps
+it and the relay is asked for it once. A failure is `no-store` instead, so a CDN
+having a bad minute cannot leave a picture that no reload will mend.
+
+    python3 ~/arcanum/tool/deploy/patch_caddy_art.py
+    sudo docker exec n8n-docker-caddy-caddy-1 caddy reload --config /etc/Caddyfile --adapter caddyfile
+    pkill -f tcgcsv_proxy.py; nohup python3 ~/arcanum/tcgcsv_proxy.py >> ~/arcanum/logs/web-relay.log 2>&1 &
+
+Nothing supervises the relay: it has been started by hand since it was written,
+which is why the restart is written down here rather than assumed. The patcher
+adds the art route to every site that already serves the browser build, and says
+so when it finds one already there.
+
 ## Rebuilding by hand
 
     nohup ~/arcanum/rebuild_mtg_history.sh > ~/arcanum/logs/mtg_rebuild.log 2>&1 &
