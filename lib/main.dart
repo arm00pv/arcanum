@@ -8,6 +8,8 @@ import 'package:arcanum/app.dart';
 import 'package:arcanum/core/platform/web_database.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/auth/account_service.dart';
+import 'package:arcanum/data/catalog/catalog_table.dart';
+import 'package:arcanum/data/catalog/supabase_catalog.dart';
 import 'package:arcanum/data/sync/account_changes.dart';
 import 'package:arcanum/data/sync/account_table.dart';
 import 'package:arcanum/data/sync/collection_sync.dart';
@@ -18,6 +20,7 @@ import 'package:arcanum/features/auth/collection_listener.dart';
 import 'package:arcanum/features/auth/collection_watcher.dart';
 import 'package:arcanum/data/backup/backup_scheduler.dart';
 import 'package:arcanum/data/db/app_database.dart';
+import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/providers.dart';
 
 /// Which step of the startup the app is on, so the screen can say.
@@ -69,7 +72,32 @@ Future<void> main() async {
 
     bootStep.value = 'reading preferences';
     final settings = await AppSettings.load();
-    final bootstrap = Bootstrap.create(database: database, settings: settings);
+
+    // Where the account will be, filled in below for a browser. Declared here
+    // because the catalogue is built before it is: whether the shared
+    // catalogue may be read is asked at the moment of each call, and by then
+    // this holds the service.
+    AccountService? account;
+
+    final bootstrap = Bootstrap.create(
+      database: database,
+      settings: settings,
+      // A browser reads Lorcana from the shared catalogue, but only while
+      // somebody is signed in and has left the switch in Settings alone. The
+      // phone is handed neither of these, so it keeps the five card providers
+      // and never constructs any part of the server path.
+      sharedCatalog: kIsWeb
+          ? () => SupabaseCatalog(
+              game: CardGame.lorcana,
+              // Read at the first query rather than here: the client exists
+              // only once Supabase.initialize has run, which is after this.
+              table: SupabaseCatalogTable(() => Supabase.instance.client),
+            )
+          : null,
+      sharedCatalogAllowed: kIsWeb
+          ? () => settings.serverCatalog && (account?.isSignedIn ?? false)
+          : null,
+    );
 
     // Android's scheduler is told what the collector chose before the vault is
     // drawn, so a backup promised days ago is already queued if it is due.
@@ -81,7 +109,6 @@ Future<void> main() async {
     // app has no accounts, keeps its vault on the phone, and never sees the
     // sign-in screen; a browser has nothing to keep a vault in, so it does.
     Widget app = const ArcanumApp();
-    AccountService? account;
     if (kIsWeb) {
       bootStep.value = 'checking your account';
       account = await AccountService.start();

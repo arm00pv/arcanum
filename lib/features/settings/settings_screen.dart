@@ -262,6 +262,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: 'Who this vault belongs to',
             ),
             _signedInAs(context, account),
+            const SectionHeader(
+              title: 'Catalogue',
+              subtitle: 'Where this browser reads card data from',
+            ),
+            _catalogue(context, settings),
           ],
           const SectionHeader(
             title: 'Appearance',
@@ -1061,6 +1066,37 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         radius: 20,
         padding: padding ?? const EdgeInsets.all(16),
         child: child,
+      ),
+    );
+  }
+
+  /// Where a signed-in browser reads the card catalogue from.
+  ///
+  /// Drawn only where there is an account, because the shared catalogue is read
+  /// through the session that account holds - a collector who is signed out, or
+  /// on the phone, never sees a switch for something they cannot have. Turning
+  /// it off is the rollback for the whole migration: every game goes back to the
+  /// provider it came from without a release.
+  Widget _catalogue(BuildContext context, AppSettings settings) {
+    final c = context.c;
+    return _group(
+      padding: EdgeInsets.zero,
+      child: SwitchListTile(
+        value: settings.serverCatalog,
+        onChanged: (bool value) {
+          setState(() => settings.serverCatalog = value);
+        },
+        contentPadding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
+        title: Text('Read Lorcana from Arcanum', style: context.t.titleSmall),
+        subtitle: Text(
+          'Sets and cards come from Arcanum\'s own catalogue instead of from '
+          'the card provider, so the set list is there before anything is '
+          'downloaded and a search covers the whole game rather than the part '
+          'of it this browser happens to have. Off is the app as it has always '
+          'been: every game asks its own provider.',
+          style: context.t.bodySmall?.copyWith(color: c.textTertiary),
+        ),
+        isThreeLine: true,
       ),
     );
   }

@@ -47,6 +47,7 @@ class AppSettings extends ChangeNotifier {
   static const _kPokemonHistoryEndpoint = 'pokemon_history_endpoint';
   static const _kJustTcgKey = 'justtcg_key';
   static const _kAutoSnapshot = 'auto_snapshot';
+  static const _kServerCatalog = 'server_catalog';
   static const _kConditionAdjust = 'condition_adjust';
   static const _kActiveGame = 'active_game';
   static const _kOnboarded = 'onboarded';
@@ -422,6 +423,21 @@ class AppSettings extends ChangeNotifier {
 
   set autoSnapshot(bool v) {
     _prefs.setBool(_kAutoSnapshot, v);
+    notifyListeners();
+  }
+
+  /// Whether this build reads the card catalogue from Arcanum's own server
+  /// rather than from the card providers.
+  ///
+  /// Off until it is asked for, and only ever asked for in a browser: the
+  /// switch that writes it is not drawn anywhere else, because a phone has no
+  /// account to read the catalogue through and has to work with the radio off.
+  /// It is the rollback for the whole migration - a browser that turns it off
+  /// is back on the provider path without a release.
+  bool get serverCatalog => _prefs.getBool(_kServerCatalog) ?? false;
+
+  set serverCatalog(bool v) {
+    _prefs.setBool(_kServerCatalog, v);
     notifyListeners();
   }
 

@@ -109,8 +109,9 @@ class _SampleLorcast implements HttpClientAdapter {
 
 /// The catalog_cards columns for one card.
 ///
-/// A transcription of CatalogDao._cardToRow, which is private and also writes
-/// the SQLite-only price columns. What is being compared is the *stored row*
+/// A transcription of the shared mapper in lib/data/db/catalog_row.dart, which
+/// this test keeps its own copy of because it writes the SQLite-only price
+/// columns too. What is being compared is the *stored row*
 /// rather than the model, because a row is what reaches the database and what
 /// the other language has to reproduce. Booleans stay booleans: the catalogue
 /// keeps the honest type and the adapter converts them to the 0/1 the SQLite

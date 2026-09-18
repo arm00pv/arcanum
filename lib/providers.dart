@@ -8,6 +8,7 @@ import 'package:arcanum/data/backup/backup_service.dart';
 import 'package:arcanum/data/catalog/lorcana_catalog.dart';
 import 'package:arcanum/data/catalog/mtg_catalog.dart';
 import 'package:arcanum/data/catalog/pokemon_catalog.dart';
+import 'package:arcanum/data/catalog/routed_catalog.dart';
 import 'package:arcanum/data/catalog/tcgcsv_catalog.dart';
 import 'package:arcanum/data/catalog/ygo_catalog.dart';
 import 'package:arcanum/data/db/alert_dao.dart';
@@ -121,10 +122,18 @@ class Bootstrap {
   CollectionRepository collectionFor(CardGame game) => collections[game]!;
 
   /// Wires the object graph. The only place construction order matters.
+  ///
+  /// [sharedCatalog] and [sharedCatalogAllowed] are what a browser is handed
+  /// and a phone is not: the first builds the catalogue that reads Arcanum's own
+  /// Postgres, the second answers whether it may be read at all. Both are
+  /// absent on a phone, so no part of the server path exists there and the map
+  /// below is the one it has always had.
   static Bootstrap create({
     required AppDatabase database,
     required AppSettings settings,
     Map<CardGame, CardCatalog>? catalogs,
+    CardCatalog Function()? sharedCatalog,
+    bool Function()? sharedCatalogAllowed,
   }) {
     final catalogDao = CatalogDao(database.db);
     final collectionDao = CollectionDao(database.db);
@@ -136,13 +145,27 @@ class Bootstrap {
       settings: settings,
     );
 
+    // Lorcana is the only game the shared catalogue holds so far, so it is the
+    // only one that gets a router. Moving another game to the server is adding
+    // it here, and moving one back is taking it out - the provider behind it
+    // stays either way, which is what makes the fallback worth having.
+    final CardCatalog lorcana =
+        sharedCatalog == null || sharedCatalogAllowed == null
+        ? LorcanaCatalog()
+        : RoutedCatalog(
+            game: CardGame.lorcana,
+            provider: LorcanaCatalog(),
+            server: sharedCatalog(),
+            serverAllowed: sharedCatalogAllowed,
+          );
+
     final resolvedCatalogs =
         catalogs ??
         <CardGame, CardCatalog>{
           CardGame.mtg: MtgCatalog(),
           CardGame.pokemon: PokemonCatalog(),
           CardGame.yugioh: YgoCatalog(),
-          CardGame.lorcana: LorcanaCatalog(),
+          CardGame.lorcana: lorcana,
           // The three games TCGplayer catalogs itself share one adapter: the
           // provider's shape is the same for all of them and only the category
           // id and the name of the colour field differ.
