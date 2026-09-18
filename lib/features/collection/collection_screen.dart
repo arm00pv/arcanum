@@ -270,9 +270,12 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                         : SliverPadding(
                             padding: const EdgeInsets.fromLTRB(14, 8, 14, 120),
                             sliver: SliverGrid.builder(
+                              // Bounded by the card, not by a count, so a
+                              // desktop window shows the collection rather than
+                              // three cards the size of a plate.
                               gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 3,
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: 190,
                                     mainAxisSpacing: 12,
                                     crossAxisSpacing: 10,
                                     childAspectRatio: 0.5,
@@ -530,11 +533,21 @@ class _EntryGridTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: CardThumbnail(
-              imageUrl: card?.imageUrl(size: 'normal'),
-              rarity: CardRarity.fromCode(card?.rarity),
-              quantity: valued.entry.quantity.toDouble(),
-              borderRadius: BorderRadius.circular(10),
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints box) =>
+                  CardThumbnail(
+                    imageUrl: card?.imageUrl(
+                      size: CardThumbnail.renditionFor(
+                        width: box.maxWidth,
+                        devicePixelRatio: MediaQuery.devicePixelRatioOf(
+                          context,
+                        ),
+                      ),
+                    ),
+                    rarity: CardRarity.fromCode(card?.rarity),
+                    quantity: valued.entry.quantity.toDouble(),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
             ),
           ),
           const SizedBox(height: 6),

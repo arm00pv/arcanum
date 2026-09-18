@@ -142,16 +142,26 @@ class EmptyState extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: context.t.titleMedium,
           ),
+          // A sentence four hundred pixels long is comfortable; one fourteen
+          // hundred pixels long is not, because the eye loses the start of the
+          // next line on the way back. A desktop window is wider than any
+          // sentence needs, so the copy is capped rather than stretched to the
+          // edge - capped here rather than around the column, because the
+          // column is stretched to the window by whatever holds it and a cap
+          // outside it would simply be overruled.
           if (message != null) ...<Widget>[
             const SizedBox(height: 6),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: context.t.bodySmall?.copyWith(
-                color: c.textSecondary,
-                height: 1.4,
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _readingWidth),
+              child: Text(
+                message,
+                textAlign: TextAlign.center,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: context.t.bodySmall?.copyWith(
+                  color: c.textSecondary,
+                  height: 1.4,
+                ),
               ),
             ),
           ],
@@ -160,6 +170,9 @@ class EmptyState extends StatelessWidget {
       ),
     );
   }
+
+  /// How wide a line of supporting copy is allowed to run.
+  static const double _readingWidth = 560;
 }
 
 /// A dashboard metric tile: small label, big numeric value and optional delta.

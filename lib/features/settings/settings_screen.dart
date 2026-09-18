@@ -19,6 +19,8 @@ import 'package:arcanum/core/utils/formatters.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/data/update/update_service.dart';
 import 'package:arcanum/features/report/forecast_audit_screen.dart';
+import 'package:arcanum/data/auth/account_service.dart';
+import 'package:arcanum/features/auth/account_providers.dart';
 import 'package:arcanum/features/settings/account_screen.dart';
 import 'package:arcanum/features/settings/sync_screen.dart';
 import 'package:arcanum/features/report/valuation_report_screen.dart';
@@ -185,12 +187,60 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
+  /// Who is signed in, and how they stop being.
+  ///
+  /// The address is the whole of what the app knows about them, so it is the
+  /// whole of what this shows. Signing out is the one action: it ends the
+  /// session, and the gate above the vault closes behind it - there is nothing
+  /// left here to tidy up afterwards.
+  Widget _signedInAs(BuildContext context, AccountService account) {
+    final c = context.c;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: c.surfaceRaised,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: c.hairline),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                'Signed in as',
+                style: context.t.labelSmall?.copyWith(color: c.textTertiary),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                account.user?.email ?? 'this account',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.t.bodyMedium?.copyWith(color: c.textPrimary),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => account.signOut(),
+                icon: const Icon(Icons.logout_rounded, size: 18),
+                label: const Text('Sign out'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // -------------------------------------------------------------------- build
 
   @override
   Widget build(BuildContext context) {
     final AppSettings settings = ref.watch(settingsProvider);
     final CardGame game = ref.watch(activeGameProvider);
+    // Null on the phone, which has no account to show. Present in a browser,
+    // where the vault belongs to one.
+    final AccountService? account = ref.watch(accountServiceProvider);
 
     return Scaffold(
       appBar: GlassAppBar(
@@ -206,6 +256,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 120),
         children: <Widget>[
+          if (account != null) ...<Widget>[
+            const SectionHeader(
+              title: 'Arcanum account',
+              subtitle: 'Who this vault belongs to',
+            ),
+            _signedInAs(context, account),
+          ],
           const SectionHeader(
             title: 'Appearance',
             subtitle: 'How Arcanum looks',

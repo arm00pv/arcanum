@@ -56,6 +56,33 @@ class CardThumbnail extends StatelessWidget {
   /// The true Magic card aspect ratio (width : height).
   static const double cardAspectRatio = 488 / 680;
 
+  /// The rendition to ask a provider for, given the box the art is drawn in.
+  ///
+  /// A set screen asks for one picture per card, and which picture it asks for
+  /// is the difference between a page that opens and one that crawls: Scryfall
+  /// serves 146, 488 and 672 pixels across under these names, and the shop's CDN
+  /// 200, 400 and 1000. Asking for the widest of them to fill a box two hundred
+  /// pixels wide spends six times the bytes on pixels nobody can see - and the
+  /// further the window is stretched, the more cards are on screen at once, so
+  /// the waste multiplies exactly where the page can least afford it.
+  ///
+  /// The widths below are the larger of the two catalogues' for each name, so a
+  /// box is never handed a picture smaller than the one it asked for. A
+  /// catalogue that publishes fewer renditions falls back in
+  /// [TcgCard.imageUrl], so nothing here can produce a missing picture.
+  static String renditionFor({
+    required double width,
+    required double devicePixelRatio,
+  }) {
+    final double needed = width * devicePixelRatio;
+    if (needed <= _smallWidth) return 'small';
+    if (needed <= _normalWidth) return 'normal';
+    return 'large';
+  }
+
+  static const double _smallWidth = 200;
+  static const double _normalWidth = 488;
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;

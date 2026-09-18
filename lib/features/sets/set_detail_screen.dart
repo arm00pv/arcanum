@@ -340,9 +340,14 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                         ? SliverPadding(
                             padding: const EdgeInsets.fromLTRB(14, 10, 14, 120),
                             sliver: SliverGrid.builder(
+                              // Sized by the space a card wants, not by a
+                              // count: three columns is right on a phone and
+                              // absurd on a desktop, where the same rule puts
+                              // eight on the screen instead of three enormous
+                              // ones.
                               gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 3,
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: 190,
                                     mainAxisSpacing: 12,
                                     crossAxisSpacing: 10,
                                     childAspectRatio: 0.52,
@@ -508,12 +513,24 @@ class _CardGridTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(
-                child: CardThumbnail(
-                  imageUrl: card.imageUrl(size: 'normal'),
-                  heroTag: 'card-${card.id}',
-                  rarity: rarity,
-                  quantity: owned > 0 ? owned.toDouble() : null,
-                  borderRadius: BorderRadius.circular(10),
+                // The box decides which rendition is worth its bytes, and only
+                // the box knows how wide it turned out.
+                child: LayoutBuilder(
+                  builder: (BuildContext context, BoxConstraints box) =>
+                      CardThumbnail(
+                        imageUrl: card.imageUrl(
+                          size: CardThumbnail.renditionFor(
+                            width: box.maxWidth,
+                            devicePixelRatio: MediaQuery.devicePixelRatioOf(
+                              context,
+                            ),
+                          ),
+                        ),
+                        heroTag: 'card-${card.id}',
+                        rarity: rarity,
+                        quantity: owned > 0 ? owned.toDouble() : null,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                 ),
               ),
               const SizedBox(height: 6),
