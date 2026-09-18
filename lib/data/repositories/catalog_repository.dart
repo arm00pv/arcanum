@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:arcanum/core/utils/collector_query.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/domain/models/card_game.dart';
@@ -259,8 +260,17 @@ class CatalogRepository {
     return _dao.printingsOf(game, groupId);
   }
 
-  /// Free-text search over the cached catalogue, extended by the API when the
-  /// local cache has nothing useful to offer.
+  /// Free-text search over the cached catalogue, extended by the catalogue
+  /// behind it when the local cache has nothing useful to offer.
+  ///
+  /// A number and a word leave here by different roads, and neither of them is
+  /// a provider for the number. A number names a printing, the providers answer
+  /// in words - asking Scryfall for "001" answers with every card that mentions
+  /// it - so a number is answered from the cache, and, when the cache holds the
+  /// grammar but not the card, from the shared catalogue, which can address a
+  /// printing by its number. That is the case a browser meets on its first
+  /// sign-in: it holds a collection whose rows name their cards by id, and a
+  /// catalogue that has never downloaded the set they are in.
   Future<List<TcgCard>> search(
     CardGame game,
     String query, {
@@ -268,15 +278,29 @@ class CatalogRepository {
   }) async {
     final q = query.trim();
     if (q.isEmpty) return const [];
-    // A number names a printing rather than a word. There is nothing for the
-    // provider to be asked - its search takes names and rules text - and a
-    // name search for "001" would answer with every card that mentions it.
-    final List<TcgCard>? byNumber = await _dao.searchByNumber(
-      game,
-      q,
-      limit: limit,
-    );
-    if (byNumber != null) return byNumber;
+
+    final CollectorQuery? parsed = CollectorQuery.parse(q);
+    if (parsed != null) {
+      final List<TcgCard>? local = await _dao.searchByNumber(
+        game,
+        q,
+        limit: limit,
+      );
+      if (local != null && local.isNotEmpty) return local;
+      final List<TcgCard> remote = await _numberFromCatalogue(
+        game,
+        q,
+        parsed,
+        limit: limit,
+      );
+      if (remote.isNotEmpty) return remote;
+      // The query read as a number and the cache had an answer for it, even if
+      // that answer was nothing: "BT26-999" is a printing this set does not
+      // have, and searching every card that mentions "BT26-999" would be a
+      // worse answer than none.
+      if (local != null) return local;
+    }
+
     final local = await _dao.searchCached(game, q, limit: limit);
     if (local.length >= 12) return local;
     try {
@@ -290,6 +314,50 @@ class CatalogRepository {
       // Offline or no results; the local answer stands.
     }
     return local;
+  }
+
+  /// A number the local cache cannot answer, asked of the catalogue that can.
+  ///
+  /// Reached only when the query parsed as a collector number and this device
+  /// could not resolve it, and never for the phone: the catalogue's default
+  /// implementation of the number lookup returns nothing without a request, so
+  /// a device with no server behaves exactly as it did before this existed.
+  ///
+  /// A source that answers nothing is answered with the local result - an empty
+  /// list - rather than by asking a provider, because a provider has no number
+  /// endpoint to ask and would answer a question nobody put.
+  Future<List<TcgCard>> _numberFromCatalogue(
+    CardGame game,
+    String query,
+    CollectorQuery parsed, {
+    required int limit,
+  }) async {
+    if (!supports(game)) return const <TcgCard>[];
+    // A parse that named no set and does not stand on its own names no printing
+    // either: "P1" is a number with a region in front of it and "Mewtwo 2" is a
+    // word with a number after it, and the catalogue answers both with nothing.
+    // Not asking is the difference between one wasted request per keystroke and
+    // none.
+    if (parsed.codeCandidates.isEmpty && !parsed.standalone) {
+      return const <TcgCard>[];
+    }
+    try {
+      final cards = await catalogFor(game)
+          .fetchCardsByNumber(parsed, limit: limit);
+      if (cards.isEmpty) return const <TcgCard>[];
+      await _dao.upsertCards(game, cards);
+      // SQLite is what the screen reads, so the number is asked of it again:
+      // a printing that was already cached keeps the row it had, prices and
+      // all, and the ones that just arrived are read back in the order the
+      // local search puts them in.
+      final merged = await _dao.searchByNumber(game, query, limit: limit);
+      return merged != null && merged.isNotEmpty ? merged : cards;
+    } catch (_) {
+      // Offline, signed out, or a catalogue that cannot address a printing by
+      // its number. All three are the app as it was before the shared
+      // catalogue existed, which is the only acceptable failure here.
+      return const <TcgCard>[];
+    }
   }
 
   /// Sets whose name or code matches [query], newest first.

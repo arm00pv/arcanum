@@ -8,7 +8,13 @@
 // sign-in for those games. These tests hold it to what its callers rely on:
 // every id is asked about once, a printing nobody can answer for is left out
 // rather than turned into a failure, and an empty list is not a request.
+//
+// The number lookup is the second body [CardCatalog] carries, and no source
+// overrides it at all. It answers nothing, and the last group here is what says
+// so: a provider that was asked for a collector number would answer a word
+// search, and the phone's search has never taken that road.
 
+import 'package:arcanum/core/utils/collector_query.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -110,6 +116,31 @@ void main() {
 
     test('is not asked anything at all for an empty list', () async {
       expect(await catalog.fetchCardsByIds(const <String>[]), isEmpty);
+      expect(catalog.asked, isEmpty);
+    });
+  });
+
+  group('a source whose search takes words', () {
+    test(
+      'answers a collector number with nothing, and makes no request',
+      () async {
+        // The phone's behaviour, and it is deliberate rather than unfinished:
+        // CatalogDao.searchByNumber owns the number grammar and the local cache
+        // owns the answer, so a provider is never asked a question it would
+        // answer with every card that mentions "001".
+        expect(
+          await catalog.fetchCardsByNumber(CollectorQuery.parse('001')!),
+          isEmpty,
+        );
+        expect(catalog.asked, isEmpty);
+      },
+    );
+
+    test('does not become a name search when the query names a set', () async {
+      final CollectorQuery? parsed = CollectorQuery.parse('BT-26-001');
+      expect(parsed, isNotNull);
+
+      expect(await catalog.fetchCardsByNumber(parsed!), isEmpty);
       expect(catalog.asked, isEmpty);
     });
   });

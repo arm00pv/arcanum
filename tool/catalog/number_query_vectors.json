@@ -1,0 +1,1978 @@
+{
+  "generated_by": "tool/catalog/gen_number_query_vectors.dart",
+  "why": "section 4: one grammar, in Dart, and Postgres agreeing with what it produced",
+  "queries": [
+    {
+      "raw": "",
+      "parsed": false
+    },
+    {
+      "raw": "   ",
+      "parsed": false
+    },
+    {
+      "raw": "#001",
+      "parsed": false
+    },
+    {
+      "raw": "0",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "0",
+      "standalone": true
+    },
+    {
+      "raw": "000",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "000",
+      "standalone": true
+    },
+    {
+      "raw": "001",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "001",
+      "standalone": true
+    },
+    {
+      "raw": "01",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "01",
+      "standalone": true
+    },
+    {
+      "raw": "1",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "1",
+      "standalone": true
+    },
+    {
+      "raw": "10",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "10",
+      "standalone": true
+    },
+    {
+      "raw": "100",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "100",
+      "standalone": true
+    },
+    {
+      "raw": "101",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "101",
+      "standalone": true
+    },
+    {
+      "raw": "102",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "102",
+      "standalone": true
+    },
+    {
+      "raw": "103",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "103",
+      "standalone": true
+    },
+    {
+      "raw": "104",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "104",
+      "standalone": true
+    },
+    {
+      "raw": "105",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "105",
+      "standalone": true
+    },
+    {
+      "raw": "106",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "106",
+      "standalone": true
+    },
+    {
+      "raw": "107",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "107",
+      "standalone": true
+    },
+    {
+      "raw": "108",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "108",
+      "standalone": true
+    },
+    {
+      "raw": "109",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "109",
+      "standalone": true
+    },
+    {
+      "raw": "11",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "11",
+      "standalone": true
+    },
+    {
+      "raw": "110",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "110",
+      "standalone": true
+    },
+    {
+      "raw": "111",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "111",
+      "standalone": true
+    },
+    {
+      "raw": "112",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "112",
+      "standalone": true
+    },
+    {
+      "raw": "113",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "113",
+      "standalone": true
+    },
+    {
+      "raw": "114",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "114",
+      "standalone": true
+    },
+    {
+      "raw": "115",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "115",
+      "standalone": true
+    },
+    {
+      "raw": "116",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "116",
+      "standalone": true
+    },
+    {
+      "raw": "117",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "117",
+      "standalone": true
+    },
+    {
+      "raw": "118",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "118",
+      "standalone": true
+    },
+    {
+      "raw": "119",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "119",
+      "standalone": true
+    },
+    {
+      "raw": "12",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "12",
+      "standalone": true
+    },
+    {
+      "raw": "120",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "120",
+      "standalone": true
+    },
+    {
+      "raw": "121",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "121",
+      "standalone": true
+    },
+    {
+      "raw": "122",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "122",
+      "standalone": true
+    },
+    {
+      "raw": "123",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "123",
+      "standalone": true
+    },
+    {
+      "raw": "123A",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "123A",
+      "standalone": true
+    },
+    {
+      "raw": "123a",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "123a",
+      "standalone": true
+    },
+    {
+      "raw": "124",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "124",
+      "standalone": true
+    },
+    {
+      "raw": "125",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "125",
+      "standalone": true
+    },
+    {
+      "raw": "125F",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "125F",
+      "standalone": true
+    },
+    {
+      "raw": "125f",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "125f",
+      "standalone": true
+    },
+    {
+      "raw": "126",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "126",
+      "standalone": true
+    },
+    {
+      "raw": "127",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "127",
+      "standalone": true
+    },
+    {
+      "raw": "128",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "128",
+      "standalone": true
+    },
+    {
+      "raw": "129",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "129",
+      "standalone": true
+    },
+    {
+      "raw": "13",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "13",
+      "standalone": true
+    },
+    {
+      "raw": "130",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "130",
+      "standalone": true
+    },
+    {
+      "raw": "131",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "131",
+      "standalone": true
+    },
+    {
+      "raw": "132",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "132",
+      "standalone": true
+    },
+    {
+      "raw": "133",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "133",
+      "standalone": true
+    },
+    {
+      "raw": "134",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "134",
+      "standalone": true
+    },
+    {
+      "raw": "135",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "135",
+      "standalone": true
+    },
+    {
+      "raw": "136",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "136",
+      "standalone": true
+    },
+    {
+      "raw": "137",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "137",
+      "standalone": true
+    },
+    {
+      "raw": "138",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "138",
+      "standalone": true
+    },
+    {
+      "raw": "139",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "139",
+      "standalone": true
+    },
+    {
+      "raw": "14",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "14",
+      "standalone": true
+    },
+    {
+      "raw": "140",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "140",
+      "standalone": true
+    },
+    {
+      "raw": "141",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "141",
+      "standalone": true
+    },
+    {
+      "raw": "142",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "142",
+      "standalone": true
+    },
+    {
+      "raw": "143",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "143",
+      "standalone": true
+    },
+    {
+      "raw": "144",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "144",
+      "standalone": true
+    },
+    {
+      "raw": "145",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "145",
+      "standalone": true
+    },
+    {
+      "raw": "146",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "146",
+      "standalone": true
+    },
+    {
+      "raw": "147",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "147",
+      "standalone": true
+    },
+    {
+      "raw": "148",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "148",
+      "standalone": true
+    },
+    {
+      "raw": "149",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "149",
+      "standalone": true
+    },
+    {
+      "raw": "15",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "15",
+      "standalone": true
+    },
+    {
+      "raw": "150",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "150",
+      "standalone": true
+    },
+    {
+      "raw": "151",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "151",
+      "standalone": true
+    },
+    {
+      "raw": "152",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "152",
+      "standalone": true
+    },
+    {
+      "raw": "153",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "153",
+      "standalone": true
+    },
+    {
+      "raw": "154",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "154",
+      "standalone": true
+    },
+    {
+      "raw": "155",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "155",
+      "standalone": true
+    },
+    {
+      "raw": "156",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "156",
+      "standalone": true
+    },
+    {
+      "raw": "157",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "157",
+      "standalone": true
+    },
+    {
+      "raw": "158",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "158",
+      "standalone": true
+    },
+    {
+      "raw": "159",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "159",
+      "standalone": true
+    },
+    {
+      "raw": "16",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "16",
+      "standalone": true
+    },
+    {
+      "raw": "160",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "160",
+      "standalone": true
+    },
+    {
+      "raw": "161",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "161",
+      "standalone": true
+    },
+    {
+      "raw": "162",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "162",
+      "standalone": true
+    },
+    {
+      "raw": "163",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "163",
+      "standalone": true
+    },
+    {
+      "raw": "164",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "164",
+      "standalone": true
+    },
+    {
+      "raw": "165",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "165",
+      "standalone": true
+    },
+    {
+      "raw": "166",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "166",
+      "standalone": true
+    },
+    {
+      "raw": "167",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "167",
+      "standalone": true
+    },
+    {
+      "raw": "168",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "168",
+      "standalone": true
+    },
+    {
+      "raw": "169",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "169",
+      "standalone": true
+    },
+    {
+      "raw": "17",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "17",
+      "standalone": true
+    },
+    {
+      "raw": "170",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "170",
+      "standalone": true
+    },
+    {
+      "raw": "171",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "171",
+      "standalone": true
+    },
+    {
+      "raw": "172",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "172",
+      "standalone": true
+    },
+    {
+      "raw": "173",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "173",
+      "standalone": true
+    },
+    {
+      "raw": "174",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "174",
+      "standalone": true
+    },
+    {
+      "raw": "175",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "175",
+      "standalone": true
+    },
+    {
+      "raw": "176",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "176",
+      "standalone": true
+    },
+    {
+      "raw": "177",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "177",
+      "standalone": true
+    },
+    {
+      "raw": "178",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "178",
+      "standalone": true
+    },
+    {
+      "raw": "179",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "179",
+      "standalone": true
+    },
+    {
+      "raw": "18",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "18",
+      "standalone": true
+    },
+    {
+      "raw": "180",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "180",
+      "standalone": true
+    },
+    {
+      "raw": "181",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "181",
+      "standalone": true
+    },
+    {
+      "raw": "182",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "182",
+      "standalone": true
+    },
+    {
+      "raw": "183",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "183",
+      "standalone": true
+    },
+    {
+      "raw": "184",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "184",
+      "standalone": true
+    },
+    {
+      "raw": "185",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "185",
+      "standalone": true
+    },
+    {
+      "raw": "186",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "186",
+      "standalone": true
+    },
+    {
+      "raw": "187",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "187",
+      "standalone": true
+    },
+    {
+      "raw": "188",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "188",
+      "standalone": true
+    },
+    {
+      "raw": "189",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "189",
+      "standalone": true
+    },
+    {
+      "raw": "19",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "19",
+      "standalone": true
+    },
+    {
+      "raw": "190",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "190",
+      "standalone": true
+    },
+    {
+      "raw": "191",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "191",
+      "standalone": true
+    },
+    {
+      "raw": "192",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "192",
+      "standalone": true
+    },
+    {
+      "raw": "193",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "193",
+      "standalone": true
+    },
+    {
+      "raw": "194",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "194",
+      "standalone": true
+    },
+    {
+      "raw": "195",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "195",
+      "standalone": true
+    },
+    {
+      "raw": "196",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "196",
+      "standalone": true
+    },
+    {
+      "raw": "197",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "197",
+      "standalone": true
+    },
+    {
+      "raw": "198",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "198",
+      "standalone": true
+    },
+    {
+      "raw": "199",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "199",
+      "standalone": true
+    },
+    {
+      "raw": "1F",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "1F",
+      "standalone": true
+    },
+    {
+      "raw": "1f",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "1f",
+      "standalone": true
+    },
+    {
+      "raw": "2",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "2",
+      "standalone": true
+    },
+    {
+      "raw": "20",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "20",
+      "standalone": true
+    },
+    {
+      "raw": "200",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "200",
+      "standalone": true
+    },
+    {
+      "raw": "201",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "201",
+      "standalone": true
+    },
+    {
+      "raw": "202",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "202",
+      "standalone": true
+    },
+    {
+      "raw": "203",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "203",
+      "standalone": true
+    },
+    {
+      "raw": "204",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "204",
+      "standalone": true
+    },
+    {
+      "raw": "205",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "205",
+      "standalone": true
+    },
+    {
+      "raw": "206",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "206",
+      "standalone": true
+    },
+    {
+      "raw": "207",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "207",
+      "standalone": true
+    },
+    {
+      "raw": "208",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "208",
+      "standalone": true
+    },
+    {
+      "raw": "209",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "209",
+      "standalone": true
+    },
+    {
+      "raw": "21",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "21",
+      "standalone": true
+    },
+    {
+      "raw": "210",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "210",
+      "standalone": true
+    },
+    {
+      "raw": "211",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "211",
+      "standalone": true
+    },
+    {
+      "raw": "212",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "212",
+      "standalone": true
+    },
+    {
+      "raw": "213",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "213",
+      "standalone": true
+    },
+    {
+      "raw": "214",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "214",
+      "standalone": true
+    },
+    {
+      "raw": "215",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "215",
+      "standalone": true
+    },
+    {
+      "raw": "216",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "216",
+      "standalone": true
+    },
+    {
+      "raw": "22",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "22",
+      "standalone": true
+    },
+    {
+      "raw": "23",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "23",
+      "standalone": true
+    },
+    {
+      "raw": "24",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "24",
+      "standalone": true
+    },
+    {
+      "raw": "24B",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "24B",
+      "standalone": true
+    },
+    {
+      "raw": "24b",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "24b",
+      "standalone": true
+    },
+    {
+      "raw": "25",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "25",
+      "standalone": true
+    },
+    {
+      "raw": "25JA",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "25JA",
+      "standalone": true
+    },
+    {
+      "raw": "25ZH",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "25ZH",
+      "standalone": true
+    },
+    {
+      "raw": "25ja",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "25ja",
+      "standalone": true
+    },
+    {
+      "raw": "25zh",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "25zh",
+      "standalone": true
+    },
+    {
+      "raw": "26",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "26",
+      "standalone": true
+    },
+    {
+      "raw": "27",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "27",
+      "standalone": true
+    },
+    {
+      "raw": "28",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "28",
+      "standalone": true
+    },
+    {
+      "raw": "29",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "29",
+      "standalone": true
+    },
+    {
+      "raw": "2F",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "2F",
+      "standalone": true
+    },
+    {
+      "raw": "2f",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "2f",
+      "standalone": true
+    },
+    {
+      "raw": "3",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "3",
+      "standalone": true
+    },
+    {
+      "raw": "30",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "30",
+      "standalone": true
+    },
+    {
+      "raw": "31",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "31",
+      "standalone": true
+    },
+    {
+      "raw": "32",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "32",
+      "standalone": true
+    },
+    {
+      "raw": "33",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "33",
+      "standalone": true
+    },
+    {
+      "raw": "34",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "34",
+      "standalone": true
+    },
+    {
+      "raw": "35",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "35",
+      "standalone": true
+    },
+    {
+      "raw": "36",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "36",
+      "standalone": true
+    },
+    {
+      "raw": "37",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "37",
+      "standalone": true
+    },
+    {
+      "raw": "38",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "38",
+      "standalone": true
+    },
+    {
+      "raw": "39",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "39",
+      "standalone": true
+    },
+    {
+      "raw": "3F",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "3F",
+      "standalone": true
+    },
+    {
+      "raw": "3f",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "3f",
+      "standalone": true
+    },
+    {
+      "raw": "4",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4",
+      "standalone": true
+    },
+    {
+      "raw": "40",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "40",
+      "standalone": true
+    },
+    {
+      "raw": "41",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "41",
+      "standalone": true
+    },
+    {
+      "raw": "42",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "42",
+      "standalone": true
+    },
+    {
+      "raw": "43",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "43",
+      "standalone": true
+    },
+    {
+      "raw": "44",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "44",
+      "standalone": true
+    },
+    {
+      "raw": "45",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "45",
+      "standalone": true
+    },
+    {
+      "raw": "46",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "46",
+      "standalone": true
+    },
+    {
+      "raw": "47",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "47",
+      "standalone": true
+    },
+    {
+      "raw": "48",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "48",
+      "standalone": true
+    },
+    {
+      "raw": "49",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "49",
+      "standalone": true
+    },
+    {
+      "raw": "4A",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4A",
+      "standalone": true
+    },
+    {
+      "raw": "4B",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4B",
+      "standalone": true
+    },
+    {
+      "raw": "4C",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4C",
+      "standalone": true
+    },
+    {
+      "raw": "4D",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4D",
+      "standalone": true
+    },
+    {
+      "raw": "4E",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4E",
+      "standalone": true
+    },
+    {
+      "raw": "4a",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4a",
+      "standalone": true
+    },
+    {
+      "raw": "4b",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4b",
+      "standalone": true
+    },
+    {
+      "raw": "4c",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4c",
+      "standalone": true
+    },
+    {
+      "raw": "4d",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4d",
+      "standalone": true
+    },
+    {
+      "raw": "4e",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "4e",
+      "standalone": true
+    },
+    {
+      "raw": "5",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "5",
+      "standalone": true
+    },
+    {
+      "raw": "50",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "50",
+      "standalone": true
+    },
+    {
+      "raw": "50%",
+      "parsed": false
+    },
+    {
+      "raw": "51",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "51",
+      "standalone": true
+    },
+    {
+      "raw": "52",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "52",
+      "standalone": true
+    },
+    {
+      "raw": "53",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "53",
+      "standalone": true
+    },
+    {
+      "raw": "54",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "54",
+      "standalone": true
+    },
+    {
+      "raw": "55",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "55",
+      "standalone": true
+    },
+    {
+      "raw": "56",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "56",
+      "standalone": true
+    },
+    {
+      "raw": "57",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "57",
+      "standalone": true
+    },
+    {
+      "raw": "58",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "58",
+      "standalone": true
+    },
+    {
+      "raw": "59",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "59",
+      "standalone": true
+    },
+    {
+      "raw": "6",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "6",
+      "standalone": true
+    },
+    {
+      "raw": "60",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "60",
+      "standalone": true
+    },
+    {
+      "raw": "61",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "61",
+      "standalone": true
+    },
+    {
+      "raw": "62",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "62",
+      "standalone": true
+    },
+    {
+      "raw": "63",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "63",
+      "standalone": true
+    },
+    {
+      "raw": "64",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "64",
+      "standalone": true
+    },
+    {
+      "raw": "65",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "65",
+      "standalone": true
+    },
+    {
+      "raw": "65F",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "65F",
+      "standalone": true
+    },
+    {
+      "raw": "65f",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "65f",
+      "standalone": true
+    },
+    {
+      "raw": "66",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "66",
+      "standalone": true
+    },
+    {
+      "raw": "67",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "67",
+      "standalone": true
+    },
+    {
+      "raw": "68",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "68",
+      "standalone": true
+    },
+    {
+      "raw": "69",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "69",
+      "standalone": true
+    },
+    {
+      "raw": "7",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "7",
+      "standalone": true
+    },
+    {
+      "raw": "70",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "70",
+      "standalone": true
+    },
+    {
+      "raw": "71",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "71",
+      "standalone": true
+    },
+    {
+      "raw": "72",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "72",
+      "standalone": true
+    },
+    {
+      "raw": "73",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "73",
+      "standalone": true
+    },
+    {
+      "raw": "74",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "74",
+      "standalone": true
+    },
+    {
+      "raw": "75",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "75",
+      "standalone": true
+    },
+    {
+      "raw": "76",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "76",
+      "standalone": true
+    },
+    {
+      "raw": "77",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "77",
+      "standalone": true
+    },
+    {
+      "raw": "78",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "78",
+      "standalone": true
+    },
+    {
+      "raw": "79",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "79",
+      "standalone": true
+    },
+    {
+      "raw": "8",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "8",
+      "standalone": true
+    },
+    {
+      "raw": "80",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "80",
+      "standalone": true
+    },
+    {
+      "raw": "81",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "81",
+      "standalone": true
+    },
+    {
+      "raw": "82",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "82",
+      "standalone": true
+    },
+    {
+      "raw": "83",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "83",
+      "standalone": true
+    },
+    {
+      "raw": "84",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "84",
+      "standalone": true
+    },
+    {
+      "raw": "85",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "85",
+      "standalone": true
+    },
+    {
+      "raw": "86",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "86",
+      "standalone": true
+    },
+    {
+      "raw": "87",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "87",
+      "standalone": true
+    },
+    {
+      "raw": "88",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "88",
+      "standalone": true
+    },
+    {
+      "raw": "89",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "89",
+      "standalone": true
+    },
+    {
+      "raw": "9",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "9",
+      "standalone": true
+    },
+    {
+      "raw": "90",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "90",
+      "standalone": true
+    },
+    {
+      "raw": "91",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "91",
+      "standalone": true
+    },
+    {
+      "raw": "92",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "92",
+      "standalone": true
+    },
+    {
+      "raw": "93",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "93",
+      "standalone": true
+    },
+    {
+      "raw": "94",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "94",
+      "standalone": true
+    },
+    {
+      "raw": "95",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "95",
+      "standalone": true
+    },
+    {
+      "raw": "96",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "96",
+      "standalone": true
+    },
+    {
+      "raw": "97",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "97",
+      "standalone": true
+    },
+    {
+      "raw": "98",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "98",
+      "standalone": true
+    },
+    {
+      "raw": "99",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "99",
+      "standalone": true
+    },
+    {
+      "raw": "A_B",
+      "parsed": false
+    },
+    {
+      "raw": "BLB 123A",
+      "parsed": true,
+      "code_candidates": [
+        "blb"
+      ],
+      "number": "123A",
+      "standalone": false
+    },
+    {
+      "raw": "BLB 123a",
+      "parsed": true,
+      "code_candidates": [
+        "blb"
+      ],
+      "number": "123a",
+      "standalone": false
+    },
+    {
+      "raw": "BT-26",
+      "parsed": true,
+      "code_candidates": [
+        "bt"
+      ],
+      "number": "26",
+      "standalone": false
+    },
+    {
+      "raw": "BT-26-001",
+      "parsed": true,
+      "code_candidates": [
+        "bt26"
+      ],
+      "number": "001",
+      "standalone": false
+    },
+    {
+      "raw": "BT26-001",
+      "parsed": true,
+      "code_candidates": [
+        "bt26"
+      ],
+      "number": "001",
+      "standalone": false
+    },
+    {
+      "raw": "CHARIZARD",
+      "parsed": false
+    },
+    {
+      "raw": "Charizard",
+      "parsed": false
+    },
+    {
+      "raw": "ELSA",
+      "parsed": false
+    },
+    {
+      "raw": "Elsa",
+      "parsed": false
+    },
+    {
+      "raw": "LET IT GO",
+      "parsed": false
+    },
+    {
+      "raw": "LOB-EN001",
+      "parsed": true,
+      "code_candidates": [
+        "loben",
+        "lob"
+      ],
+      "number": "001",
+      "standalone": false
+    },
+    {
+      "raw": "MAMA-EN001",
+      "parsed": true,
+      "code_candidates": [
+        "mamaen",
+        "mama"
+      ],
+      "number": "001",
+      "standalone": false
+    },
+    {
+      "raw": "MEWTWO 2",
+      "parsed": true,
+      "code_candidates": [
+        "mewtwo"
+      ],
+      "number": "2",
+      "standalone": false
+    },
+    {
+      "raw": "Mewtwo 2",
+      "parsed": true,
+      "code_candidates": [
+        "mewtwo"
+      ],
+      "number": "2",
+      "standalone": false
+    },
+    {
+      "raw": "P1",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "1",
+      "standalone": false
+    },
+    {
+      "raw": "ST23-01",
+      "parsed": true,
+      "code_candidates": [
+        "st23"
+      ],
+      "number": "01",
+      "standalone": false
+    },
+    {
+      "raw": "a_b",
+      "parsed": false
+    },
+    {
+      "raw": "blb 123a",
+      "parsed": true,
+      "code_candidates": [
+        "blb"
+      ],
+      "number": "123a",
+      "standalone": false
+    },
+    {
+      "raw": "bt-26",
+      "parsed": true,
+      "code_candidates": [
+        "bt"
+      ],
+      "number": "26",
+      "standalone": false
+    },
+    {
+      "raw": "bt-26-001",
+      "parsed": true,
+      "code_candidates": [
+        "bt26"
+      ],
+      "number": "001",
+      "standalone": false
+    },
+    {
+      "raw": "bt26-001",
+      "parsed": true,
+      "code_candidates": [
+        "bt26"
+      ],
+      "number": "001",
+      "standalone": false
+    },
+    {
+      "raw": "charizard",
+      "parsed": false
+    },
+    {
+      "raw": "elsa",
+      "parsed": false
+    },
+    {
+      "raw": "let it go",
+      "parsed": false
+    },
+    {
+      "raw": "lob-en001",
+      "parsed": true,
+      "code_candidates": [
+        "loben",
+        "lob"
+      ],
+      "number": "001",
+      "standalone": false
+    },
+    {
+      "raw": "mama-en001",
+      "parsed": true,
+      "code_candidates": [
+        "mamaen",
+        "mama"
+      ],
+      "number": "001",
+      "standalone": false
+    },
+    {
+      "raw": "mewtwo 2",
+      "parsed": true,
+      "code_candidates": [
+        "mewtwo"
+      ],
+      "number": "2",
+      "standalone": false
+    },
+    {
+      "raw": "p1",
+      "parsed": true,
+      "code_candidates": [],
+      "number": "1",
+      "standalone": false
+    },
+    {
+      "raw": "st23-01",
+      "parsed": true,
+      "code_candidates": [
+        "st23"
+      ],
+      "number": "01",
+      "standalone": false
+    }
+  ]
+}

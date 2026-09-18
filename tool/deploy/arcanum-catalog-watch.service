@@ -1,0 +1,31 @@
+[Unit]
+Description=Arcanum - report a shared catalogue that has stopped refreshing
+Documentation=https://github.com/arm00pv/arcanum
+After=network-online.target
+Wants=network-online.target
+# A oneshot driven by arcanum-catalog-watch.timer rather than a long-running
+# process: the work is one read of catalog_meta, two counts and at most one
+# notification, and there is nothing to keep alive between runs. It reads the
+# catalogue the way a browser does - PostgREST, with the publishable key - so it
+# holds no database password, and it also fails on the night the read path is
+# what broke. The three questions it asks are in check_catalog_freshness.py.
+
+[Service]
+Type=oneshot
+User=zixen
+Group=zixen
+WorkingDirectory=/home/zixen/arcanum
+# The same credentials file the importer reads: the project URL and the
+# publishable key are facts about the deployment, not arguments to a script.
+# Both of those values are public; nothing secret is read from here.
+EnvironmentFile=/home/zixen/arcanum/supabase.env
+ExecStart=/usr/bin/python3 /home/zixen/arcanum/check_catalog_freshness.py --config /home/zixen/arcanum/notify.json --token-file /home/zixen/arcanum/backup.token --state /home/zixen/arcanum/catalog.state.json
+# The exit status is non-zero when it had something to report, so systemctl
+# status answers the same question the notification did.
+Nice=10
+TimeoutStartSec=300
+StandardOutput=append:/home/zixen/arcanum/logs/catalog_watch.log
+StandardError=append:/home/zixen/arcanum/logs/catalog_watch.log
+
+[Install]
+WantedBy=multi-user.target

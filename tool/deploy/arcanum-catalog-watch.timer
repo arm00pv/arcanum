@@ -1,0 +1,20 @@
+[Unit]
+Description=Arcanum - check the shared catalogue is still being refreshed
+Documentation=https://github.com/arm00pv/arcanum
+
+[Timer]
+# After the whole sampling window, not inside it: pokemon fires at 04:20,
+# lorcana at 04:40 and Yu-Gi-Oh! at 04:55, and each of them can be deferred by
+# its own randomized delay or by Persistent=true to the next boot. By 06:30 the
+# night's answer is a finished record rather than a run in progress, which is
+# what makes "nothing has finished since the window" mean what it says.
+OnCalendar=*-*-* 06:30:00 UTC
+# A host that was off at 06:30 should ask the question when it comes back
+# rather than skip the day: a catalogue being stale is exactly what an
+# overnight outage produces.
+Persistent=true
+RandomizedDelaySec=300
+Unit=arcanum-catalog-watch.service
+
+[Install]
+WantedBy=timers.target

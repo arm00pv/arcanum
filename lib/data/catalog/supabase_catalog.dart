@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:arcanum/core/utils/collector_query.dart';
 import 'package:arcanum/data/catalog/card_art.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/catalog/catalog_table.dart';
@@ -116,35 +117,49 @@ class SupabaseCatalog extends CardCatalog {
     return out;
   }
 
-  /// Free-text search over the whole catalogue.
+  /// Free-text search over the whole game, in one request.
   ///
-  /// Two requests, because the ordering the app searches by - a name that
-  /// *starts with* the query, then a name that contains it, then the newest
-  /// printing - is a predicate PostgREST cannot order by. Asking for the two
-  /// buckets separately is that ordering written down, and it matters to the
+  /// The ordering the app searches by - a name that *starts with* the query,
+  /// then a name that contains it, then the newest printing - is a predicate
+  /// PostgREST cannot order by, which is why this is the catalogue's own search
+  /// rather than two filtered reads stitched together. It matters to the
   /// caller: [CatalogRepository.search] stores what arrives and re-reads it
   /// from SQLite, so results that came back in a different order would be shown
   /// in one.
+  ///
+  /// The query goes as the collector typed it. Escaping the two characters that
+  /// mean something to a pattern is the search's own business - see
+  /// `catalog_search` in tool/catalog/0003_read_functions.sql - because that
+  /// endpoint is reachable by anything holding the publishable key, and a caller
+  /// that forgot would be one keystroke from asking for the whole catalogue.
   @override
   Future<List<TcgCard>> search(String query, {int limit = 100}) async {
     final String q = query.trim();
     if (q.isEmpty) return const <TcgCard>[];
-    final String escaped = _likePattern(q);
+    final rows = await _table.search(game, q, limit: limit);
+    return [for (final row in rows) _card(row)];
+  }
 
-    final found = <String, TcgCard>{};
-    void keep(List<Map<String, Object?>> rows) {
-      for (final row in rows) {
-        if (found.length >= limit) return;
-        final card = _card(row);
-        found.putIfAbsent(card.id, () => card);
-      }
-    }
-
-    keep(await _table.cardsByName(game, '$escaped%', limit: limit));
-    if (found.length < limit) {
-      keep(await _table.cardsByText(game, '%$escaped%', limit: limit));
-    }
-    return found.values.toList();
+  /// The printings a collector number names.
+  ///
+  /// [CatalogDao.searchByNumber] keeps its own answer for everything this
+  /// device has downloaded, and this is what answers for everything it has not:
+  /// a browser that has just signed in holds a collection whose rows name their
+  /// cards by id and no catalogue to resolve them against, so a collector
+  /// typing a number would otherwise see nothing at all.
+  @override
+  Future<List<TcgCard>> fetchCardsByNumber(
+    CollectorQuery query, {
+    int limit = 80,
+  }) async {
+    final rows = await _table.cardsByNumber(
+      game,
+      codeCandidates: query.codeCandidates,
+      number: query.number,
+      standalone: query.standalone,
+      limit: limit,
+    );
+    return [for (final row in rows) _card(row)];
   }
 
   /// Every printing the catalogue files under one grouping id.
@@ -268,16 +283,6 @@ class SupabaseCatalog extends CardCatalog {
     'back_image_small',
     'back_image_normal',
   ];
-
-  /// The query as a LIKE pattern, with the two characters that would ask a
-  /// different question escaped.
-  ///
-  /// A collector typing a percent sign is looking for a card with one in its
-  /// name, not asking for the whole catalogue.
-  static String _likePattern(String query) => query
-      .replaceAll('\\', '\\\\')
-      .replaceAll('%', '\\%')
-      .replaceAll('_', '\\_');
 
   /// A price, whether PostgREST sends it as a number or as text.
   static double? _price(Object? raw) {

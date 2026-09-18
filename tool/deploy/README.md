@@ -21,6 +21,8 @@ Paths on the host:
       sync_server.py                  the service
       slice_prices.py                 builds the Magic database from MTGJSON
       poll_pokemon_prices.py          samples Pokemon prices once a day
+  check_catalog_freshness.py      reports a stale shared catalogue, to the same
+                                  notify path the price alerts use
       rebuild_mtg_history.sh          download + slice + swap, in one step
       watch_slice_and_restart.sh      restart the service after a manual rebuild
       patch_caddy.py                  adds the public route (idempotent)
@@ -40,14 +42,38 @@ Paths on the host:
 | --- | --- | --- |
 | `arcanum-sync.service` | serves all four databases on 172.19.0.1:8787 | always |
 | `arcanum-pokemon-poll.timer` | samples TCGdex into the Pokemon database | daily, 04:20 UTC |
-| `arcanum-lorcana-poll.timer` | samples Lorcast into the Lorcana database | daily, 04:40 UTC |
+| `arcanum-lorcana-poll.timer` | samples Lorcast into the Lorcana database, and refreshes the shared Lorcana catalogue in Postgres | daily, 04:40 UTC |
 | `arcanum-yugioh-poll.timer` | samples YGOPRODeck into the Yu-Gi-Oh! database | daily, 04:55 UTC |
 | `arcanum-mtg-rebuild.timer` | re-slices the Magic history from MTGJSON | Mondays, 05:30 UTC |
+| `arcanum-catalog-watch.timer` | reports a shared catalogue that has stopped being refreshed | daily, 06:30 UTC |
 
 The listening address is the docker bridge gateway on purpose. The host has a
 public address and no host firewall, so binding every interface would publish
 the database to the internet in cleartext; bound this way only the Caddy
 container can reach it, and everything public arrives over TLS.
+
+## The shared catalogue
+
+The browser build reads the card catalogue from the project's Supabase Postgres
+rather than from the providers, and the Lorcana half of it is filled by the same
+nightly sweep that samples Lorcana prices: the 24 Lorcast responses the sampler
+already downloads are the 24 responses the catalogue rows are built from, so the
+second job costs no extra traffic and about sixteen seconds of `psql` round
+trips. The credentials come from `supabase.env`, read by systemd through
+`EnvironmentFile` so the importer is handed them as environment variables
+rather than as arguments of its own.
+
+Importing is not the same as keeping current, and the run at 04:40 happens with
+nobody watching, so `arcanum-catalog-watch.timer` asks three questions every
+morning at 06:30 and posts to ntfy - the notify path `notify.json` and
+`check_alerts.py` already use - when the answer is wrong: whether the last
+import recorded itself as successful, whether one has finished since the night's
+window, and whether the counts it recorded still match what a client can read.
+It reads the catalogue over PostgREST with the publishable key, so it needs no
+database password and it also fails on the night the read path is what broke.
+
+The schedule, the measurement behind it and the failure modes are in
+`docs/catalogue-refresh.md`.
 
 ## Signing in without a password
 

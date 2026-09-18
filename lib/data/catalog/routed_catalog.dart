@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:arcanum/core/utils/collector_query.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -110,6 +111,25 @@ class RoutedCatalog extends CardCatalog {
     read: (CardCatalog server) => server.search(query, limit: limit),
     hasAnswer: (List<TcgCard> cards) => cards.isNotEmpty,
     fromProvider: () => _provider.search(query, limit: limit),
+  );
+
+  /// A printing addressed by its collector number.
+  ///
+  /// The provider half of this is the interface's default, which is nothing,
+  /// and that is not a gap: a number query has never gone to a provider, and
+  /// [CatalogRepository.search] answers it from the local cache first. What the
+  /// shared catalogue adds is the other half of the same promise - the cache
+  /// only holds sets this browser has opened, and a browser that has just
+  /// signed in has opened none of them.
+  @override
+  Future<List<TcgCard>> fetchCardsByNumber(
+    CollectorQuery query, {
+    int limit = 80,
+  }) => _shared(
+    read: (CardCatalog server) =>
+        server.fetchCardsByNumber(query, limit: limit),
+    hasAnswer: (List<TcgCard> cards) => cards.isNotEmpty,
+    fromProvider: () => _provider.fetchCardsByNumber(query, limit: limit),
   );
 
   @override

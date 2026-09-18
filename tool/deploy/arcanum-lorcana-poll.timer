@@ -1,8 +1,12 @@
 [Unit]
-Description=Arcanum - sample Lorcana prices once a day
+Description=Arcanum - sample Lorcana prices and refresh its shared catalogue
 Documentation=https://github.com/arm00pv/arcanum
 
 [Timer]
+# The window is unchanged by the catalogue import arriving in this unit: the
+# three nightly samplers are spread across 04:20 to 04:55 and each of them runs
+# in seconds to a couple of minutes, so there is nothing here to contend for.
+# docs/catalogue-refresh.md records the measurement and the alternatives.
 OnCalendar=*-*-* 04:40:00 UTC
 # Persistent matters more here than for the other timers: if the host is down
 # or overloaded at the scheduled minute, the run happens at the next

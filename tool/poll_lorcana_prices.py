@@ -44,7 +44,7 @@ Usage:
     python poll_lorcana_prices.py --limit 500        # stop after 500 cards
     python poll_lorcana_prices.py --skip-polled-today
     python poll_lorcana_prices.py --catalog          # also import the catalogue
-    python poll_lorcana_prices.py --catalog-first    # import only, sample no prices
+    python poll_lorcana_prices.py --catalog-only     # import only, sample no prices
 
 The importer takes the database URL from the environment, never from a
 command-line argument, so the password does not appear in a process listing:
@@ -808,7 +808,24 @@ def run(args, store):
     # Taken before a single row is written. sets_revision is the signal that
     # tells every browser its set list is stale, and it is only meaningful if
     # the comparison is against the list as it stood before this run.
-    before_fingerprint = store.set_list_fingerprint("lorcana") if store else None
+    #
+    # A catalogue that cannot be reached is a catalogue problem and not a price
+    # problem. The series this sweep samples cannot be backfilled from anywhere,
+    # so a database that is down at 04:40 has to cost the catalogue a night
+    # rather than cost the day its prices: dropping the import here leaves the
+    # run a plain price sample, the record in catalog_meta keeps whatever it
+    # said yesterday, and check_catalog_freshness.py reports the stale
+    # catalogue in the morning. The per-set import below is already survivable -
+    # a set that fails is counted and the sampling continues - and this is the
+    # one catalogue read that happens before any price is written.
+    before_fingerprint = None
+    if store is not None:
+        try:
+            before_fingerprint = store.set_list_fingerprint("lorcana")
+        except catalog_store.CatalogError as exc:
+            print(f"catalogue unreachable, sampling prices without importing: {exc}",
+                  file=sys.stderr, flush=True)
+            store = None
 
     t0 = time.time()
     seen = 0

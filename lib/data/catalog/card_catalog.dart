@@ -1,3 +1,4 @@
+import 'package:arcanum/core/utils/collector_query.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 
@@ -74,6 +75,25 @@ abstract class CardCatalog {
   /// Free-text search. Implementations should return printings, not rollups,
   /// because the printing is what carries the price.
   Future<List<TcgCard>> search(String query, {int limit = 100});
+
+  /// The printings a collector number names, for the parse the caller made.
+  ///
+  /// A number is an address rather than a word, and a source that can only be
+  /// asked in words cannot answer one: the five provider clients search names
+  /// and rules text, so asking Scryfall for "001" answers with every card that
+  /// mentions it. The app has always answered numbers from its own cache for
+  /// exactly that reason, and the default here keeps that unchanged - nothing
+  /// at all, without a request - so that a source with a real number lookup can
+  /// opt in and no provider is dragged into a question it would answer badly.
+  ///
+  /// The parse is not this method's business. [CollectorQuery.parse] decides
+  /// what part of "BT-26-001" is a set code and what the number is, and the
+  /// answer is handed over rather than worked out again: one grammar, and it is
+  /// in Dart.
+  Future<List<TcgCard>> fetchCardsByNumber(
+    CollectorQuery query, {
+    int limit = 80,
+  }) async => const <TcgCard>[];
 
   /// Every printing of the same card, for the "other printings" list.
   Future<List<TcgCard>> fetchPrintingsOf(String groupId);

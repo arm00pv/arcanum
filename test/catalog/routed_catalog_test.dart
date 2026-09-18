@@ -12,6 +12,7 @@
 // is why CardCatalog is the seam it is.
 
 import 'package:arcanum/core/utils/app_settings.dart';
+import 'package:arcanum/core/utils/collector_query.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/catalog/lorcana_catalog.dart';
 import 'package:arcanum/data/catalog/mtg_catalog.dart';
@@ -55,6 +56,7 @@ class _ScriptedCatalog extends CardCatalog {
     this.cards = const <TcgCard>[],
     this.card,
     this.byId = const <String, TcgCard>{},
+    this.byNumber = const <TcgCard>[],
   });
 
   final String label;
@@ -63,6 +65,7 @@ class _ScriptedCatalog extends CardCatalog {
   final List<TcgCard> cards;
   final TcgCard? card;
   final Map<String, TcgCard> byId;
+  final List<TcgCard> byNumber;
 
   /// How many requests reached this catalogue.
   int calls = 0;
@@ -119,6 +122,15 @@ class _ScriptedCatalog extends CardCatalog {
   }
 
   @override
+  Future<List<TcgCard>> fetchCardsByNumber(
+    CollectorQuery query, {
+    int limit = 80,
+  }) async {
+    _asked();
+    return byNumber;
+  }
+
+  @override
   Future<List<TcgCard>> fetchPrintingsOf(String groupId) async {
     _asked();
     return cards;
@@ -139,7 +151,11 @@ _ScriptedCatalog _answering(String label) => _ScriptedCatalog(
   cards: <TcgCard>[cardOf(label)],
   card: cardOf(label),
   byId: <String, TcgCard>{'x': cardOf(label)},
+  byNumber: <TcgCard>[cardOf(label)],
 );
+
+/// A number query, as the repository parses one before it asks anybody.
+CollectorQuery get _number => CollectorQuery.parse('001')!;
 
 RoutedCatalog _routedTo(
   _ScriptedCatalog server,
@@ -164,6 +180,7 @@ void main() {
       expect((await routed.fetchCardById('x'))!.id, 'server');
       expect((await routed.fetchCardsByIds(<String>['x']))['x']!.id, 'server');
       expect((await routed.search('elsa')).single.id, 'server');
+      expect((await routed.fetchCardsByNumber(_number)).single.id, 'server');
       expect((await routed.fetchPrintingsOf('g')).single.id, 'server');
       expect(
         (await routed.refreshPrices(<TcgCard>[cardOf('x')])).single.id,
@@ -187,6 +204,10 @@ void main() {
         expect((await routed.fetchAllSets()).single.code, 'provider');
         expect((await routed.fetchCardsInSet('1')).single.id, 'provider');
         expect((await routed.search('elsa')).single.id, 'provider');
+        expect(
+          (await routed.fetchCardsByNumber(_number)).single.id,
+          'provider',
+        );
 
         expect(
           server.calls,
@@ -236,14 +257,15 @@ void main() {
         'provider',
       );
       expect((await routed.search('elsa')).single.id, 'provider');
+      expect((await routed.fetchCardsByNumber(_number)).single.id, 'provider');
       expect((await routed.fetchPrintingsOf('g')).single.id, 'provider');
       expect(
         (await routed.refreshPrices(<TcgCard>[cardOf('x')])).single.id,
         'provider',
       );
 
-      expect(server.calls, 7);
-      expect(provider.calls, 7);
+      expect(server.calls, 8);
+      expect(provider.calls, 8);
     });
 
     test('and so is one that answers with nothing', () async {
@@ -262,11 +284,43 @@ void main() {
         'provider',
       );
       expect((await routed.search('elsa')).single.id, 'provider');
+      expect((await routed.fetchCardsByNumber(_number)).single.id, 'provider');
       expect((await routed.fetchPrintingsOf('g')).single.id, 'provider');
       expect(
         (await routed.refreshPrices(<TcgCard>[cardOf('x')])).single.id,
         'provider',
       );
+    });
+  });
+
+  group('a collector number', () {
+    test('goes to the server, and never to a provider', () async {
+      // The case this exists for: a browser that has just signed in has the
+      // collection and no catalogue, so the number is in neither the cache nor
+      // the provider's vocabulary.
+      final server = _ScriptedCatalog(
+        label: 'server',
+        byNumber: <TcgCard>[cardOf('from-the-catalogue')],
+      );
+      final provider = _ScriptedCatalog(
+        label: 'provider',
+        byNumber: <TcgCard>[cardOf('from-the-provider')],
+      );
+      final routed = _routedTo(server, provider, serverAllowed: () => true);
+
+      final cards = await routed.fetchCardsByNumber(_number);
+      expect(cards.single.id, 'from-the-catalogue');
+      expect(provider.calls, 0);
+    });
+
+    test('stays empty when the shared catalogue has nothing', () async {
+      // Which is the phone's whole behaviour, unchanged: it has no router, and
+      // a provider's number lookup is the empty default above.
+      final server = _ScriptedCatalog(label: 'server');
+      final provider = _ScriptedCatalog(label: 'provider');
+      final routed = _routedTo(server, provider, serverAllowed: () => true);
+
+      expect(await routed.fetchCardsByNumber(_number), isEmpty);
     });
   });
 

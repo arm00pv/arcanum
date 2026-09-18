@@ -17,6 +17,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:arcanum/core/utils/collector_query.dart';
 import 'package:arcanum/data/catalog/card_art.dart';
 import 'package:arcanum/data/catalog/catalog_table.dart';
 import 'package:arcanum/data/catalog/supabase_catalog.dart';
@@ -64,9 +65,17 @@ class _ScriptedTable implements CatalogTable {
   /// Every group of ids asked for in one request.
   final List<List<String>> idBatches = <List<String>>[];
 
-  /// Every LIKE pattern the search asked for, per query.
-  final List<String> namePatterns = <String>[];
-  final List<String> textPatterns = <String>[];
+  /// Every search the catalogue was asked for, as the collector typed it.
+  final List<String> searches = <String>[];
+
+  /// Every number lookup, as the Dart parse produced it.
+  final List<
+    ({List<String> candidates, String number, bool standalone, int limit})
+  >
+  numbers =
+      <
+        ({List<String> candidates, String number, bool standalone, int limit})
+      >[];
 
   List<Map<String, Object?>> _page(
     List<Map<String, Object?>> rows,
@@ -132,45 +141,63 @@ class _ScriptedTable implements CatalogTable {
       if (row['oracle_id'] == oracleId) row,
   ];
 
+  /// The catalogue's own search, ranked the way `catalog_search` ranks: a name
+  /// that starts with the query, then a name that contains it, then the newest
+  /// printing.
+  ///
+  /// Filtered here rather than replayed from a canned answer, because what the
+  /// reader is being tested for is the request it makes and the order it keeps
+  /// - a fake that answered everything would pass either way.
   @override
-  Future<List<Map<String, Object?>>> cardsByName(
+  Future<List<Map<String, Object?>>> search(
     CardGame game,
-    String pattern, {
+    String query, {
     required int limit,
   }) async {
-    namePatterns.add(pattern);
-    if (!pattern.endsWith('%') || pattern.startsWith('%')) {
-      fail('a name search asks for a prefix, and this asked for $pattern');
-    }
-    final String prefix = pattern.substring(0, pattern.length - 1);
-    return _page(
-      <Map<String, Object?>>[
-        for (final row in cardRows)
-          if ((row['name'] as String).startsWith(prefix)) row,
-      ],
-      0,
-      limit,
-    );
+    searches.add(query);
+    final String needle = query.toLowerCase();
+    int rank(Map<String, Object?> row) =>
+        (row['name'] as String).toLowerCase().startsWith(needle) ? 0 : 1;
+    final hits = <Map<String, Object?>>[
+      for (final row in cardRows)
+        if ((row['name'] as String).toLowerCase().contains(needle) ||
+            ((row['oracle_text'] as String?) ?? '').toLowerCase().contains(
+              needle,
+            ))
+          row,
+    ];
+    hits.sort((Map<String, Object?> a, Map<String, Object?> b) {
+      final int byRank = rank(a).compareTo(rank(b));
+      if (byRank != 0) return byRank;
+      return ((b['released_at'] as String?) ?? '').compareTo(
+        (a['released_at'] as String?) ?? '',
+      );
+    });
+    return _page(hits, 0, limit);
   }
 
   @override
-  Future<List<Map<String, Object?>>> cardsByText(
-    CardGame game,
-    String pattern, {
+  Future<List<Map<String, Object?>>> cardsByNumber(
+    CardGame game, {
+    required List<String> codeCandidates,
+    required String number,
+    required bool standalone,
     required int limit,
   }) async {
-    textPatterns.add(pattern);
-    final String needle = pattern.replaceAll('%', '');
-    return _page(
-      <Map<String, Object?>>[
-        for (final row in cardRows)
-          if ((row['name'] as String).contains(needle) ||
-              ((row['oracle_text'] as String?) ?? '').contains(needle))
-            row,
-      ],
-      0,
-      limit,
-    );
+    numbers.add((
+      candidates: codeCandidates,
+      number: number,
+      standalone: standalone,
+      limit: limit,
+    ));
+    final String wanted = number.toLowerCase();
+    final hits = <Map<String, Object?>>[
+      for (final row in cardRows)
+        if ((row['collector_number'] as String).toLowerCase() == wanted ||
+            _bare(row['collector_number'] as String) == _bare(number))
+          row,
+    ];
+    return _page(hits, 0, limit);
   }
 
   @override
@@ -287,6 +314,9 @@ bool _sameJson(Object? a, Object? b) {
 /// An id of the length and shape the provider's are, so a filter that fits one
 /// fits them all.
 String idAt(int index) => 'crd_${index.toString().padLeft(32, '0')}';
+
+/// A collector number without its leading zeros, the way both sides strip them.
+String _bare(String number) => number.replaceFirst(RegExp(r'^0+'), '');
 
 void main() {
   late Map<String, dynamic> vectors;
@@ -544,14 +574,17 @@ void main() {
               'the local search orders the same way, and the caller re-reads '
               'the cache after storing what arrives',
         );
-        expect(table.namePatterns, <String>['Elsa%']);
-        expect(table.textPatterns, <String>['%Elsa%']);
+        expect(table.searches, <String>['Elsa']);
       },
     );
 
-    test('is one request when the names alone fill the answer', () async {
+    test('is one request, whatever the answer holds', () async {
+      // It used to be two - a prefix pass and a contains pass, because a
+      // PostgREST filter cannot order by the predicate - and it is one now that
+      // the ordering is the catalogue's own.
       final table = _ScriptedTable(
         cardRows: <Map<String, Object?>>[
+          cardRow('crd_anna', name: 'Anna - Heir to Arendelle'),
           cardRow('crd_elsa', name: 'Elsa - Snow Queen'),
         ],
       );
@@ -561,21 +594,73 @@ void main() {
       ).search('Elsa', limit: 1);
 
       expect(results, hasLength(1));
-      expect(table.namePatterns, hasLength(1));
-      expect(table.textPatterns, isEmpty);
+      expect(table.searches, hasLength(1));
     });
 
-    test(
-      'escapes the characters that would ask a different question',
-      () async {
-        final table = _ScriptedTable();
-        final catalog = SupabaseCatalog(game: CardGame.lorcana, table: table);
-        await catalog.search('50%');
-        await catalog.search('a_b');
+    test('carries the query as typed, escapes and all', () async {
+      // The escaping belongs to the function: the same endpoint answers anyone
+      // holding the publishable key, and a percent sign that reached the
+      // pattern unescaped would ask for the whole game. That is proved against
+      // the live database - tool/catalog/prove_catalogue_reads.py - and what is
+      // asserted here is that this side does not try to do it twice.
+      final table = _ScriptedTable();
+      final catalog = SupabaseCatalog(game: CardGame.lorcana, table: table);
+      await catalog.search('50%');
+      await catalog.search('a_b');
 
-        expect(table.namePatterns, <String>['50\\%%', 'a\\_b%']);
-      },
-    );
+      expect(table.searches, <String>['50%', 'a_b']);
+    });
+  });
+
+  group('a collector number', () {
+    test('travels as the parse produced it, and not as a pattern', () async {
+      final table = _ScriptedTable(
+        cardRows: <Map<String, Object?>>[
+          cardRow('crd_yokomon', name: 'Yokomon'),
+        ],
+      );
+      final catalog = SupabaseCatalog(game: CardGame.lorcana, table: table);
+
+      await catalog.fetchCardsByNumber(CollectorQuery.parse('BT-26-001')!);
+      await catalog.fetchCardsByNumber(CollectorQuery.parse('001')!);
+
+      // Field by field, because a record holding a list is compared by that
+      // list's identity, and two equal lists are not the same list.
+      expect(table.numbers, hasLength(2));
+      expect(table.numbers.first.candidates, <String>['bt26']);
+      expect(table.numbers.first.number, '001');
+      expect(table.numbers.first.standalone, isFalse);
+      expect(table.numbers.first.limit, 80);
+      expect(table.numbers.last.candidates, isEmpty);
+      expect(table.numbers.last.number, '001');
+      expect(
+        table.numbers.last.standalone,
+        isTrue,
+        reason:
+            'the grammar stays in Dart: the catalogue is handed the candidates '
+            'and the number, never the raw query',
+      );
+      expect(table.searches, isEmpty, reason: 'a number is not a word search');
+    });
+
+    test('comes back as the printings the catalogue named', () async {
+      final table = _ScriptedTable(
+        cardRows: <Map<String, Object?>>[
+          cardRow('crd_one', name: 'Elsa - Snow Queen'),
+          cardRow('crd_padded', name: 'Padding Test'),
+        ],
+      );
+      final cards = await SupabaseCatalog(
+        game: CardGame.lorcana,
+        table: table,
+      ).fetchCardsByNumber(CollectorQuery.parse('001')!);
+
+      expect(
+        <String>[for (final TcgCard c in cards) c.id],
+        <String>['crd_one', 'crd_padded'],
+        reason: 'every row in the fixture is numbered 1',
+      );
+    });
   });
 
   group('prices', () {
