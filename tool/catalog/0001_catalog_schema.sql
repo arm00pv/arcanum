@@ -131,6 +131,15 @@ create index catalog_cards_oracle on public.catalog_cards (game, oracle_id);
 create index catalog_cards_number on public.catalog_cards (game, set_code, collector_number);
 create index catalog_cards_rarity on public.catalog_cards (game, rarity);
 
+-- Note added later, when 0002_search_index_expressions.sql was written: these two
+-- index definitions are the ones step 0 ran, and they were superseded. Section
+-- 2.2 has since been corrected and the indexes now stand on the raw name and
+-- oracle_text columns, which is what section 4's search compares; a trigram index
+-- on an expression the predicate does not use is never chosen by the planner.
+-- This file is left as it ran - if it is ever reversed and applied again, the two
+-- indexes come back on the lowered expressions and 0002 has to be applied again
+-- after it.
+--
 -- The operator class is spelled extensions.gin_trgm_ops rather than the bare
 -- gin_trgm_ops of the document. Both resolve in this project - extensions is on
 -- the search_path - but the qualified form does not depend on that, and an

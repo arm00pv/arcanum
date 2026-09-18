@@ -9,6 +9,13 @@ client change, because step 0 delivers none of those. Section 2 of the design
 document is the specification for the shape; this file records what was actually
 built, what the environment forced, and how to undo it.
 
+Amended the same day by `tool/catalog/0002_search_index_expressions.sql`: the two
+trigram indexes moved off the lowered expressions step 0 copied out of design
+§2.2 and onto the raw columns §4's search compares. Step 1 has since imported
+Lorcana - that import is `catalogue-import.md`'s record, not this file's - so
+`catalog_cards` holds 3,208 rows rather than none, and the measurements below
+were taken on them.
+
 If this file and the SQL disagree, the SQL is what ran.
 
 ## What was applied
@@ -62,7 +69,10 @@ string for string, so a later migration that edits them has to do so on purpose.
 that come from the read paths in design §4, two trigram indexes that make
 `ILIKE '%...%'` usable over a quarter of a million rows, and the two on the
 generated columns. Nothing was added beyond the design's list: an index is a
-claim about which queries matter, and those queries are listed in §4.
+claim about which queries matter, and those queries are listed in §4. The two
+trigram indexes were rebuilt by 0002 onto the raw `name` and `oracle_text`
+columns, because a trigram index on an expression the predicate does not compare
+is an index the planner refuses - see that section below.
 
 **`catalog_meta` is seeded with nine rows**, one per `CardGame.id`
 (`mtg, pokemon, lorcana, yugioh, onepiece, swu, digimon, dragonball, gundam`,
@@ -73,9 +83,10 @@ client can read rather than a missing row it has to interpret. The insert is
 
 ### The two places the environment forced a spelling
 
-The design wrote `using gin (lower(name) gin_trgm_ops)`. The applied index says
-`extensions.gin_trgm_ops`, because `pg_trgm` is installed in the `extensions`
-schema - as §2.2 asks - and the unqualified name resolves only while
+The design writes the opclass unqualified - `using gin (name gin_trgm_ops)`, and
+`lower(name)` in place of `name` until 0002 moved the expression. The applied
+index says `extensions.gin_trgm_ops`, because `pg_trgm` is installed in the
+`extensions` schema - as §2.2 asks - and the unqualified name resolves only while
 `extensions` is on the `search_path`. Both work on this project today; the
 qualified one keeps working if a `search_path` is ever set differently for a
 role, and an index definition is a bad place to discover that. `pg_indexes`
@@ -91,6 +102,164 @@ on that continuing to be true.
 - `tool/catalog/0001_catalog_schema.sql` - what was executed, with the reasoning
   inline.
 - `tool/catalog/0001_catalog_schema_down.sql` - the reversal.
+
+## 0002: the two trigram indexes, on the columns search compares
+
+Step 0 built the two trigram indexes exactly as design §2.2 specifies them, on
+`lower(name)` and `lower(coalesce(oracle_text, ''))`, and the section at the end
+of this file recorded that the design contradicted itself: §4's `catalog_search`
+compares the raw columns, and a GIN index is matched by the expression in the
+predicate rather than by one that means the same thing. That note left the choice
+to whoever writes §4's function, on the argument that the indexes belonged to
+step 0 and the function to step 4. The argument was wrong. The function is
+specified, the indexes are the part that was inconsistent with it, and waiting
+costs a rebuild later plus a search that reads the whole table until then.
+
+`tool/catalog/0002_search_index_expressions.sql`, one transaction and two index
+definitions:
+
+~~~sql
+drop index public.catalog_cards_name_trgm;
+create index catalog_cards_name_trgm on public.catalog_cards
+  using gin (name extensions.gin_trgm_ops);
+
+drop index public.catalog_cards_text_trgm;
+create index catalog_cards_text_trgm on public.catalog_cards
+  using gin (oracle_text extensions.gin_trgm_ops);
+~~~
+
+Both names are unchanged, so nothing that refers to these indexes has to change,
+and the reversal is the two expressions it replaced.
+
+### The measurement, before and after
+
+The same query against the live table, as `postgres`, on the 3,208 Lorcana rows
+step 1 imported, with `explain (analyze, buffers)` and costs off.
+
+Before, with step 0's index on `lower(name)` in place:
+
+~~~
+Seq Scan on catalog_cards (actual rows=32 loops=1)
+  Filter: (name ~~* '%elsa%'::text)
+  Rows Removed by Filter: 3176
+  Buffers: shared hit=345
+~~~
+
+The index was there and the planner read the table. The same search written the
+way that index wanted it proves the index was fine and the expression was not:
+
+~~~
+Bitmap Heap Scan on catalog_cards (actual rows=32 loops=1)
+  Recheck Cond: (lower(name) ~~ '%elsa%'::text)
+  Heap Blocks: exact=28
+  Buffers: shared hit=33
+  ->  Bitmap Index Scan on catalog_cards_name_trgm (actual rows=32 loops=1)
+        Index Cond: (lower(name) ~~ '%elsa%'::text)
+        Buffers: shared hit=5
+~~~
+
+After 0002, on the predicate §4 actually writes:
+
+~~~
+Bitmap Heap Scan on catalog_cards (actual rows=32 loops=1)
+  Recheck Cond: (name ~~* '%elsa%'::text)
+  Heap Blocks: exact=28
+  Buffers: shared hit=33
+  ->  Bitmap Index Scan on catalog_cards_name_trgm (actual rows=32 loops=1)
+        Index Cond: (name ~~* '%elsa%'::text)
+        Buffers: shared hit=5
+~~~
+
+And both halves of §4's predicate together, which is the shape step 4 ships - a
+BitmapOr over the two indexes rather than a scan of the table:
+
+~~~
+Bitmap Heap Scan on catalog_cards (actual rows=36 loops=1)
+  Recheck Cond: ((name ~~* '%elsa%'::text) OR (oracle_text ~~* '%elsa%'::text))
+  Filter: (game = 'lorcana'::text)
+  Heap Blocks: exact=31
+  Buffers: shared hit=41
+  ->  BitmapOr (actual rows=0 loops=1)
+        ->  Bitmap Index Scan on catalog_cards_name_trgm (actual rows=32 loops=1)
+              Index Cond: (name ~~* '%elsa%'::text)
+        ->  Bitmap Index Scan on catalog_cards_text_trgm (actual rows=12 loops=1)
+              Index Cond: (oracle_text ~~* '%elsa%'::text)
+~~~
+
+345 buffers down to 33 on the name half, and no rows removed by the filter. The
+`or` between the two columns is not a hole in this: a BitmapOr of two trigram
+indexes is still an index plan, and it is the one step 4 will get.
+
+Two things this measurement does not say, since both are easy to read into it.
+The index on `name` answers `ILIKE` rather than only `LIKE` because pg_trgm
+extracts its trigrams from the lower-cased text whichever case the column stores,
+so nothing is lost by dropping the `lower()` - the case-insensitivity lives in
+the operator class, not in the expression. And `catalog_cards_name`, the btree on
+`(game, lower(name))`, was left exactly as it is: equality on the lowered name is
+a predicate that expression does match.
+
+### The rules-text index is on `oracle_text`, not on `coalesce(oracle_text, '')`
+
+The first draft of 0002 kept §2.2's `coalesce` and dropped only the `lower()` -
+which is what the note at the end of this file had suggested, and it does not
+work. Measured in a transaction that was rolled back, each time with one trigram
+index on the table:
+
+~~~
+oracle_text ILIKE '%elsa%'  with an index on coalesce(oracle_text, '')  -> Seq Scan
+oracle_text ILIKE '%elsa%'  with an index on oracle_text                -> Bitmap Index Scan
+~~~
+
+The predicate names `oracle_text`; an index on `coalesce(oracle_text, '')` is a
+different expression and is not matched, for the same reason as before. Nothing
+is given up by indexing the bare column: a row whose `oracle_text` is null has no
+trigrams to index and matches no `ILIKE` pattern either way. This is the one part
+of step 4 that 0002 cannot settle in advance - if the function is ever written
+with a `coalesce` around the column, the rules-text half of search goes back to
+reading the table, and it will still return the right rows while it does.
+
+### What the indexes cost now, and how much of the old figure was never the expression
+
+`catalogue-import.md` measured 6,768 kB of index against 2,760 kB of rows before
+this migration. The two trigram indexes were 1,253,376 B and 4,440,064 B at that
+point - 5,693,440 B together - and rebuilding them on the raw columns brought them
+to 524,288 B and 925,696 B, 1,449,984 B together. Every index on the table went
+from 6,881,280 B to 2,637,824 B.
+
+Most of that difference is not the change of expression. Building the same two
+indexes fresh, on the same rows and with the expressions step 0 used, gives
+512 kB and 904 kB - 1,416 kB, which is what the two new ones cost as well, because
+the expression is not what makes a trigram index big. Measured in a transaction
+that created all four variants and was rolled back, before anything was applied.
+The old indexes had grown to nearly four times that under the importer's churn:
+`pg_stat_user_tables` reports 3,208 inserts and 432 deletes on a table that holds
+3,208 rows, which is writing rule 1 doing what it says - every card in a changed
+set deleted and reinserted, every night. A GIN index gives that space back only at
+vacuum.
+
+Both readings matter and they point in different directions, so neither is
+folded into the other here:
+
+- the cost figure in the import doc is the churned size, not the settled one, and
+  a fresh build of the same indexes is about a quarter of it;
+- but the churn is real and it comes back, so the storage bill for these two
+  indexes is a function of how often a set changes, not only of how many rows
+  there are.
+
+That is a step 2 and step 3 question - whether an import replaces cards or
+updates them, and how the indexes are kept tidy - and it is recorded here because
+it was found here.
+
+### Reversing 0002
+
+`tool/catalog/0002_search_index_expressions_down.sql` puts both indexes back on
+the lowered expressions. It has been run, and the up file re-applied immediately
+afterwards, as a round trip rather than a claim: after the down file `pg_indexes`
+reported `lower(name)` and `lower(COALESCE(oracle_text, ''::text))` again and the
+search went back to a `Seq Scan` with 345 buffers, which is what reversing this
+migration means; after the up file the plans above were back and `catalog_cards`
+still held its 3,208 rows and 24 sets. Nothing else needs undoing - 0002 changed
+two index definitions and no column, policy, grant or row.
 
 ## The RLS posture, and why it is both barriers
 
@@ -287,6 +456,13 @@ It drops the four policies, then the four tables in foreign-key order, then
 `pg_trgm` - and only if nothing else in the database has come to depend on the
 extension.
 
+That is 0001 only. 0002 reverses separately, in the section above, and the reason
+it is worth saying here is that `0001_catalog_schema.sql` still holds the two
+trigram index definitions on the lowered expressions - it records what ran, and
+what ran is what it says. So reversing 0001 and applying it again puts the
+unusable indexes back, and 0002 has to be applied again after it. A note in 0001
+says the same thing where the definitions are.
+
 It has been run. The reversal was applied to the live project and the up file
 re-applied immediately afterwards, as a round trip rather than as a claim:
 after the down file the only relations left in `public` were the two account
@@ -324,44 +500,42 @@ provider fallback in `RoutedCatalog` - which is step 2 and does not exist yet.
 - The database password contains `@` and `!` and has to be percent-encoded in a
   URL. It is not written down here, or anywhere in the repository.
 
-## One thing in the design that step 4 will have to resolve
+## What step 4 inherits, now that the indexes have moved
 
-Recorded here because it was found while building the indexes, and because it is
-cheaper to settle now than after step 4 has written the search function.
-
-Section 2.2 specifies the two trigram indexes on the lowered expression:
-
-~~~sql
-create index catalog_cards_name_trgm on public.catalog_cards using gin (lower(name) gin_trgm_ops);
-create index catalog_cards_text_trgm on public.catalog_cards using gin (lower(coalesce(oracle_text, '')) gin_trgm_ops);
-~~~
-
-Section 4's `catalog_search` searches the raw columns:
-
-~~~sql
-where c.name ilike '%' || p_query || '%'
-   or c.oracle_text ilike '%' || p_query || '%'
-~~~
-
-A GIN trigram index is used only when the predicate's expression matches the
-indexed expression, and `name ILIKE ...` does not match an index on
-`lower(name)`. Measured on the live database, on a throwaway table of 50,000
-rows inside a rolled-back transaction, with `pg_trgm` 1.6:
+This section used to record an inconsistency rather than a decision. Design §2.2
+specified the two trigram indexes on `lower(name)` and
+`lower(coalesce(oracle_text, ''))` and §4's `catalog_search` compares `c.name`
+and `c.oracle_text`; a GIN trigram index is used only when the predicate's
+expression matches the indexed expression, so the index that existed to make
+search work over a quarter of a million rows would not have been used. The first
+measurement of it was synthetic - a throwaway table of 50,000 rows inside a
+rolled-back transaction, with `pg_trgm` 1.6:
 
 ~~~
 name ILIKE '%card49999%'          with an index on lower(name)   -> Seq Scan
 lower(name) LIKE '%card49999%'    with an index on lower(name)   -> Bitmap Index Scan
-name ILIKE '%card49999%'          with an index on name         -> Bitmap Index Scan
+name ILIKE '%card49999%'          with an index on name          -> Bitmap Index Scan
 ~~~
 
-So as the two sections stand, the index that exists to make search usable over a
-quarter of a million rows will not be used, and step 4 would ship a sequential
-scan that looks indexed. The design is not wrong about wanting the index; it is
-inconsistent about which expression it is on. Either the indexes move to the raw
-columns - which is enough, since `gin_trgm_ops` supports `ILIKE` directly, and
-which also makes the indexes usable by a case-sensitive `LIKE` - or
-`catalog_search` compares `lower(name) LIKE lower(p_query) || '%'`. The first
-is the smaller change and the one that costs nothing at read time; it is a
-change to two index definitions here and to nothing else. It was left alone in
-this step because this step implements section 2.2 as written, and the choice
-belongs with whoever writes section 4's function.
+That was left for whoever writes §4's function, because the indexes were step
+0's and the function was step 4's. It should not have been: the inconsistency was
+in the indexes, the predicate is settled, and the second measurement - on the
+real table, above - says the same thing with real rows in it. 0002 has moved the
+indexes, so §4's two `ILIKE`s are the indexed expressions and step 4 changes
+nothing:
+
+- `c.name ilike '%' || p_query || '%'` uses `catalog_cards_name_trgm`;
+- `c.oracle_text ilike '%' || p_query || '%'` uses `catalog_cards_text_trgm`;
+- the two together are a BitmapOr of both, which is the plan in the section
+  above.
+
+What step 4 must not do is tidy either predicate into `lower(...)` or
+`coalesce(...)`. Both would work, both would return exactly the right rows, and
+both would leave the index unused with no error and nothing in the plan that
+looks wrong to a reader who is not looking for a Seq Scan.
+
+The one thing still open is not about the expression but about the size:
+`catalogue-import.md`'s cost estimate for these two indexes is the size they
+reach under the importer's delete-and-reinsert churn rather than the size a fresh
+build has, and the difference is a factor of four. That is recorded above, and it
+belongs to step 2 rather than to step 4.

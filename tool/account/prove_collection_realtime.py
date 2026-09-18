@@ -132,6 +132,15 @@ def psql(db_url, sql):
 
 
 def values(rows):
+    """The readings, as one dictionary. One name=value pair per field.
+
+    A field that holds several pairs run together is not split into them: the
+    name ends at the first '=' and the whole remainder is the value. That is a
+    contract the SQL above has to keep, not a detail of the parsing - the
+    publication flags are one field each because a single field carrying all
+    five of them was read as one key called puballtables, and a check built on
+    that reading went red on a database where every flag was right.
+    """
     out = {}
     for row in rows:
         for field in row:
@@ -362,9 +371,15 @@ def wait_for_change(conn, kind, card_id, timeout=20.0):
 
 def check_publication(db_url):
     rows = psql(db_url, f"""
-      select 'puballtables=' || puballtables::text || ' pubinsert=' || pubinsert::text
-             || ' pubupdate=' || pubupdate::text || ' pubdelete=' || pubdelete::text
-             || ' pubtruncate=' || pubtruncate::text
+      -- One field per flag, separated by the -F psql was given. Concatenating
+      -- them into a single string put four of the five behind the first '=',
+      -- where the reading below cannot see them - which is how this check came
+      -- to report a failure while printing five correct values.
+      select 'puballtables=' || puballtables::text,
+             'pubinsert=' || pubinsert::text,
+             'pubupdate=' || pubupdate::text,
+             'pubdelete=' || pubdelete::text,
+             'pubtruncate=' || pubtruncate::text
         from pg_publication where pubname = '{PUBLICATION}';
       select 'member=' || count(*)::text
         from pg_publication_tables
@@ -396,16 +411,33 @@ def check_publication(db_url):
 
 
 def report_publication(got):
-    flags = got.get("puballtables", "")
-    if "puballtables=false" in flags and "pubinsert=true" in flags \
-            and "pubupdate=true" in flags and "pubdelete=true" in flags:
+    # Each flag is compared with the value it must have, rather than searched
+    # for as a substring of one concatenated reading. The earlier version asked
+    # whether "pubinsert=true" appeared in a string that began at the first '='
+    # of the row, so it saw puballtables and nothing else, and went red on a
+    # publication where all five flags were right.
+    #
+    # The four compared here are the ones the claim needs: FOR ALL TABLES cannot
+    # be told to add a single table, and a publication without UPDATE streams no
+    # removal, because a removal in this table is an update. Truncate is read
+    # and printed but deliberately not required - nothing in the design asks for
+    # TRUNCATE events, this table is never truncated, and a check that went red
+    # the day somebody cleared the flag would be a check nobody could act on.
+    wanted = {"puballtables": "false", "pubinsert": "true",
+              "pubupdate": "true", "pubdelete": "true"}
+    flags = " ".join(f"{name}={got.get(name, 'missing')}"
+                     for name in ("puballtables", "pubinsert", "pubupdate",
+                                  "pubdelete", "pubtruncate"))
+    wrong = [f"{name} is {got.get(name, 'missing')}, wanted {value}"
+             for name, value in wanted.items() if got.get(name) != value]
+    if wrong:
+        bad("sql_publication_streams_edits", f"{flags} - " + "; ".join(wrong))
+    else:
         ok("sql_publication_streams_edits",
            f"{PUBLICATION} is a table list rather than FOR ALL TABLES, and it "
            "streams inserts, updates and deletes - which is what makes adding a "
            "table to it possible at all, and what makes a removal, which is an "
            "update, arrive")
-    else:
-        bad("sql_publication_streams_edits", flags or "missing")
 
     if got.get("member") == "1":
         ok("sql_collection_entries_is_in_the_publication",

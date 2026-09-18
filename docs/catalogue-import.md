@@ -57,6 +57,18 @@ number than the paragraph in section 7 implies, and it is the index - not the ro
 that decides whether this fits a plan. It is cheaper to know that now than after
 Magic is imported.
 
+**Correction, added after `tool/catalog/0002_search_index_expressions.sql`: much
+of that 6,768 kB was churn rather than the steady size of the two trigram
+indexes.** The 5,693,440 B of it that was the trigram pair was the size those
+indexes had grown to under this importer's own rule 1 - every card in a changed
+set deleted and reinserted, every night - and a GIN index gives that space back
+only at vacuum. Built fresh on the same 3,208 rows, the same two expressions come
+to 1,416 kB, and `pg_stat_user_tables` shows 3,208 inserts and 432 deletes on a
+table holding 3,208 rows. So the paragraph above is right that these indexes
+decide whether the plan fits, and the lever is larger than it looks: how often a
+set changes is as much a part of the bill as how long the rules text is. The
+measurements are in `catalogue-schema.md`.
+
 ## What was built
 
 ### `tool/catalog_store.py`
@@ -317,7 +329,11 @@ not.** Measured above: 6,768 kB of index to 2,760 kB of rows, on the smallest re
 catalogue in the design, and the ratio worsens with longer rules text. Section 7 says
 roughly a quarter of a million rows and hundreds of megabytes as though the rows were the
 cost. If the plan is tight, the lever is the two GIN indexes or `oracle_text` itself, not
-the row count.
+the row count. Two corrections to make before acting on that number: the indexes
+are on the raw columns now rather than on the lowered expressions, so search uses
+them (`catalogue-schema.md`), and most of the 6,768 kB was churn from rule 1
+rather than the size a fresh build reaches - 1,416 kB for the same two indexes on
+the same rows.
 
 **The design does not say how the importer reaches Postgres, and the answer is narrower
 than section 2.4 implies.** Section 2.4 says the credentials are in a file with mode 600

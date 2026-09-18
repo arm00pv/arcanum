@@ -184,10 +184,11 @@ SKIP  realtime_a_change_reaches_a_signed_in_browser
 2 passed, 0 failed, 6 skipped
 ~~~
 
-**So the publication state of the live project is not known from here.** The
-migration is written to be safe either way - it does nothing if the table is
-already streamed - and it must be applied, and this script re-run with
-`--require-sql` and the admin key, from a machine that holds the credentials:
+**So nothing about the publication is known from that machine.** The migration is
+written to be safe either way - it does nothing if the table is already streamed -
+and it was applied, and this script re-run with `--require-sql` and the admin
+key, from the server that holds the credentials. That run is the next subsection.
+The command is:
 
 ~~~sh
 set -a; . /home/zixen/arcanum/supabase.env; set +a
@@ -205,6 +206,83 @@ with a live negative control rather than a citation: a subscription to a table
 that does not exist is accepted at the join and refused a moment later with the
 same sentence as a real one, so "the client subscribed" is not evidence that
 anything will ever be delivered.
+
+### What a run on the server said, and a check that was lying
+
+The SQL half needs the credentials and `psql`, so it was run where they are -
+`zapp.sytes.net`, on 2026-09-18, with `--require-sql` so that a skipped SQL
+section counts as a failure rather than passing quietly:
+
+~~~sh
+set -a; . /home/zixen/arcanum/supabase.env; set +a
+python3 tool/account/prove_collection_realtime.py --require-sql
+~~~
+
+~~~
+--- SQL, as the owner ---
+PASS  sql_publication_streams_edits
+        supabase_realtime is a table list rather than FOR ALL TABLES, and it
+        streams inserts, updates and deletes - which is what makes adding a
+        table to it possible at all, and what makes a removal, which is an
+        update, arrive
+PASS  sql_collection_entries_is_in_the_publication
+        public.collection_entries is streamed. The tables in supabase_realtime
+        are public.collection_entries. This is the one reading that settles it
+PASS  sql_nothing_but_the_publication_changed
+        the constraints, the policy, the grants and the indexes are byte-for-byte
+        what the tombstone migration left behind
+PASS  sql_the_table_is_the_one_the_client_knows
+        16 columns, row level security on and not forced, and 6 holding(s) in it
+
+--- Realtime, without a session ---
+PASS  realtime_the_join_is_accepted_whatever_the_table
+PASS  realtime_the_verdict_does_not_name_the_publication
+PASS  realtime_a_subscription_without_a_session_is_refused
+
+--- Realtime, with a session ---
+PASS  realtime_a_change_reaches_a_signed_in_browser
+probe account deleted (200)
+PASS  probe_left_nothing_behind
+
+9 passed, 0 failed, 0 skipped
+~~~
+
+**The first run of this section was red, and the check was wrong rather than the
+publication.** `sql_publication_streams_edits` reported FAIL while printing
+`puballtables=false pubinsert=true pubupdate=true pubdelete=true
+pubtruncate=true` - five correct flags - because the reading and the assertion
+disagreed about the shape of what was read. The SQL concatenated the five flags
+into one field of one column:
+
+~~~sql
+select 'puballtables=' || puballtables::text || ' pubinsert=' || pubinsert::text
+       || ' pubupdate=' || ... 
+  from pg_publication where pubname = 'supabase_realtime';
+~~~
+
+and the reading takes each field to be one `name=value` pair, splitting on the
+first `=` it finds. So the dictionary held one key, `puballtables`, whose value
+was the other four flags run together, and the assertion - which asked whether
+the literal string `"puballtables=false"` appeared in it - was looking for a form
+the reading could never produce. It could not have passed on any database.
+
+The fix is one field per flag, separated the way `psql` was already told to
+separate fields, and an assertion that compares each flag with the value it must
+have rather than searching for a substring of a joined-up string. Truncate is
+read and printed but deliberately not required: nothing in the design asks for
+TRUNCATE events, this table is never truncated, and a check that went red the day
+somebody cleared that flag would be a check nobody could act on - which is the
+fault this one already had, for a different reason. The three flags that are
+required are the claim rather than a formality: `FOR ALL TABLES` cannot be told
+to add a single table, and a publication without UPDATE streams no removal,
+because a removal in this table is an update.
+
+A check that cannot fail is worse than no check, so this one was made to fail on
+purpose before being trusted: with `pubupdate` false, with `puballtables` true,
+and with the publication renamed away entirely, the assertion goes red and names
+the flag; with the five values the live publication actually has, it passes.
+Those three were run against the function with the readings handed to it, not by
+altering the live publication.
 
 ## Reversing it
 

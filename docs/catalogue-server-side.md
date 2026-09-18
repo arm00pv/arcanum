@@ -177,14 +177,30 @@ create index catalog_cards_number on public.catalog_cards (game, set_code, colle
 create index catalog_cards_rarity on public.catalog_cards (game, rarity);
 
 create extension if not exists pg_trgm with schema extensions;
-create index catalog_cards_name_trgm on public.catalog_cards using gin (lower(name) gin_trgm_ops);
-create index catalog_cards_text_trgm on public.catalog_cards using gin (lower(coalesce(oracle_text, '')) gin_trgm_ops);
+create index catalog_cards_name_trgm on public.catalog_cards using gin (name gin_trgm_ops);
+create index catalog_cards_text_trgm on public.catalog_cards using gin (oracle_text gin_trgm_ops);
 ~~~
 
 The two trigram indexes are what make `name ILIKE '%charizard%'` and the
 rules-text half of search usable over a quarter of a million rows. They are the
 only reason a shared catalogue can answer a question the local one answers with a
 full scan.
+
+**Both are on the raw columns, because the predicate compares the raw columns.**
+This section first specified `lower(name)` and `lower(coalesce(oracle_text, ''))`,
+which is the same mistake twice. A GIN index is matched by the expression in the
+predicate and by nothing that merely means the same thing, so `name ILIKE ...`
+cannot use an index on `lower(name)`, and `oracle_text ILIKE ...` cannot use one
+on `coalesce(oracle_text, '')` either - the second is easy to miss, because
+dropping the `lower()` is the obvious half of the fix and it is not enough on its
+own. Both were measured against the imported Lorcana rows rather than reasoned
+about: as first specified, section 4's predicate read the table; as written above,
+it reads the indexes. pg_trgm lower-cases what it indexes whichever case the
+column stores, so an index on `name` answers `ILIKE` exactly as the old one would
+have, and a case-sensitive `LIKE` as well. The expression was corrected in
+`tool/catalog/0002_search_index_expressions.sql`; the index names did not change.
+Section 4's predicate is what these indexes are on, and it has to stay spelled
+the way it is there.
 
 ### 2.3 The two folding rules, which must not drift
 
@@ -379,6 +395,13 @@ $$;
 That is `CatalogDao.searchCached`'s ordering, translated. The caller escapes `%`
 and `_` in `p_query`, or the function does; a collector typing `%` should not turn
 the query into "everything".
+
+The two `ILIKE`s in that function do more than select rows: they are the
+expressions the two trigram indexes of §2.2 are on, and they are written against
+the raw columns so that they match. Wrapping either one in `lower(...)` or
+`coalesce(...)` gives the same results and no matching index, which over a
+quarter of a million rows is a sequential scan that reads like a search. See §2.2
+for the measurements.
 
 The number lookup takes the parsed query rather than parsing it again, because
 `CollectorQuery.parse` already exists in Dart and a second grammar in SQL is a
