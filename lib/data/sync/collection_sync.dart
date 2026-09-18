@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:sqflite/sqflite.dart';
 
 import 'package:arcanum/data/sync/account_collection.dart';
@@ -19,7 +21,7 @@ import 'package:arcanum/domain/models/collection_entry.dart';
 /// in this file has to know which rows are tombstones; what it does have to get
 /// right is the order it works in, which is what [sync] is for.
 class CollectionSync {
-  const CollectionSync({required this.table, required this.db});
+  CollectionSync({required this.table, required this.db});
 
   /// The account's side.
   final AccountTable table;
@@ -29,6 +31,21 @@ class CollectionSync {
 
   static const String _local = 'collection_entries';
 
+  /// The newest edit this device has carried up, by game.
+  ///
+  /// What a watcher has to ask is not whether the collection has changed but
+  /// whether the account has been told, and only a push can answer that. So the
+  /// answer is recorded where pushes happen rather than kept by whoever asks,
+  /// and every push - a sign-in's, a watcher's - leaves it correct.
+  ///
+  /// Held for the life of the process and never written down. It is knowledge
+  /// about the account, and a session begins by reading the account's own copy;
+  /// a value kept past that sign-in would describe a collection that is no
+  /// longer there, since restoring an archive brings rows with their own older
+  /// stamps. Being wrong in the other direction costs one push, and this one
+  /// costs a change that never travels at all.
+  final Map<String, int> _carried = <String, int>{};
+
   /// Sends everything this device holds for one game up to the account.
   ///
   /// Everything, including the holdings removed here: a removal is the only
@@ -37,6 +54,12 @@ class CollectionSync {
   ///
   /// Returns how many were sent, which is what a progress line or a test wants
   /// to know - not a number the caller has to count itself.
+  ///
+  /// The newest stamp in what was sent becomes what this device has carried up.
+  /// Recorded after the account answers and never before: a push that failed
+  /// must not look like one that worked, or the edit it was carrying would sit
+  /// waiting for a next edit that may never come, which is the bug this file is
+  /// here to prevent, arrived at from the other side.
   Future<int> push(CardGame game) async {
     final List<Map<String, Object?>> local = await db.query(
       _local,
@@ -50,8 +73,71 @@ class CollectionSync {
         AccountCollection.row(CollectionEntry.fromRow(row), game),
     ];
     await table.upsert(rows);
+    _carried[game.id] = _newest(local);
     return rows.length;
   }
+
+  /// Carries up the holdings this device has changed since it last did.
+  ///
+  /// The counterpart to [push] rather than a second version of it. A whole-game
+  /// push answers for the whole game because that is what a sign-in is asking;
+  /// it is also blind, and there is a trap in that: an upsert never asks what
+  /// the account holds, so a device sending a row it has not touched since it
+  /// last pushed is how a browser left closed for a week clears a removal
+  /// somebody made on another browser while it was away. Only the rows stamped
+  /// since the last push travel here, and those are the rows this device has
+  /// actually edited - so nothing this device has no news about is ever sent,
+  /// and the news it does have is the newest this device knows.
+  ///
+  /// Returns how many were sent, and nothing at all when the account already
+  /// has everything this device holds.
+  Future<int> pushAhead(CardGame game) async {
+    final List<Map<String, Object?>> local = await db.query(
+      _local,
+      where: 'game = ? AND updated_at > ?',
+      whereArgs: <Object?>[game.id, _carried[game.id] ?? 0],
+    );
+    if (local.isEmpty) return 0;
+
+    final List<Map<String, Object?>> rows = <Map<String, Object?>>[
+      for (final Map<String, Object?> row in local)
+        AccountCollection.row(CollectionEntry.fromRow(row), game),
+    ];
+    await table.upsert(rows);
+    _carried[game.id] = _newest(local);
+    return rows.length;
+  }
+
+  /// The games holding an edit the account has not been told about.
+  ///
+  /// The most recently edited first, so the game somebody is working in is the
+  /// one being brought current, which is the one they will look at.
+  ///
+  /// One query for all of them, because this is asked on a timer and a timer
+  /// that costs nine queries to be told nothing has happened is a timer that
+  /// shows up in a profile. A game whose rows have not moved - or which has no
+  /// rows at all - is not in the answer, and a watch that gets an empty list
+  /// makes no request.
+  Future<List<CardGame>> ahead() async {
+    final List<Map<String, Object?>> held = await db.rawQuery(
+      'SELECT game, MAX(updated_at) AS newest FROM $_local '
+      'GROUP BY game ORDER BY newest DESC',
+    );
+    final List<CardGame> moved = <CardGame>[];
+    for (final Map<String, Object?> row in held) {
+      final String id = row['game'] as String? ?? '';
+      final int newest = (row['newest'] as num?)?.toInt() ?? 0;
+      if (newest > (_carried[id] ?? 0)) moved.add(CardGame.fromId(id));
+    }
+    return moved;
+  }
+
+  /// The newest edit among [rows] - what the account has just been told.
+  static int _newest(List<Map<String, Object?>> rows) => rows.fold<int>(
+    0,
+    (int newest, Map<String, Object?> row) =>
+        math.max(newest, (row['updated_at'] as num?)?.toInt() ?? 0),
+  );
 
   /// Brings the account's holdings for one game down, keeping the newer copy.
   ///

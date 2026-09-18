@@ -19,6 +19,7 @@ class AccountGate extends StatefulWidget {
     required this.service,
     required this.child,
     this.onSignedIn,
+    this.onSignedOut,
   });
 
   final AccountService service;
@@ -35,6 +36,14 @@ class AccountGate extends StatefulWidget {
   /// has to be announced to the screens that already answered, and those are
   /// reachable from the scope and from nowhere that dies with a widget.
   final Future<void> Function(ProviderContainer container)? onSignedIn;
+
+  /// Called when the session goes, whichever way it went.
+  ///
+  /// The other end of [onSignedIn]: work that was started because there was an
+  /// account has to stop when there is not one. It is told rather than left to
+  /// notice, because the gate is the thing that already knows - a token that
+  /// expired or a sign-out from Settings closes the vault here and nowhere else.
+  final void Function()? onSignedOut;
 
   /// The vault, shown once somebody is signed in.
   final Widget child;
@@ -54,7 +63,11 @@ class _AccountGateState extends State<AccountGate> {
       final bool signedIn = state.session != null;
       if (signedIn != _signedIn && mounted) {
         setState(() => _signedIn = signedIn);
-        if (signedIn) _start();
+        if (signedIn) {
+          _start();
+        } else {
+          widget.onSignedOut?.call();
+        }
       }
     });
     // A session restored on launch never fires a change, so the same work has

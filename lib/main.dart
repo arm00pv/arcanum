@@ -13,6 +13,7 @@ import 'package:arcanum/data/sync/collection_sync.dart';
 import 'package:arcanum/features/auth/account_gate.dart';
 import 'package:arcanum/features/auth/account_providers.dart';
 import 'package:arcanum/features/auth/account_reconcile.dart';
+import 'package:arcanum/features/auth/collection_watcher.dart';
 import 'package:arcanum/data/backup/backup_scheduler.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/providers.dart';
@@ -82,23 +83,38 @@ Future<void> main() async {
     if (kIsWeb) {
       bootStep.value = 'checking your account';
       account = await AccountService.start();
+      final AccountService service = account;
       // A confirmation link lands the browser here carrying the session in the
       // address. Read it before the gate decides what to show, so the link
       // finishes what it started instead of leaving the collector at a sign-in
       // screen wondering whether it worked.
-      await account.completeRedirect(Uri.base);
+      await service.completeRedirect(Uri.base);
 
       final CollectionSync collection = CollectionSync(
         table: SupabaseAccountTable(Supabase.instance.client),
         db: database.db,
       );
+      // Signing in reconciles the account once; this is what keeps it current
+      // for the rest of the session. Made here, inside the branch that has an
+      // account, so nothing about it exists on a phone.
+      final CollectionWatcher watcher = CollectionWatcher(
+        sync: collection,
+        signedIn: () => service.isSignedIn,
+      );
       app = AccountGate(
-        service: account,
-        onSignedIn: (ProviderContainer scope) => reconcileAccount(
-          sync: collection,
-          bootstrap: bootstrap,
-          scope: scope,
-        ),
+        service: service,
+        onSignedIn: (ProviderContainer scope) async {
+          await reconcileAccount(
+            sync: collection,
+            bootstrap: bootstrap,
+            scope: scope,
+          );
+          // Only once the sign-in's own sync is done: two runs carrying the
+          // same game up at once is work nobody asked for, and the watcher
+          // knows what has been carried up precisely because that sync says so.
+          watcher.begin(scope);
+        },
+        onSignedOut: watcher.end,
         child: app,
       );
     }

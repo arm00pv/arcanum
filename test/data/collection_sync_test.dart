@@ -412,4 +412,56 @@ void main() {
       expect(await db.query('collection_entries'), hasLength(1));
     });
   });
+
+  group('what this device has already carried up', () {
+    test('a device that has just pushed has nothing left to carry', () async {
+      await putLocal(db, held('lotus-1'));
+      await sync.sync(CardGame.mtg);
+
+      expect(await sync.ahead(), isEmpty);
+      // And nothing is asked of the account again. A watch that pushed the
+      // whole game every time it looked would be a request per ten seconds
+      // that nobody's collection ever asked for.
+      account.written.clear();
+      expect(await sync.pushAhead(CardGame.mtg), 0);
+      expect(account.written, isEmpty);
+    });
+
+    test('only what has changed since the last push travels', () async {
+      await putLocal(db, held('lotus-1'));
+      await putLocal(db, held('bolt-1'));
+      await sync.sync(CardGame.mtg);
+      account.written.clear();
+
+      await CollectionDao(db).addOrMerge(
+        game: CardGame.mtg,
+        cardId: 'bolt-2',
+        finish: CardFinish.nonfoil,
+        condition: CardCondition.nearMint,
+        language: 'en',
+        quantity: 1,
+      );
+
+      expect(await sync.ahead(), <CardGame>[CardGame.mtg]);
+      expect(await sync.pushAhead(CardGame.mtg), 1);
+      expect(account.written.single['card_id'], 'bolt-2');
+      // The two cards nobody touched were not sent, and that is the point of
+      // sending only the changes: a push carrying a row this device has no news
+      // about is a push that can clear a removal made on another browser.
+      expect(account.written.single['quantity'], 1);
+      expect(await sync.ahead(), isEmpty);
+    });
+
+    test('a removal made since the last push travels as the removal', () async {
+      await putLocal(db, held('lotus-1'));
+      await sync.sync(CardGame.mtg);
+      account.written.clear();
+
+      await CollectionDao(db).delete(await idOf(db, 'lotus-1'));
+
+      expect(await sync.pushAhead(CardGame.mtg), 1);
+      expect(account.written.single['deleted_at'], isNotNull);
+      expect(account.tombstoned('lotus-1'), isTrue);
+    });
+  });
 }

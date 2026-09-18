@@ -64,7 +64,7 @@ Future<void> reconcileAccount({
     } catch (error) {
       debugPrint('[sync] $game did not reconcile: $error');
     }
-    _announce(scope, game);
+    announceCollectionChange(scope, game);
   }
 
   for (final CardGame game in _inSignInOrder(bootstrap.settings.activeGame)) {
@@ -78,7 +78,7 @@ Future<void> reconcileAccount({
     } catch (error) {
       debugPrint('[sync] $game cards did not resolve: $error');
     }
-    _announce(scope, game);
+    announceCollectionChange(scope, game);
   }
 }
 
@@ -102,12 +102,16 @@ List<CardGame> _inSignInOrder(CardGame active) => <CardGame>[
 /// what a pull changes: the holdings themselves, and the catalogue data behind
 /// them.
 ///
+/// Shared with `CollectionWatcher`, which brings the account's copy down the
+/// same way when it reconciles after a gap: what has to be announced is one
+/// fact, and a second definition of it is a second thing to keep in step.
+///
 /// Per game rather than all at once, so the vault somebody is looking at is
 /// readable while the rest of the account is still travelling. And per game
 /// rather than per chunk of a catalogue download: a collection arrives in
 /// dozens of chunks, and a list rebuilt for each of them is a list nobody can
 /// read while it flickers.
-void _announce(ProviderContainer scope, CardGame game) {
+void announceCollectionChange(ProviderContainer scope, CardGame game) {
   scope.invalidate(collectionOverviewProvider(game));
   scope.invalidate(ownedCardsProvider(game));
 }
