@@ -1,0 +1,1302 @@
+{
+  "generated_by": "tool/catalog/gen_fold_vectors.dart",
+  "why": "section 2.3: one rule, two languages, asserted from both sides",
+  "separators": [
+    "-",
+    " ",
+    ".",
+    "/",
+    "_",
+    ":"
+  ],
+  "code_expr_sql": "replace(replace(replace(replace(replace(replace(lower(code), '-', ''), ' ', ''), '.', ''), '/', ''), '_', ''), ':', '')",
+  "number_expr_sql": "ltrim(collector_number, '0')",
+  "codes": [
+    {
+      "input": "",
+      "fold": "",
+      "stored": ""
+    },
+    {
+      "input": "  padded  ",
+      "fold": "padded",
+      "stored": "padded"
+    },
+    {
+      "input": "1",
+      "fold": "1",
+      "stored": "1"
+    },
+    {
+      "input": "10",
+      "fold": "10",
+      "stored": "10"
+    },
+    {
+      "input": "11",
+      "fold": "11",
+      "stored": "11"
+    },
+    {
+      "input": "12",
+      "fold": "12",
+      "stored": "12"
+    },
+    {
+      "input": "13",
+      "fold": "13",
+      "stored": "13"
+    },
+    {
+      "input": "2",
+      "fold": "2",
+      "stored": "2"
+    },
+    {
+      "input": "3",
+      "fold": "3",
+      "stored": "3"
+    },
+    {
+      "input": "4",
+      "fold": "4",
+      "stored": "4"
+    },
+    {
+      "input": "5",
+      "fold": "5",
+      "stored": "5"
+    },
+    {
+      "input": "6",
+      "fold": "6",
+      "stored": "6"
+    },
+    {
+      "input": "7",
+      "fold": "7",
+      "stored": "7"
+    },
+    {
+      "input": "8",
+      "fold": "8",
+      "stored": "8"
+    },
+    {
+      "input": "9",
+      "fold": "9",
+      "stored": "9"
+    },
+    {
+      "input": "BT 26",
+      "fold": "bt26",
+      "stored": "bt26"
+    },
+    {
+      "input": "BT!26",
+      "fold": "bt26",
+      "stored": "bt!26"
+    },
+    {
+      "input": "BT#26",
+      "fold": "bt26",
+      "stored": "bt#26"
+    },
+    {
+      "input": "BT%26",
+      "fold": "bt26",
+      "stored": "bt%26"
+    },
+    {
+      "input": "BT&26",
+      "fold": "bt26",
+      "stored": "bt&26"
+    },
+    {
+      "input": "BT's",
+      "fold": "bts",
+      "stored": "bt's"
+    },
+    {
+      "input": "BT(26)",
+      "fold": "bt26",
+      "stored": "bt(26)"
+    },
+    {
+      "input": "BT*26",
+      "fold": "bt26",
+      "stored": "bt*26"
+    },
+    {
+      "input": "BT+26",
+      "fold": "bt26",
+      "stored": "bt+26"
+    },
+    {
+      "input": "BT,26",
+      "fold": "bt26",
+      "stored": "bt,26"
+    },
+    {
+      "input": "BT-26",
+      "fold": "bt26",
+      "stored": "bt26"
+    },
+    {
+      "input": "BT-26/EN",
+      "fold": "bt26en",
+      "stored": "bt26en"
+    },
+    {
+      "input": "BT.26",
+      "fold": "bt26",
+      "stored": "bt26"
+    },
+    {
+      "input": "BT/26",
+      "fold": "bt26",
+      "stored": "bt26"
+    },
+    {
+      "input": "BT:26",
+      "fold": "bt26",
+      "stored": "bt26"
+    },
+    {
+      "input": "BT;26",
+      "fold": "bt26",
+      "stored": "bt;26"
+    },
+    {
+      "input": "BT<26>",
+      "fold": "bt26",
+      "stored": "bt<26>"
+    },
+    {
+      "input": "BT=26",
+      "fold": "bt26",
+      "stored": "bt=26"
+    },
+    {
+      "input": "BT?26",
+      "fold": "bt26",
+      "stored": "bt?26"
+    },
+    {
+      "input": "BT@26",
+      "fold": "bt26",
+      "stored": "bt@26"
+    },
+    {
+      "input": "BT[26]",
+      "fold": "bt26",
+      "stored": "bt[26]"
+    },
+    {
+      "input": "BT\\26",
+      "fold": "bt26",
+      "stored": "bt\\26"
+    },
+    {
+      "input": "BT_26",
+      "fold": "bt26",
+      "stored": "bt26"
+    },
+    {
+      "input": "BT{26}",
+      "fold": "bt26",
+      "stored": "bt{26}"
+    },
+    {
+      "input": "BT|26",
+      "fold": "bt26",
+      "stored": "bt|26"
+    },
+    {
+      "input": "BT~26",
+      "fold": "bt26",
+      "stored": "bt~26"
+    },
+    {
+      "input": "C2",
+      "fold": "c2",
+      "stored": "c2"
+    },
+    {
+      "input": "CC1",
+      "fold": "cc1",
+      "stored": "cc1"
+    },
+    {
+      "input": "Coconut",
+      "fold": "coconut",
+      "stored": "coconut"
+    },
+    {
+      "input": "D23",
+      "fold": "d23",
+      "stored": "d23"
+    },
+    {
+      "input": "DIS",
+      "fold": "dis",
+      "stored": "dis"
+    },
+    {
+      "input": "EX-13",
+      "fold": "ex13",
+      "stored": "ex13"
+    },
+    {
+      "input": "MAMA-EN001",
+      "fold": "mamaen001",
+      "stored": "mamaen001"
+    },
+    {
+      "input": "Mixed-Case.Code",
+      "fold": "mixedcasecode",
+      "stored": "mixedcasecode"
+    },
+    {
+      "input": "P1",
+      "fold": "p1",
+      "stored": "p1"
+    },
+    {
+      "input": "P2",
+      "fold": "p2",
+      "stored": "p2"
+    },
+    {
+      "input": "P3",
+      "fold": "p3",
+      "stored": "p3"
+    },
+    {
+      "input": "P4",
+      "fold": "p4",
+      "stored": "p4"
+    },
+    {
+      "input": "PD1",
+      "fold": "pd1",
+      "stored": "pd1"
+    },
+    {
+      "input": "Pékor",
+      "fold": "pkor",
+      "stored": "pékor"
+    },
+    {
+      "input": "cp",
+      "fold": "cp",
+      "stored": "cp"
+    },
+    {
+      "input": "st-23",
+      "fold": "st23",
+      "stored": "st23"
+    },
+    {
+      "input": " nbsp",
+      "fold": "nbsp",
+      "stored": " nbsp"
+    },
+    {
+      "input": "–dash",
+      "fold": "dash",
+      "stored": "–dash"
+    },
+    {
+      "input": "ポケモン",
+      "fold": "",
+      "stored": "ポケモン"
+    }
+  ],
+  "numbers": [
+    {
+      "input": "",
+      "bare": ""
+    },
+    {
+      "input": "+5",
+      "bare": "+5"
+    },
+    {
+      "input": "-5",
+      "bare": "-5"
+    },
+    {
+      "input": "0",
+      "bare": ""
+    },
+    {
+      "input": "00",
+      "bare": ""
+    },
+    {
+      "input": "000",
+      "bare": ""
+    },
+    {
+      "input": "001",
+      "bare": "1"
+    },
+    {
+      "input": "0012",
+      "bare": "12"
+    },
+    {
+      "input": "001a",
+      "bare": "1a"
+    },
+    {
+      "input": "01",
+      "bare": "1"
+    },
+    {
+      "input": "010",
+      "bare": "10"
+    },
+    {
+      "input": "0125",
+      "bare": "125"
+    },
+    {
+      "input": "0x1f",
+      "bare": "x1f"
+    },
+    {
+      "input": "1",
+      "bare": "1"
+    },
+    {
+      "input": "10",
+      "bare": "10"
+    },
+    {
+      "input": "100",
+      "bare": "100"
+    },
+    {
+      "input": "101",
+      "bare": "101"
+    },
+    {
+      "input": "102",
+      "bare": "102"
+    },
+    {
+      "input": "103",
+      "bare": "103"
+    },
+    {
+      "input": "104",
+      "bare": "104"
+    },
+    {
+      "input": "105",
+      "bare": "105"
+    },
+    {
+      "input": "106",
+      "bare": "106"
+    },
+    {
+      "input": "107",
+      "bare": "107"
+    },
+    {
+      "input": "108",
+      "bare": "108"
+    },
+    {
+      "input": "109",
+      "bare": "109"
+    },
+    {
+      "input": "11",
+      "bare": "11"
+    },
+    {
+      "input": "110",
+      "bare": "110"
+    },
+    {
+      "input": "111",
+      "bare": "111"
+    },
+    {
+      "input": "112",
+      "bare": "112"
+    },
+    {
+      "input": "113",
+      "bare": "113"
+    },
+    {
+      "input": "114",
+      "bare": "114"
+    },
+    {
+      "input": "115",
+      "bare": "115"
+    },
+    {
+      "input": "116",
+      "bare": "116"
+    },
+    {
+      "input": "117",
+      "bare": "117"
+    },
+    {
+      "input": "118",
+      "bare": "118"
+    },
+    {
+      "input": "119",
+      "bare": "119"
+    },
+    {
+      "input": "12",
+      "bare": "12"
+    },
+    {
+      "input": "120",
+      "bare": "120"
+    },
+    {
+      "input": "121",
+      "bare": "121"
+    },
+    {
+      "input": "122",
+      "bare": "122"
+    },
+    {
+      "input": "123",
+      "bare": "123"
+    },
+    {
+      "input": "124",
+      "bare": "124"
+    },
+    {
+      "input": "125",
+      "bare": "125"
+    },
+    {
+      "input": "125f",
+      "bare": "125f"
+    },
+    {
+      "input": "126",
+      "bare": "126"
+    },
+    {
+      "input": "127",
+      "bare": "127"
+    },
+    {
+      "input": "128",
+      "bare": "128"
+    },
+    {
+      "input": "129",
+      "bare": "129"
+    },
+    {
+      "input": "13",
+      "bare": "13"
+    },
+    {
+      "input": "130",
+      "bare": "130"
+    },
+    {
+      "input": "131",
+      "bare": "131"
+    },
+    {
+      "input": "132",
+      "bare": "132"
+    },
+    {
+      "input": "133",
+      "bare": "133"
+    },
+    {
+      "input": "134",
+      "bare": "134"
+    },
+    {
+      "input": "135",
+      "bare": "135"
+    },
+    {
+      "input": "136",
+      "bare": "136"
+    },
+    {
+      "input": "137",
+      "bare": "137"
+    },
+    {
+      "input": "138",
+      "bare": "138"
+    },
+    {
+      "input": "139",
+      "bare": "139"
+    },
+    {
+      "input": "14",
+      "bare": "14"
+    },
+    {
+      "input": "140",
+      "bare": "140"
+    },
+    {
+      "input": "141",
+      "bare": "141"
+    },
+    {
+      "input": "142",
+      "bare": "142"
+    },
+    {
+      "input": "143",
+      "bare": "143"
+    },
+    {
+      "input": "144",
+      "bare": "144"
+    },
+    {
+      "input": "145",
+      "bare": "145"
+    },
+    {
+      "input": "146",
+      "bare": "146"
+    },
+    {
+      "input": "147",
+      "bare": "147"
+    },
+    {
+      "input": "148",
+      "bare": "148"
+    },
+    {
+      "input": "149",
+      "bare": "149"
+    },
+    {
+      "input": "15",
+      "bare": "15"
+    },
+    {
+      "input": "150",
+      "bare": "150"
+    },
+    {
+      "input": "151",
+      "bare": "151"
+    },
+    {
+      "input": "152",
+      "bare": "152"
+    },
+    {
+      "input": "153",
+      "bare": "153"
+    },
+    {
+      "input": "154",
+      "bare": "154"
+    },
+    {
+      "input": "155",
+      "bare": "155"
+    },
+    {
+      "input": "156",
+      "bare": "156"
+    },
+    {
+      "input": "157",
+      "bare": "157"
+    },
+    {
+      "input": "158",
+      "bare": "158"
+    },
+    {
+      "input": "159",
+      "bare": "159"
+    },
+    {
+      "input": "16",
+      "bare": "16"
+    },
+    {
+      "input": "160",
+      "bare": "160"
+    },
+    {
+      "input": "161",
+      "bare": "161"
+    },
+    {
+      "input": "162",
+      "bare": "162"
+    },
+    {
+      "input": "163",
+      "bare": "163"
+    },
+    {
+      "input": "164",
+      "bare": "164"
+    },
+    {
+      "input": "165",
+      "bare": "165"
+    },
+    {
+      "input": "166",
+      "bare": "166"
+    },
+    {
+      "input": "167",
+      "bare": "167"
+    },
+    {
+      "input": "168",
+      "bare": "168"
+    },
+    {
+      "input": "169",
+      "bare": "169"
+    },
+    {
+      "input": "17",
+      "bare": "17"
+    },
+    {
+      "input": "170",
+      "bare": "170"
+    },
+    {
+      "input": "171",
+      "bare": "171"
+    },
+    {
+      "input": "172",
+      "bare": "172"
+    },
+    {
+      "input": "173",
+      "bare": "173"
+    },
+    {
+      "input": "174",
+      "bare": "174"
+    },
+    {
+      "input": "175",
+      "bare": "175"
+    },
+    {
+      "input": "176",
+      "bare": "176"
+    },
+    {
+      "input": "177",
+      "bare": "177"
+    },
+    {
+      "input": "178",
+      "bare": "178"
+    },
+    {
+      "input": "179",
+      "bare": "179"
+    },
+    {
+      "input": "18",
+      "bare": "18"
+    },
+    {
+      "input": "180",
+      "bare": "180"
+    },
+    {
+      "input": "181",
+      "bare": "181"
+    },
+    {
+      "input": "182",
+      "bare": "182"
+    },
+    {
+      "input": "183",
+      "bare": "183"
+    },
+    {
+      "input": "184",
+      "bare": "184"
+    },
+    {
+      "input": "185",
+      "bare": "185"
+    },
+    {
+      "input": "186",
+      "bare": "186"
+    },
+    {
+      "input": "187",
+      "bare": "187"
+    },
+    {
+      "input": "188",
+      "bare": "188"
+    },
+    {
+      "input": "189",
+      "bare": "189"
+    },
+    {
+      "input": "19",
+      "bare": "19"
+    },
+    {
+      "input": "190",
+      "bare": "190"
+    },
+    {
+      "input": "191",
+      "bare": "191"
+    },
+    {
+      "input": "192",
+      "bare": "192"
+    },
+    {
+      "input": "193",
+      "bare": "193"
+    },
+    {
+      "input": "194",
+      "bare": "194"
+    },
+    {
+      "input": "195",
+      "bare": "195"
+    },
+    {
+      "input": "196",
+      "bare": "196"
+    },
+    {
+      "input": "197",
+      "bare": "197"
+    },
+    {
+      "input": "198",
+      "bare": "198"
+    },
+    {
+      "input": "199",
+      "bare": "199"
+    },
+    {
+      "input": "1f",
+      "bare": "1f"
+    },
+    {
+      "input": "2",
+      "bare": "2"
+    },
+    {
+      "input": "20",
+      "bare": "20"
+    },
+    {
+      "input": "200",
+      "bare": "200"
+    },
+    {
+      "input": "201",
+      "bare": "201"
+    },
+    {
+      "input": "202",
+      "bare": "202"
+    },
+    {
+      "input": "203",
+      "bare": "203"
+    },
+    {
+      "input": "204",
+      "bare": "204"
+    },
+    {
+      "input": "205",
+      "bare": "205"
+    },
+    {
+      "input": "206",
+      "bare": "206"
+    },
+    {
+      "input": "207",
+      "bare": "207"
+    },
+    {
+      "input": "208",
+      "bare": "208"
+    },
+    {
+      "input": "209",
+      "bare": "209"
+    },
+    {
+      "input": "21",
+      "bare": "21"
+    },
+    {
+      "input": "210",
+      "bare": "210"
+    },
+    {
+      "input": "211",
+      "bare": "211"
+    },
+    {
+      "input": "212",
+      "bare": "212"
+    },
+    {
+      "input": "213",
+      "bare": "213"
+    },
+    {
+      "input": "214",
+      "bare": "214"
+    },
+    {
+      "input": "215",
+      "bare": "215"
+    },
+    {
+      "input": "216",
+      "bare": "216"
+    },
+    {
+      "input": "22",
+      "bare": "22"
+    },
+    {
+      "input": "23",
+      "bare": "23"
+    },
+    {
+      "input": "24",
+      "bare": "24"
+    },
+    {
+      "input": "24B",
+      "bare": "24B"
+    },
+    {
+      "input": "25",
+      "bare": "25"
+    },
+    {
+      "input": "25ja",
+      "bare": "25ja"
+    },
+    {
+      "input": "25zh",
+      "bare": "25zh"
+    },
+    {
+      "input": "26",
+      "bare": "26"
+    },
+    {
+      "input": "27",
+      "bare": "27"
+    },
+    {
+      "input": "28",
+      "bare": "28"
+    },
+    {
+      "input": "29",
+      "bare": "29"
+    },
+    {
+      "input": "2f",
+      "bare": "2f"
+    },
+    {
+      "input": "3",
+      "bare": "3"
+    },
+    {
+      "input": "30",
+      "bare": "30"
+    },
+    {
+      "input": "31",
+      "bare": "31"
+    },
+    {
+      "input": "32",
+      "bare": "32"
+    },
+    {
+      "input": "33",
+      "bare": "33"
+    },
+    {
+      "input": "34",
+      "bare": "34"
+    },
+    {
+      "input": "35",
+      "bare": "35"
+    },
+    {
+      "input": "36",
+      "bare": "36"
+    },
+    {
+      "input": "37",
+      "bare": "37"
+    },
+    {
+      "input": "38",
+      "bare": "38"
+    },
+    {
+      "input": "39",
+      "bare": "39"
+    },
+    {
+      "input": "3f",
+      "bare": "3f"
+    },
+    {
+      "input": "4",
+      "bare": "4"
+    },
+    {
+      "input": "40",
+      "bare": "40"
+    },
+    {
+      "input": "41",
+      "bare": "41"
+    },
+    {
+      "input": "42",
+      "bare": "42"
+    },
+    {
+      "input": "43",
+      "bare": "43"
+    },
+    {
+      "input": "44",
+      "bare": "44"
+    },
+    {
+      "input": "45",
+      "bare": "45"
+    },
+    {
+      "input": "46",
+      "bare": "46"
+    },
+    {
+      "input": "47",
+      "bare": "47"
+    },
+    {
+      "input": "48",
+      "bare": "48"
+    },
+    {
+      "input": "49",
+      "bare": "49"
+    },
+    {
+      "input": "4a",
+      "bare": "4a"
+    },
+    {
+      "input": "4b",
+      "bare": "4b"
+    },
+    {
+      "input": "4c",
+      "bare": "4c"
+    },
+    {
+      "input": "4d",
+      "bare": "4d"
+    },
+    {
+      "input": "4e",
+      "bare": "4e"
+    },
+    {
+      "input": "5",
+      "bare": "5"
+    },
+    {
+      "input": "50",
+      "bare": "50"
+    },
+    {
+      "input": "51",
+      "bare": "51"
+    },
+    {
+      "input": "52",
+      "bare": "52"
+    },
+    {
+      "input": "53",
+      "bare": "53"
+    },
+    {
+      "input": "54",
+      "bare": "54"
+    },
+    {
+      "input": "55",
+      "bare": "55"
+    },
+    {
+      "input": "56",
+      "bare": "56"
+    },
+    {
+      "input": "57",
+      "bare": "57"
+    },
+    {
+      "input": "58",
+      "bare": "58"
+    },
+    {
+      "input": "59",
+      "bare": "59"
+    },
+    {
+      "input": "6",
+      "bare": "6"
+    },
+    {
+      "input": "60",
+      "bare": "60"
+    },
+    {
+      "input": "61",
+      "bare": "61"
+    },
+    {
+      "input": "62",
+      "bare": "62"
+    },
+    {
+      "input": "63",
+      "bare": "63"
+    },
+    {
+      "input": "64",
+      "bare": "64"
+    },
+    {
+      "input": "65",
+      "bare": "65"
+    },
+    {
+      "input": "65f",
+      "bare": "65f"
+    },
+    {
+      "input": "66",
+      "bare": "66"
+    },
+    {
+      "input": "67",
+      "bare": "67"
+    },
+    {
+      "input": "68",
+      "bare": "68"
+    },
+    {
+      "input": "69",
+      "bare": "69"
+    },
+    {
+      "input": "7",
+      "bare": "7"
+    },
+    {
+      "input": "70",
+      "bare": "70"
+    },
+    {
+      "input": "71",
+      "bare": "71"
+    },
+    {
+      "input": "72",
+      "bare": "72"
+    },
+    {
+      "input": "73",
+      "bare": "73"
+    },
+    {
+      "input": "74",
+      "bare": "74"
+    },
+    {
+      "input": "75",
+      "bare": "75"
+    },
+    {
+      "input": "76",
+      "bare": "76"
+    },
+    {
+      "input": "77",
+      "bare": "77"
+    },
+    {
+      "input": "78",
+      "bare": "78"
+    },
+    {
+      "input": "79",
+      "bare": "79"
+    },
+    {
+      "input": "8",
+      "bare": "8"
+    },
+    {
+      "input": "80",
+      "bare": "80"
+    },
+    {
+      "input": "81",
+      "bare": "81"
+    },
+    {
+      "input": "82",
+      "bare": "82"
+    },
+    {
+      "input": "83",
+      "bare": "83"
+    },
+    {
+      "input": "84",
+      "bare": "84"
+    },
+    {
+      "input": "85",
+      "bare": "85"
+    },
+    {
+      "input": "86",
+      "bare": "86"
+    },
+    {
+      "input": "87",
+      "bare": "87"
+    },
+    {
+      "input": "88",
+      "bare": "88"
+    },
+    {
+      "input": "89",
+      "bare": "89"
+    },
+    {
+      "input": "9",
+      "bare": "9"
+    },
+    {
+      "input": "90",
+      "bare": "90"
+    },
+    {
+      "input": "91",
+      "bare": "91"
+    },
+    {
+      "input": "92",
+      "bare": "92"
+    },
+    {
+      "input": "93",
+      "bare": "93"
+    },
+    {
+      "input": "94",
+      "bare": "94"
+    },
+    {
+      "input": "95",
+      "bare": "95"
+    },
+    {
+      "input": "96",
+      "bare": "96"
+    },
+    {
+      "input": "97",
+      "bare": "97"
+    },
+    {
+      "input": "98",
+      "bare": "98"
+    },
+    {
+      "input": "99",
+      "bare": "99"
+    },
+    {
+      "input": "H1",
+      "bare": "H1"
+    },
+    {
+      "input": "SV001",
+      "bare": "SV001"
+    },
+    {
+      "input": "TG01",
+      "bare": "TG01"
+    },
+    {
+      "input": "★1",
+      "bare": "★1"
+    }
+  ]
+}
