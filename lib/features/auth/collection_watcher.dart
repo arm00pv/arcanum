@@ -42,7 +42,14 @@ class CollectionWatcher with WidgetsBindingObserver {
   CollectionWatcher({
     required this.sync,
     required this.signedIn,
-    this.interval = const Duration(seconds: 10),
+    // A second, not ten. The question this asks is a local one - the newest
+    // stamp per game, which SQLite answers out of an index in microseconds - so
+    // asking it often costs nothing, and the network request only happens when
+    // something has actually moved. Ten seconds was chosen for the request's
+    // sake, which was the wrong thing to weigh: the request is the rare case,
+    // and a collector who changes something and immediately looks at another
+    // screen should not be able to see the old answer.
+    this.interval = const Duration(seconds: 1),
   });
 
   /// This device's side of the sync.
