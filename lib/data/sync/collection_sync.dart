@@ -172,17 +172,25 @@ class CollectionSync {
     return _merge(game, row, entry);
   }
 
-  /// Brings the account's holdings for one game down, answering whether any of
-  /// them was newer than this device's copy.
+  /// Brings the account's holdings for one game down, naming the printings that
+  /// moved here.
   ///
   /// [pull] asked a different question - how many holdings the account has -
   /// and that count cannot answer this one: nine games the account holds
   /// thousands of rows for would be nine games announced every time a browser
   /// reconnects, most of them to show the collection that is already on screen.
-  Future<bool> pullChanged(CardGame game) async {
-    bool moved = false;
+  ///
+  /// The ids rather than a bare yes, because a row that moved is a row a screen
+  /// will be showing a moment from now, and whether it can be shown as a card or
+  /// as a placeholder is a question about the catalogue - which the caller holds
+  /// and this file does not.
+  Future<Set<String>> pullChanged(CardGame game) async {
+    final Set<String> moved = <String>{};
     for (final Map<String, Object?> row in await table.fetch(game)) {
-      if (await mergeRow(game, row)) moved = true;
+      if (!await mergeRow(game, row)) continue;
+      // mergeRow only answers for rows that are holdings, so there is an id
+      // here for every row that got past it.
+      moved.add(AccountCollection.entry(row)!.cardId);
     }
     return moved;
   }

@@ -111,6 +111,10 @@ Future<void> main() async {
       final CollectionListener listener = CollectionListener(
         sync: collection,
         changes: SupabaseAccountChanges(Supabase.instance.client),
+        // The catalogue this browser already has, so a change announced from
+        // another browser can be fetched as the card it names rather than left
+        // on screen as a placeholder.
+        catalog: bootstrap.catalog,
         signedIn: () => service.isSignedIn,
         accountId: () => service.user?.id,
       );

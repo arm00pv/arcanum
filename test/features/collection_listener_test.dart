@@ -12,13 +12,18 @@
 // These tests are about the hearing: that another device's change lands without
 // a reload, that a removal lands as a removal and hides the card, that an older
 // row from the account does not overwrite newer work here, that a burst of
-// changes is not a burst of rebuilds, and that a change in a vault nobody is
-// looking at does not disturb the vault they are.
+// changes is not a burst of rebuilds, that a change in a vault nobody is looking
+// at does not disturb the vault they are, and that a row arriving with the id of
+// a printing this browser has never downloaded is fetched as the card it names
+// rather than left on the list as "--".
 //
 // None of it needs a websocket. The account announces changes through the same
 // kind of seam AccountTable is - a fake that answers instantly and misbehaves on
 // demand - because the merge and the coalescing are the parts that have to be
-// right, and neither is a thing to leave to a live connection.
+// right, and neither is a thing to leave to a live connection. The shop behind
+// the collection is faked the same way, and the repository the app itself uses
+// is given to that fake, so what is watched here is the fetch the app makes
+// rather than a second way of making one written for the test.
 
 import 'dart:async';
 
@@ -26,13 +31,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/db/app_database.dart';
+import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/data/db/collection_dao.dart';
+import 'package:arcanum/data/repositories/catalog_repository.dart';
 import 'package:arcanum/data/sync/account_changes.dart';
 import 'package:arcanum/data/sync/account_table.dart';
 import 'package:arcanum/data/sync/collection_sync.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/collection_entry.dart';
+import 'package:arcanum/domain/models/tcg_card.dart';
 import 'package:arcanum/features/auth/collection_listener.dart';
 
 /// An account that answers instantly, remembers what it was told, and takes a
@@ -133,14 +142,81 @@ class _Socket implements AccountChanges {
   void dropped([Object error = 'the wire went away']) => _lost?.call(error);
 }
 
-/// One browser: its own database, the account it is signed in to, and the
-/// listener that hears from that account.
+/// One game's shop, as the browser sees it.
+///
+/// A source with nothing clever to do with a list of ids - it asks about them
+/// one at a time, which is what every catalogue does that has no set to read a
+/// whole bulk out of - and it records what it was asked, so that a test can see
+/// whether a fetch happened at all and how the ids were sliced rather than
+/// assume either.
+class _Source extends CardCatalog {
+  _Source(this.game, this.events);
+
+  @override
+  final CardGame game;
+
+  /// The browser's log of everything that happened, in order. A request is
+  /// written to it as well as the tellings, because one of these tests asks
+  /// something no log of its own could answer: whether the cards were here by
+  /// the time the screens heard about the row.
+  final List<String> events;
+
+  /// The ids of every request, in the order the requests were made.
+  final List<List<String>> bulks = <List<String>>[];
+
+  /// A shop that will not answer at all - one that is down, a network that
+  /// refuses it.
+  bool failing = false;
+
+  @override
+  String get sourceName => 'test';
+
+  @override
+  Future<Map<String, TcgCard>> fetchCardsByIds(List<String> ids) async {
+    events.add('cards:${game.id}');
+    bulks.add(List<String>.of(ids));
+    if (failing) throw const CatalogException('the shop did not answer');
+    return super.fetchCardsByIds(ids);
+  }
+
+  @override
+  Future<TcgCard?> fetchCardById(String id) async => printing(id, game: game);
+
+  @override
+  Future<List<TcgSet>> fetchAllSets({
+    void Function(int done, int total)? onProgress,
+  }) async => const <TcgSet>[];
+
+  @override
+  Future<List<TcgCard>> fetchCardsInSet(
+    String setCode, {
+    void Function(int done, int total)? onProgress,
+  }) async => const <TcgCard>[];
+
+  @override
+  Future<List<TcgCard>> search(String query, {int limit = 100}) async =>
+      const <TcgCard>[];
+
+  @override
+  Future<List<TcgCard>> fetchPrintingsOf(String groupId) async =>
+      const <TcgCard>[];
+
+  @override
+  Future<List<TcgCard>> refreshPrices(List<TcgCard> cards) async => cards;
+}
+
+/// One browser: its own database, the account it is signed in to, the shop it
+/// asks for cards, and the listener that hears from that account.
 class _Browser {
   _Browser({
     required this.db,
     required this.scope,
     required this.sync,
     required this.socket,
+    required this.sources,
+    required this.catalogDao,
+    required this.catalog,
+    required this.events,
   });
 
   /// Opens a browser, signed in to nothing yet.
@@ -150,15 +226,27 @@ class _Browser {
     Duration retry = const Duration(seconds: 2),
   }) async {
     final AppDatabase db = await AppDatabase.openInMemory();
+    final List<String> events = <String>[];
+    // Every game gets a source, because a browser has a shop to ask for any of
+    // them; a game with nothing to ask is a different file's question.
+    final Map<CardGame, _Source> sources = <CardGame, _Source>{
+      for (final CardGame game in CardGame.values) game: _Source(game, events),
+    };
+    final CatalogDao catalogDao = CatalogDao(db.db);
     final _Browser browser = _Browser(
       db: db,
       scope: ProviderContainer(),
       sync: CollectionSync(table: account, db: db.db),
       socket: _Socket(),
+      sources: sources,
+      catalogDao: catalogDao,
+      catalog: CatalogRepository(catalogs: sources, dao: catalogDao),
+      events: events,
     );
     browser.listener = CollectionListener(
       sync: browser.sync,
       changes: browser.socket,
+      catalog: browser.catalog,
       signedIn: () => browser.signedIn,
       accountId: () => browser.account,
       settle: settle,
@@ -166,9 +254,12 @@ class _Browser {
       // What a test wants to see is how often the screens are told, and the
       // telling is the thing being coalesced - so it is counted here rather
       // than watched through a provider, which would measure the same fact
-      // through a query.
-      announce: (ProviderContainer scope, CardGame game) =>
-          browser.announced.add(game),
+      // through a query. It is written to the log as well, because one test
+      // needs to see the telling against the fetch rather than on its own.
+      announce: (ProviderContainer scope, CardGame game) {
+        browser.announced.add(game);
+        events.add('announce:${game.id}');
+      },
     );
     addTearDown(browser.close);
     return browser;
@@ -179,6 +270,16 @@ class _Browser {
   final CollectionSync sync;
   final _Socket socket;
 
+  /// Each game's shop, which is what a fetch is made against.
+  final Map<CardGame, _Source> sources;
+
+  final CatalogDao catalogDao;
+  final CatalogRepository catalog;
+
+  /// Everything the browser did, in the order it did it: a request its shop was
+  /// given, and a telling its screens were given.
+  final List<String> events;
+
   /// The games the screens have been told about, in the order they were told.
   final List<CardGame> announced = <CardGame>[];
 
@@ -188,6 +289,9 @@ class _Browser {
   String? account = 'account-1';
 
   CollectionDao get dao => CollectionDao(db.db);
+
+  /// The shop this browser asks for a Magic card.
+  _Source get shop => sources[CardGame.mtg]!;
 
   /// Signs in the way the gate does, and starts listening the way [main] does.
   void signIn() => listener.begin(scope);
@@ -227,6 +331,17 @@ Map<String, Object?> accountRow({
   'created_at': '2026-09-01T00:00:00.000Z',
   'updated_at': updated,
 };
+
+/// A printing as this browser's own catalogue holds one.
+TcgCard printing(String id, {CardGame game = CardGame.mtg}) => TcgCard(
+  game: game,
+  id: id,
+  setCode: 'BLB',
+  setName: 'Bloomburrow',
+  name: 'Card $id',
+  collectorNumber: '001',
+  rarity: 'common',
+);
 
 /// A holding this device has been carrying for a while.
 CollectionEntry held(String cardId, {int quantity = 1}) => CollectionEntry(
@@ -290,6 +405,105 @@ void main() {
       );
     },
   );
+
+  test('a row naming an undownloaded card is fetched as a card', () async {
+    final _Account account = _Account();
+    final _Browser one = await _Browser.open(account);
+    one.signIn();
+
+    one.socket.hears(accountRow(cardId: 'bolt-1'));
+
+    await waitFor(
+      () async => one.announced.isNotEmpty,
+      'the screen being told',
+    );
+    // The report this exists for. The row names a printing whose set this
+    // browser has never opened, so the list can draw it as nothing but "--" -
+    // and the fetch comes first, which is what makes the rebuild the collector
+    // sees a list with a card on it rather than a placeholder that a second
+    // rebuild then takes away.
+    expect(one.events, <String>['cards:mtg', 'announce:mtg']);
+    expect(one.shop.bulks.single, <String>['bolt-1']);
+    final TcgCard? fetched = await one.catalogDao.cardById(
+      CardGame.mtg,
+      'bolt-1',
+    );
+    expect(fetched?.name, 'Card bolt-1');
+  });
+
+  test('a card this browser already has is not asked for again', () async {
+    final _Account account = _Account();
+    final _Browser one = await _Browser.open(account);
+    // The browser that has everything: it opened this set for another printing,
+    // or fetched this one for another holding a moment ago, and is only now
+    // hearing about this holding.
+    await one.catalogDao.upsertCards(CardGame.mtg, <TcgCard>[
+      printing('bolt-1'),
+    ]);
+    one.signIn();
+
+    one.socket.hears(accountRow(cardId: 'bolt-1'));
+
+    await waitFor(
+      () async => one.announced.isNotEmpty,
+      'the screen being told',
+    );
+    // The holding is new here and is announced like any other; the card behind
+    // it is not asked for, because the only question worth a request - is this
+    // printing missing - was answered out of the local catalogue.
+    expect(await one.owned(), contains('bolt-1'));
+    expect(one.events, <String>['announce:mtg']);
+    expect(one.shop.bulks, isEmpty);
+  });
+
+  test('a burst of arrivals is one fetch, not one a row', () async {
+    final _Account account = _Account();
+    final _Browser one = await _Browser.open(
+      account,
+      settle: const Duration(milliseconds: 250),
+    );
+    one.signIn();
+
+    // A bulk import on the other device: one event per card, arriving together.
+    for (var i = 0; i < 50; i++) {
+      one.socket.hears(accountRow(cardId: 'card-$i'));
+    }
+
+    await waitFor(
+      () async => one.announced.isNotEmpty,
+      'the screen being told once',
+    );
+    // One request for the whole import and one telling, which is the gathering
+    // the merges already wait for carried through to the fetch. A request per
+    // row would be fifty of each, against a shop that pays for every one - and
+    // a list rebuilt fifty times, which is the flicker the settle window is
+    // there to prevent.
+    expect(one.events, <String>['cards:mtg', 'announce:mtg']);
+    expect(one.shop.bulks.single, hasLength(50));
+    expect(one.announced, <CardGame>[CardGame.mtg]);
+  });
+
+  test('a fetch that failed still leaves the holding on the list', () async {
+    final _Account account = _Account();
+    final _Browser one = await _Browser.open(account);
+    // A shop that is down, or a network that will not carry the request.
+    one.shop.failing = true;
+    one.signIn();
+
+    one.socket.hears(accountRow(cardId: 'bolt-1'));
+
+    await waitFor(
+      () async => one.announced.isNotEmpty,
+      'the screen being told',
+    );
+    // The row is what the list is made of, and it is in the collection and on
+    // the screen whether or not the card behind it came back. A card nobody
+    // could fetch costs the collector the name of a card - the placeholder this
+    // browser showed before any of this existed - and never the card itself.
+    expect(await one.owned(), contains('bolt-1'));
+    expect(one.announced, <CardGame>[CardGame.mtg]);
+    expect(await one.catalogDao.cardById(CardGame.mtg, 'bolt-1'), isNull);
+  });
 
   test('a removal made on another browser hides the card here', () async {
     final _Account account = _Account();

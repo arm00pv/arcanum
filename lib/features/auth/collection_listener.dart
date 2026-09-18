@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:arcanum/data/repositories/catalog_repository.dart';
 import 'package:arcanum/data/sync/account_changes.dart';
 import 'package:arcanum/data/sync/account_collection.dart';
 import 'package:arcanum/data/sync/collection_sync.dart';
@@ -36,6 +37,29 @@ import 'package:arcanum/features/auth/account_reconcile.dart';
 /// exactly one place where two copies of a holding are weighed and this file is
 /// not it.
 ///
+/// A holding arrives as an id, and an id is not a card. The catalogue behind a
+/// collection is downloaded set by set, so a browser that has never opened the
+/// set a printing came from holds the row and cannot name it: the card is drawn
+/// as "--", and before this it went on being drawn as "--" for ever, because the
+/// row merged and the screen was told and nothing ever went looking for the
+/// printing. So the ids the arriving rows name are fetched here, through
+/// [CatalogRepository.resolveMissingCards], which is the same fetch a sign-in
+/// makes for the collection it has just brought down. Only what arrived is asked
+/// about, and only what this browser is genuinely missing is requested, so two
+/// browsers holding the same cards exchange a change and no catalogue traffic at
+/// all.
+///
+/// The telling waits for that fetch rather than following it. A rebuild made
+/// first draws the very placeholder being complained about, and the cards
+/// arriving then rebuild the same list a second time to replace it - two
+/// rebuilds for one change, the first of them thrown away. Waiting costs the
+/// person reading nothing they would otherwise have seen: a row whose card is
+/// already here is asked about, found, and announced on the tick it always was,
+/// so the only rows that wait are the ones no rebuild could have drawn as a card
+/// anyway. And nothing vanishes while it waits - the row was merged into the
+/// collection the moment it arrived, and the announcement is made whether the
+/// fetch answered, failed, or had nothing to ask for.
+///
 /// What is gathered up is the announcement, not the change. Every row lands as
 /// it arrives - a merge is a query and a write, and a screen is pixels - and
 /// the games that moved are told once per [settle], so a bulk import on another
@@ -50,6 +74,7 @@ class CollectionListener {
   CollectionListener({
     required this.sync,
     required this.changes,
+    required this.catalog,
     required this.signedIn,
     required this.accountId,
     this.settle = const Duration(milliseconds: 250),
@@ -63,6 +88,16 @@ class CollectionListener {
 
   /// The account's side: what it announces about its own holdings.
   final AccountChanges changes;
+
+  /// This browser's catalogue: what turns the ids a row names into cards.
+  ///
+  /// The repository rather than some way of asking it for one card, because what
+  /// makes the work affordable is that method's own two promises - a collection
+  /// is narrowed to what actually arrived before anything is asked for, and a
+  /// bulk import's ids reach the catalogue in one batch rather than one request
+  /// apiece. A second way to fetch a card would be a second place for both of
+  /// them to be forgotten.
+  final CatalogRepository catalog;
 
   /// Whether there is an account to listen to.
   ///
@@ -122,8 +157,24 @@ class CollectionListener {
   /// The games whose collection has changed here and have not been announced.
   final Set<CardGame> _changed = <CardGame>{};
 
+  /// The printings those games' arriving rows named, and have not been fetched.
+  ///
+  /// Keyed by game because a fetch is: an id only means anything inside the
+  /// catalogue it was minted in, and the two games' sources have nothing to say
+  /// to each other.
+  final Map<CardGame, Set<String>> _named = <CardGame, Set<String>>{};
+
   /// The merges still to happen, in the order the account announced them.
   Future<void> _queue = Future<void>.value();
+
+  /// The fetches still to happen, and the tellings that follow them.
+  ///
+  /// A chain of its own rather than the merges' queue, and the length of a fetch
+  /// is why: a catalogue answering for a set this browser has never downloaded
+  /// is minutes of requests, and a merge waiting behind one would hold up every
+  /// change behind that - including the rows that need no cards fetched for them
+  /// at all.
+  Future<void> _naming = Future<void>.value();
 
   bool _busy = false;
   Duration _wait = const Duration(seconds: 2);
@@ -152,6 +203,7 @@ class CollectionListener {
     _retry = null;
     _wait = retry;
     _changed.clear();
+    _named.clear();
     unawaited(changes.stop());
   }
 
@@ -191,8 +243,14 @@ class CollectionListener {
 
   Future<void> _merge(Map<String, Object?> row) async {
     final CardGame? game = AccountCollection.gameOf(row);
-    if (game == null) return;
-    if (await sync.mergeRow(game, row)) _changed.add(game);
+    final String? cardId = AccountCollection.entry(row)?.cardId;
+    if (game == null || cardId == null) return;
+    // A row that lost its comparison is a holding this browser already had, and
+    // it only ever got here by landing once before - through the sign-in's pull
+    // or through this same path - which is what asked for its card at the time.
+    if (!await sync.mergeRow(game, row)) return;
+    _changed.add(game);
+    _named.putIfAbsent(game, () => <String>{}).add(cardId);
   }
 
   /// The subscription is live, so everything missed while it was not is asked
@@ -223,7 +281,11 @@ class CollectionListener {
       for (final CardGame game in CardGame.values) {
         if (!signedIn()) break;
         try {
-          if (await sync.pullChanged(game)) _changed.add(game);
+          final Set<String> named = await sync.pullChanged(game);
+          if (named.isNotEmpty) {
+            _changed.add(game);
+            _named.putIfAbsent(game, () => <String>{}).addAll(named);
+          }
         } catch (error) {
           debugPrint('[realtime] $game did not catch up: $error');
         }
@@ -249,12 +311,51 @@ class CollectionListener {
   /// write this: the alternative is arming a delay on the first change and
   /// cancelling it on the last, and a burst that never quite stops is a screen
   /// that never quite updates.
+  ///
+  /// Both what arrived and what those arrivals named are taken out here, at the
+  /// tick, rather than read again when the fetch runs: a change landing while a
+  /// slow catalogue is still answering the last one waits for the next tick
+  /// instead of joining a batch already on its way out.
   void _announceChanged() {
     final ProviderContainer? scope = _scope;
     if (scope == null || _changed.isEmpty) return;
     final List<CardGame> games = _changed.toList();
     _changed.clear();
+    _naming = _naming.then((_) => _fetchThenAnnounce(scope, games)).catchError((
+      Object error,
+    ) {
+      debugPrint('[realtime] a change was not named: $error');
+    });
+  }
+
+  /// Fetches the cards behind one run of arrivals, and then tells the screens.
+  ///
+  /// The order is the whole of it. [CatalogRepository.resolveMissingCards]
+  /// first, so that the rebuild which follows has cards to draw rather than the
+  /// placeholder this whole file is here to stop showing; the telling second,
+  /// and unconditional, because the rows are already in the collection and a
+  /// catalogue that did not answer must cost the collector the name of a card
+  /// and nothing besides - the list they are reading goes on being exactly the
+  /// list it was, with the row they just heard about on it.
+  Future<void> _fetchThenAnnounce(
+    ProviderContainer scope,
+    List<CardGame> games,
+  ) async {
     for (final CardGame game in games) {
+      final List<String> named = (_named.remove(game) ?? const <String>{})
+          .toList();
+      try {
+        if (named.isNotEmpty) await catalog.resolveMissingCards(game, named);
+      } catch (error) {
+        // One game's catalogue costs that game's cards and no other game's
+        // telling, and costs nothing that was already written: the fetch stores
+        // each batch as it arrives.
+        debugPrint('[realtime] the cards behind $game did not arrive: $error');
+      }
+      // The session this run was started for can end while a set is coming
+      // down - minutes of requests is minutes in which to sign out - and a
+      // scope that has been let go of is not one to tell anything.
+      if (_scope != scope) return;
       _announce(scope, game);
     }
   }
