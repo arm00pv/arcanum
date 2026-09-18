@@ -46,6 +46,14 @@ Map<String, Object?> holding(
 
 /// An account that answers from memory, and can be told to stop answering.
 class _Account implements AccountTable {
+  _Account(this.steps);
+
+  /// Every step of the sign-in this account took part in, in the order it
+  /// started, shared with the catalogues: the order one sign-in works through
+  /// the games is the whole question these tests ask, and a record each game
+  /// keeps of itself cannot answer it.
+  final List<String> steps;
+
   /// Everything this device has handed up, so a test can see that a browser's
   /// own cards travelled before the account's came down.
   final List<Map<String, Object?>> written = <Map<String, Object?>>[];
@@ -63,6 +71,7 @@ class _Account implements AccountTable {
 
   @override
   Future<List<Map<String, Object?>>> fetch(CardGame game) async {
+    steps.add('holdings:${game.id}');
     if (unreachable) throw Exception('the account did not answer');
     return <Map<String, Object?>>[
       for (final Map<String, Object?> row in remote)
@@ -75,10 +84,14 @@ class _Account implements AccountTable {
 /// one at a time, which is what most of the games' sources do, and it answers
 /// about every id it is given.
 class _Catalog extends CardCatalog {
-  _Catalog(this.game);
+  _Catalog(this.game, this.steps);
 
   @override
   final CardGame game;
+
+  /// The same log the account writes to, so a test can see a game's holdings
+  /// and its cards against every other game's rather than only against its own.
+  final List<String> steps;
 
   /// How many ids each request carried, in the order they were made.
   final List<List<String>> bulks = <List<String>>[];
@@ -88,6 +101,7 @@ class _Catalog extends CardCatalog {
 
   @override
   Future<Map<String, TcgCard>> fetchCardsByIds(List<String> ids) {
+    steps.add('cards:${game.id}');
     bulks.add(List<String>.of(ids));
     return super.fetchCardsByIds(ids);
   }
@@ -166,6 +180,7 @@ class _Browser {
     required this.sync,
     required this.account,
     required this.catalogs,
+    required this.steps,
     required this.scope,
   });
 
@@ -178,11 +193,12 @@ class _Browser {
       secrets: MemorySecretStore(),
     );
     final AppDatabase db = await AppDatabase.openInMemory();
-    final _Account account = _Account();
+    final List<String> steps = <String>[];
+    final _Account account = _Account(steps);
     // Every game gets a catalogue, because a browser has a source to ask for
     // any of them and a game with no source at all is another test's question.
     final Map<CardGame, _Catalog> catalogs = <CardGame, _Catalog>{
-      for (final CardGame game in CardGame.values) game: _Catalog(game),
+      for (final CardGame game in CardGame.values) game: _Catalog(game, steps),
     };
     final Bootstrap bootstrap = Bootstrap.create(
       database: db,
@@ -198,6 +214,7 @@ class _Browser {
       sync: CollectionSync(table: account, db: db.db),
       account: account,
       catalogs: catalogs,
+      steps: steps,
       scope: scope,
     );
     addTearDown(browser.close);
@@ -212,6 +229,12 @@ class _Browser {
   /// What each game's source had to answer, so a test can see how a run was
   /// sliced rather than assume it.
   final Map<CardGame, _Catalog> catalogs;
+
+  /// Every step of the sign-in so far, in the order it started, as
+  /// "holdings:gundam" and "cards:gundam". Two steps per game at most, so a
+  /// game that ran twice - the thing a reordered loop can quietly do - says so
+  /// twice here.
+  final List<String> steps;
 
   final ProviderContainer scope;
 
@@ -418,5 +441,92 @@ void main() {
         reason: 'a sync that failed is not a collection that failed',
       );
     });
+  });
+
+  group('the order a sign-in works through the games', () {
+    /// One holding for every game, which is the account a collector signs in to
+    /// when they own cards in more than one.
+    List<Map<String, Object?>> holdingInEveryGame() => <Map<String, Object?>>[
+      for (final CardGame game in CardGame.values)
+        holding('card-${game.id}', game: game),
+    ];
+
+    test('begins with the game on screen, wherever it sits in the list', () async {
+      // The report this exists for: Gundam is last in CardGame.values and Magic
+      // is first, so a Gundam collector signing in on a browser that had never
+      // seen their cards watched the account's holdings for eight other games
+      // land - and then eight other catalogue downloads finish - with nothing
+      // on their own screen the whole time.
+      final _Browser browser = await _Browser.open();
+      browser.bootstrap.settings.activeGame = CardGame.gundam;
+      browser.account.remote = holdingInEveryGame();
+
+      await browser.signIn();
+
+      expect(
+        browser.steps.first,
+        'holdings:gundam',
+        reason: 'the first question the sign-in asked was about Gundam',
+      );
+      final int cards = browser.steps.indexOf('cards:gundam');
+      expect(
+        browser.steps.firstWhere((step) => step.startsWith('cards:')),
+        'cards:gundam',
+        reason: 'and the first download it started was Gundam\'s',
+      );
+      for (final CardGame other in CardGame.values) {
+        if (other == CardGame.gundam) continue;
+        expect(
+          browser.steps.indexOf('cards:${other.id}'),
+          greaterThan(cards),
+          reason: '${other.id} waited behind the game on screen',
+        );
+      }
+    });
+
+    test('is two passes over every game and no game twice', () async {
+      // A rotation and not a second list: leading with one game is worth
+      // nothing if it means fetching another game twice, and a collector whose
+      // account is a few thousand cards notices a game reconciled twice.
+      final _Browser browser = await _Browser.open();
+      browser.bootstrap.settings.activeGame = CardGame.gundam;
+      browser.account.remote = holdingInEveryGame();
+
+      await browser.signIn();
+
+      expect(
+        browser.steps.length,
+        CardGame.values.length * 2,
+        reason: 'every game in both passes, and nothing besides',
+      );
+      expect(
+        browser.steps.toSet().length,
+        browser.steps.length,
+        reason: 'no game was worked through twice for leading the queue',
+      );
+    });
+
+    test(
+      'is left alone when the collector is already on the first game',
+      () async {
+        // Magic is the default, so the common case must be exactly what it was:
+        // nine games' holdings in the catalogue's own order, then nine games'
+        // cards in the same order.
+        final _Browser browser = await _Browser.open();
+        expect(
+          browser.bootstrap.settings.activeGame,
+          CardGame.mtg,
+          reason: 'the game an install that has never chosen one is on',
+        );
+        browser.account.remote = holdingInEveryGame();
+
+        await browser.signIn();
+
+        expect(browser.steps, <String>[
+          for (final CardGame game in CardGame.values) 'holdings:${game.id}',
+          for (final CardGame game in CardGame.values) 'cards:${game.id}',
+        ]);
+      },
+    );
   });
 }

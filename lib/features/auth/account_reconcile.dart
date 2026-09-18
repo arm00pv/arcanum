@@ -19,6 +19,20 @@ import 'package:arcanum/providers.dart';
 /// "--". Syncing every game before resolving any of them is what stops the
 /// first game's cards from holding up the rest of the account.
 ///
+/// The game the collector has selected leads both passes. Nine games' holdings
+/// are nine round trips, not free, whatever each one carries - a collector
+/// whose game is Gundam used to wait for the whole of the account's holdings
+/// and then eight other catalogues before their own screen had anything on it,
+/// because Gundam is last in [CardGame.values] and Magic is first. Its rows are
+/// asked for first and its cards are the first download started.
+///
+/// Leading in both passes rather than moving the catalogue pass ahead of the
+/// holdings one: the holdings pass is what makes the rest of the account exist
+/// on this browser at all, and running it to the end before any download begins
+/// is still what stops one game's catalogue from holding up every other game's
+/// rows. What the two orderings differ on is only how long the collector stares
+/// at an empty screen, and leading in both passes is the shorter of the two.
+///
 /// A failure is logged and not thrown. The browser still holds everything it
 /// held a moment ago, so a sync that did not happen is a delay rather than a
 /// loss - and there is nothing here a collector could usefully do about it. The
@@ -44,7 +58,7 @@ Future<void> reconcileAccount({
   required Bootstrap bootstrap,
   required ProviderContainer scope,
 }) async {
-  for (final CardGame game in CardGame.values) {
+  for (final CardGame game in _inSignInOrder(bootstrap.settings.activeGame)) {
     try {
       await sync.sync(game);
     } catch (error) {
@@ -53,7 +67,7 @@ Future<void> reconcileAccount({
     _announce(scope, game);
   }
 
-  for (final CardGame game in CardGame.values) {
+  for (final CardGame game in _inSignInOrder(bootstrap.settings.activeGame)) {
     try {
       final List<String> owned = await bootstrap.collectionDao.ownedCardIds(
         game,
@@ -67,6 +81,20 @@ Future<void> reconcileAccount({
     _announce(scope, game);
   }
 }
+
+/// Every game, with the one on screen at the front.
+///
+/// A rotation of [CardGame.values] rather than a list of its own: the same
+/// games in the same order, each of them once, so leading with one costs the
+/// others their place in the queue and nothing else. Asked for once per pass
+/// rather than once for the run, because the two passes are seconds apart on a
+/// real account and a collector who switches games while theirs arrives is
+/// looking at the new game by the time the downloads begin.
+List<CardGame> _inSignInOrder(CardGame active) => <CardGame>[
+  active,
+  for (final CardGame game in CardGame.values)
+    if (game != active) game,
+];
 
 /// Tells the screens showing one game that its collection is not what they said.
 ///
