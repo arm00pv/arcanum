@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:arcanum/app.dart';
 import 'package:arcanum/core/platform/web_database.dart';
+import 'package:arcanum/core/platform/web_storage.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/auth/account_service.dart';
 import 'package:arcanum/data/catalog/catalog_table.dart';
@@ -110,6 +113,16 @@ Future<void> main() async {
     // sign-in screen; a browser has nothing to keep a vault in, so it does.
     Widget app = const ArcanumApp();
     if (kIsWeb) {
+      // Both the catalogue and this device's copy of the collection live in
+      // storage the browser owns, and iOS Safari deletes the whole lot of an
+      // origin nobody has touched for a week. Asked here rather than beside the
+      // database factory because this is the branch that only ever runs in a
+      // browser, and never waited on: Firefox answers the request with a
+      // permission prompt, and a boot screen holding for somebody to find a
+      // dialog is a boot screen that has hung. Refused, missing or unanswered,
+      // the app carries on exactly as it did before this existed.
+      unawaited(requestPersistentStorage());
+
       bootStep.value = 'checking your account';
       account = await AccountService.start();
       final AccountService service = account;
