@@ -95,6 +95,41 @@ class AccountService {
     }
   }
 
+  /// Finishes a sign-in that arrived in the address bar.
+  ///
+  /// A confirmation link, a magic link and a recovery link all end the same
+  /// way: the browser lands on the app carrying the session in its URL. Until
+  /// this existed, clicking one confirmed the account and then showed the
+  /// sign-in screen, which reads as the link having failed.
+  ///
+  /// Returns whether a session was found - not whether the link was valid, since
+  /// a spent or expired one is the common case and is not worth an error.
+  Future<bool> completeRedirect(Uri url) async {
+    if (!_carriesSession(url)) return false;
+    try {
+      // It raises rather than returning empty-handed when the link carries
+      // nothing, so reaching the next line means a session was found.
+      await _client.auth.getSessionFromUrl(url);
+      return true;
+    } catch (error) {
+      debugPrint('[account] the redirect carried nothing usable: $error');
+      return false;
+    }
+  }
+
+  /// Whether this URL is one Supabase sent the browser back with.
+  ///
+  /// A code is the modern shape; a fragment carrying an access token is the
+  /// older one. Both are recognised, because a project's mail templates decide
+  /// which arrives and that is not a thing to be brittle about.
+  static bool _carriesSession(Uri url) {
+    if (url.queryParameters.containsKey('code')) return true;
+    if (url.queryParameters.containsKey('error_description')) return true;
+    final String fragment = url.fragment;
+    return fragment.contains('access_token=') ||
+        fragment.contains('error_description=');
+  }
+
   /// Sends the confirmation link again.
   Future<void> resendConfirmation(String email) async {
     try {

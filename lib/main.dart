@@ -82,6 +82,12 @@ Future<void> main() async {
     if (kIsWeb) {
       bootStep.value = 'checking your account';
       account = await AccountService.start();
+      // A confirmation link lands the browser here carrying the session in the
+      // address. Read it before the gate decides what to show, so the link
+      // finishes what it started instead of leaving the collector at a sign-in
+      // screen wondering whether it worked.
+      await account.completeRedirect(Uri.base);
+
       final CollectionSync collection = CollectionSync(
         table: SupabaseAccountTable(Supabase.instance.client),
         db: database.db,
