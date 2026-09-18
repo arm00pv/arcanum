@@ -10,9 +10,9 @@ import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/auth/account_service.dart';
 import 'package:arcanum/data/sync/account_table.dart';
 import 'package:arcanum/data/sync/collection_sync.dart';
-import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/features/auth/account_gate.dart';
 import 'package:arcanum/features/auth/account_providers.dart';
+import 'package:arcanum/features/auth/account_reconcile.dart';
 import 'package:arcanum/data/backup/backup_scheduler.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/providers.dart';
@@ -94,7 +94,11 @@ Future<void> main() async {
       );
       app = AccountGate(
         service: account,
-        onSignedIn: () => _reconcile(collection, bootstrap),
+        onSignedIn: (ProviderContainer scope) => reconcileAccount(
+          sync: collection,
+          bootstrap: bootstrap,
+          scope: scope,
+        ),
         child: app,
       );
     }
@@ -115,47 +119,6 @@ Future<void> main() async {
     debugPrint('[boot] $error');
     debugPrint('$stack');
     runApp(BootFailure(error: '$error', detail: '$stack'));
-  }
-}
-
-/// Brings every game's collection into step with the account, and then fetches
-/// the cards those holdings name.
-///
-/// Every game, not just the one on screen: a collector who signs in on a new
-/// browser should find all of their vaults, not the one they happened to be
-/// looking at. One query per game, once per sign-in.
-///
-/// The catalogue is a second pass rather than part of each game's sync. A
-/// holding is one small row and lands in a moment; the cards behind a
-/// collection are set downloads this browser may never have done, so a
-/// collection pulled from the account arrives as rows that can only be shown as
-/// "--". Syncing every game before resolving any of them is what stops the
-/// first game's cards from holding up the rest of the account.
-///
-/// A failure is logged and not thrown. The browser still holds everything it
-/// held a moment ago, so a sync that did not happen is a delay rather than a
-/// loss - and there is nothing here a collector could usefully do about it. The
-/// same goes for a card that did not resolve: its row keeps the placeholder it
-/// would have had anyway.
-Future<void> _reconcile(CollectionSync sync, Bootstrap bootstrap) async {
-  for (final CardGame game in CardGame.values) {
-    try {
-      await sync.sync(game);
-    } catch (error) {
-      debugPrint('[sync] $game did not reconcile: $error');
-    }
-  }
-
-  for (final CardGame game in CardGame.values) {
-    try {
-      final List<String> owned = await bootstrap.collectionDao.ownedCardIds(
-        game,
-      );
-      if (owned.isEmpty) continue;
-      await bootstrap.catalog.resolveMissingCards(game, owned);
-    } catch (error) {
-      debugPrint('[sync] $game cards did not resolve: $error');
-    }
   }
 }
 
