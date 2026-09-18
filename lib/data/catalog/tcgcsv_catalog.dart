@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/domain/models/card_game.dart';
@@ -109,7 +110,30 @@ class TcgcsvCatalog implements CardCatalog {
     dio: dio,
   );
 
-  static const String _base = 'https://tcgcsv.com/tcgplayer';
+  /// Where the mirror answers, which is what a phone asks.
+  static const String _direct = 'https://tcgcsv.com/tcgplayer';
+
+  /// Arcanum's own relay in front of the mirror, which is what a browser asks.
+  static const String _relay = 'https://marquezhv.com/arcanumweb-api/tcgcsv';
+
+  /// The address card data is asked for under.
+  ///
+  /// A browser cannot ask the mirror itself. tcgcsv sends no CORS headers, so
+  /// the browser discards the answer before any of this code sees it, and it
+  /// asks callers to identify themselves - which means a User-Agent header, one
+  /// the browser will not let a page set. Five of the nine games are catalogued
+  /// here and all five came back empty in the browser build for those two
+  /// reasons alone, so a browser is pointed at Arcanum's relay instead: it
+  /// fetches the same path under the name the mirror asks for and returns the
+  /// answer with the header the browser is waiting for. A phone needs none of
+  /// that - there is no origin to be judged against and the header the app
+  /// sends is the one the mirror wants - so it asks the mirror directly and its
+  /// card data never passes through a host of ours.
+  ///
+  /// [web] is a browser build reading its own state rather than a choice a
+  /// caller makes; it is a parameter so both addresses can be read at once
+  /// without running a request through either.
+  static String apiBase({bool web = kIsWeb}) => web ? _relay : _direct;
 
   /// How the mirror asks to be identified.
   static const String _agent =
@@ -153,7 +177,7 @@ class TcgcsvCatalog implements CardCatalog {
 
   static Dio _client() => Dio(
     BaseOptions(
-      baseUrl: _base,
+      baseUrl: apiBase(),
       connectTimeout: const Duration(seconds: 12),
       // A large set - Star Wars: Unlimited's Ashes of the Empire is 954
       // products - is about 1.5 MB in one response.

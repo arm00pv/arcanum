@@ -856,6 +856,31 @@ void main() {
       expect(catalogWith(game: CardGame.digimon).game, CardGame.digimon);
     });
 
+    test('and a browser asks Arcanum rather than the mirror', () {
+      // A browser may not set its own User-Agent and may not read an answer
+      // that carries no Access-Control-Allow-Origin, so tcgcsv is unreachable
+      // from a web build however the request is spelled; Arcanum's relay makes
+      // the request the mirror asks for and adds the header the browser is
+      // waiting for. A phone has neither problem and asks the mirror itself,
+      // which is the address every other test here builds its client on.
+      expect(TcgcsvCatalog.apiBase(web: false), 'https://tcgcsv.com/tcgplayer');
+      expect(
+        TcgcsvCatalog.apiBase(web: true),
+        'https://marquezhv.com/arcanumweb-api/tcgcsv',
+      );
+      // Every route is the shop's own path hung off the address, so the relay
+      // answers the same endpoints the mirror does - this one was checked
+      // against the live relay before it was written down.
+      expect(
+        Uri.parse('${TcgcsvCatalog.apiBase(web: true)}/3/groups').toString(),
+        'https://marquezhv.com/arcanumweb-api/tcgcsv/3/groups',
+      );
+      // The address is chosen from the build rather than passed in, so the
+      // default is what a browser build would take and this test run, which is
+      // not one, takes the mirror.
+      expect(TcgcsvCatalog.apiBase(), TcgcsvCatalog.apiBase(web: false));
+    });
+
     test('and an unreachable mirror is a typed catalogue error', () async {
       // Every request answers 404, which is how the mirror behaves when it is
       // down or when the category has moved. The repository catches this and
