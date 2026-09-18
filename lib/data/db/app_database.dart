@@ -61,7 +61,12 @@ class AppDatabase {
   ///      collide, so this makes an existing guarantee structural rather than
   ///      repairing a fault - and it is cheap now, while a search is about to
   ///      start leaning on it.
-  static const _version = 14;
+  /// v15 - collection_entries.deleted_at. Removing a stack marks the row
+  ///      instead of dropping it, because the account holds that row too and a
+  ///      sync that cannot see what left brings it straight back. The mark is a
+  ///      timestamp on the same row, so a deletion travels through the same
+  ///      push and pull as every other change.
+  static const _version = 15;
 
   static AppDatabase? _instance;
 
@@ -93,6 +98,7 @@ class AppDatabase {
         if (from < 12) await createBoxCompositions(d);
         if (from < 13) await markPromotionalPrintings(d);
         if (from < 14) await scopeCardIdsToGame(d);
+        if (from < 15) await addCollectionTombstones(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -260,6 +266,9 @@ class AppDatabase {
         binder         TEXT NOT NULL DEFAULT '',
         notes          TEXT,
         for_trade      INTEGER NOT NULL DEFAULT 0,
+        -- Null while the stack is held; a timestamp once it is not. See
+        -- addCollectionTombstones for why a removal is a mark and not a delete.
+        deleted_at     INTEGER,
         created_at     INTEGER NOT NULL,
         updated_at     INTEGER NOT NULL
       )
@@ -437,6 +446,24 @@ class AppDatabase {
     await d.execute(
       'ALTER TABLE collection_entries '
       'ADD COLUMN for_trade INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+
+  /// v15: a stack that leaves the collection is marked, not removed.
+  ///
+  /// The account is the collection now, and it syncs by comparing rows. A row
+  /// that simply vanishes from this database is a row the account still has, so
+  /// a card deleted on the phone came back on the next pull - and a card deleted
+  /// on one phone came back on every phone. Marking the row keeps it in place
+  /// with its slot in the unique index taken, which is also what makes re-adding
+  /// the card a revival of that row rather than a second one: the index would
+  /// refuse the second insert anyway.
+  ///
+  /// Every existing row is present, so null is the correct value for all of
+  /// them and there is nothing to backfill.
+  static Future<void> addCollectionTombstones(DatabaseExecutor d) async {
+    await d.execute(
+      'ALTER TABLE collection_entries ADD COLUMN deleted_at INTEGER',
     );
   }
 

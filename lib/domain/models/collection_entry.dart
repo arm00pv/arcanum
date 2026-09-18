@@ -21,6 +21,7 @@ class CollectionEntry {
     this.binder = '',
     this.notes,
     this.forTrade = false,
+    this.deletedAt,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -59,6 +60,19 @@ class CollectionEntry {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// When this stack left the collection, or null while it is still held.
+  ///
+  /// A removal is a timestamp on the row rather than the absence of the row,
+  /// because the row is the only thing that can carry the fact to the account
+  /// and on to every other device: a stack that is simply deleted here is a
+  /// stack the account still holds, and the next sync puts it back. So a
+  /// deleted entry is an ordinary entry with this set - it travels through the
+  /// same push, the same pull and the same "later edit wins" comparison as
+  /// everything else, and re-adding the card clears it.
+  final DateTime? deletedAt;
+
+  bool get isDeleted => deletedAt != null;
+
   bool get isFoil => finish != CardFinish.nonfoil;
 
   /// Cost basis for this whole stack, or null when no purchase price is known.
@@ -77,6 +91,7 @@ class CollectionEntry {
     String? binder,
     Object? notes = _unset,
     bool? forTrade,
+    Object? deletedAt = _unset,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -96,6 +111,7 @@ class CollectionEntry {
       binder: binder ?? this.binder,
       notes: notes == _unset ? this.notes : notes as String?,
       forTrade: forTrade ?? this.forTrade,
+      deletedAt: deletedAt == _unset ? this.deletedAt : deletedAt as DateTime?,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -115,6 +131,7 @@ class CollectionEntry {
     'binder': binder,
     'notes': notes,
     'for_trade': forTrade ? 1 : 0,
+    'deleted_at': deletedAt?.millisecondsSinceEpoch,
     'created_at': createdAt.millisecondsSinceEpoch,
     'updated_at': updatedAt.millisecondsSinceEpoch,
   };
@@ -133,6 +150,9 @@ class CollectionEntry {
     binder: (r['binder'] as String?) ?? '',
     notes: r['notes'] as String?,
     forTrade: ((r['for_trade'] as num?)?.toInt() ?? 0) != 0,
+    deletedAt: r['deleted_at'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch((r['deleted_at'] as num).toInt()),
     createdAt: DateTime.fromMillisecondsSinceEpoch(
       (r['created_at'] as int?) ?? 0,
     ),

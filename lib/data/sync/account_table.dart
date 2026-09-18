@@ -18,6 +18,11 @@ abstract interface class AccountTable {
   Future<void> upsert(List<Map<String, Object?>> rows);
 
   /// Every holding of one game that belongs to the signed-in account.
+  ///
+  /// Removed holdings are included, because they are holdings: the row is still
+  /// there with a deletion stamped on it. A fetch that filtered them out would
+  /// hide a deletion from the one device that has to hear about it, and that
+  /// device would push the card back up on its next sync.
   Future<List<Map<String, Object?>>> fetch(CardGame game);
 }
 

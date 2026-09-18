@@ -19,11 +19,23 @@ class CollectionDao {
 
   final Database _db;
 
+  /// The rows a collector still holds.
+  ///
+  /// A removed stack keeps its row so the removal can travel to the account, so
+  /// every read that answers "what do I own" carries this. The two places that
+  /// must not carry it are [addOrMerge], which has to find the dead row in order
+  /// to revive it, and the sync, which is the thing that carries the removal.
+  static const String _live = 'deleted_at IS NULL';
+
   /// All entries for a game, newest first.
+  ///
+  /// A stack that was removed is not in the collection, so it is not here. It
+  /// is still a row in the table - see [delete] - and every read in this class
+  /// says so by filtering on [_live].
   Future<List<CollectionEntry>> all(CardGame game) async {
     final rows = await _db.query(
       'collection_entries',
-      where: 'game = ?',
+      where: 'game = ? AND $_live',
       whereArgs: [game.id],
       orderBy: 'updated_at DESC',
     );
@@ -34,7 +46,7 @@ class CollectionDao {
   Future<List<CollectionEntry>> forCard(CardGame game, String cardId) async {
     final rows = await _db.query(
       'collection_entries',
-      where: 'game = ? AND card_id = ?',
+      where: 'game = ? AND card_id = ? AND $_live',
       whereArgs: [game.id, cardId],
       orderBy: 'updated_at DESC',
     );
@@ -56,7 +68,8 @@ class CollectionDao {
       );
       final marks = List.filled(chunk.length, '?').join(',');
       final rows = await _db.rawQuery(
-        'SELECT * FROM collection_entries WHERE game = ? AND card_id IN ($marks)',
+        'SELECT * FROM collection_entries '
+        'WHERE game = ? AND card_id IN ($marks) AND $_live',
         [game.id, ...chunk],
       );
       for (final r in rows) {
@@ -70,7 +83,8 @@ class CollectionDao {
   /// Distinct card ids currently owned.
   Future<List<String>> ownedCardIds(CardGame game) async {
     final rows = await _db.rawQuery(
-      'SELECT DISTINCT card_id FROM collection_entries WHERE game = ?',
+      'SELECT DISTINCT card_id FROM collection_entries '
+      'WHERE game = ? AND $_live',
       [game.id],
     );
     return rows.map((r) => r['card_id'] as String).toList();
@@ -80,7 +94,7 @@ class CollectionDao {
   Future<List<String>> binders(CardGame game) async {
     final rows = await _db.rawQuery(
       "SELECT DISTINCT binder FROM collection_entries "
-      "WHERE game = ? AND binder <> '' ORDER BY binder",
+      "WHERE game = ? AND binder <> '' AND $_live ORDER BY binder",
       [game.id],
     );
     return rows.map((r) => r['binder'] as String).toList();
@@ -89,7 +103,8 @@ class CollectionDao {
   /// Total number of physical cards owned in a game.
   Future<int> totalCardCount(CardGame game) async {
     final r = await _db.rawQuery(
-      'SELECT COALESCE(SUM(quantity), 0) AS n FROM collection_entries WHERE game = ?',
+      'SELECT COALESCE(SUM(quantity), 0) AS n FROM collection_entries '
+      'WHERE game = ? AND $_live',
       [game.id],
     );
     return (r.first['n'] as num?)?.toInt() ?? 0;
@@ -98,7 +113,8 @@ class CollectionDao {
   /// Number of distinct printings owned in a game.
   Future<int> uniqueCount(CardGame game) async {
     final r = await _db.rawQuery(
-      'SELECT COUNT(DISTINCT card_id) AS n FROM collection_entries WHERE game = ?',
+      'SELECT COUNT(DISTINCT card_id) AS n FROM collection_entries '
+      'WHERE game = ? AND $_live',
       [game.id],
     );
     return (r.first['n'] as num?)?.toInt() ?? 0;
@@ -106,6 +122,15 @@ class CollectionDao {
 
   /// Adds [quantity] copies of a physical stack, merging into an existing
   /// matching entry when one exists.
+  ///
+  /// A stack that was removed earlier still holds the only slot this stack's
+  /// printing, finish, condition, language and binder allow, so adding it back
+  /// is that row coming back to life. It comes back as the stack the collector
+  /// just entered and not as the dead one with these copies added to it: the
+  /// four copies they deleted are not four copies they own, so the quantity is
+  /// the new one rather than a sum. The purchase price, the note and the trade
+  /// flag go with them, for the same reason - what the deleted stack knew is
+  /// not what this one is.
   ///
   /// Returns the id of the affected row.
   Future<int> addOrMerge({
@@ -140,6 +165,35 @@ class CollectionDao {
       if (existing.isNotEmpty) {
         final row = existing.first;
         final id = row['id'] as int;
+        if (row['deleted_at'] != null) {
+          await txn.update(
+            'collection_entries',
+            <String, Object?>{
+              ..._stackValues(
+                quantity: quantity,
+                purchasePrice: purchasePrice,
+                purchaseDate: purchaseDate,
+                notes: notes,
+              ),
+              'deleted_at': null,
+              'updated_at': now.millisecondsSinceEpoch,
+            },
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+          await _recordPurchase(
+            txn,
+            game: game,
+            cardId: cardId,
+            entryId: id,
+            quantity: quantity,
+            now: now,
+            purchasePrice: purchasePrice,
+            purchaseDate: purchaseDate,
+            notes: notes,
+          );
+          return id;
+        }
         final newQty = ((row['quantity'] as int?) ?? 0) + quantity;
         // Blend the cost basis when a new purchase price is supplied.
         double? blended = (row['purchase_price'] as num?)?.toDouble();
@@ -164,59 +218,104 @@ class CollectionDao {
           where: 'id = ?',
           whereArgs: [id],
         );
-        // The stack keeps the blended average, which is the number the
-        // valuation and the purchases screen want. The purchase itself is kept
-        // as a lot of its own, because what a *part* of the stack cost is a
-        // different question and the average cannot answer it.
-        await LotsDao.insertLot(
+        await _recordPurchase(
           txn,
-          CardLot(
-            game: game,
-            cardId: cardId,
-            entryId: id,
-            quantity: quantity,
-            unitCost: purchasePrice,
-            acquiredOn: purchaseDate ?? now,
-            note: notes ?? '',
-          ),
+          game: game,
+          cardId: cardId,
+          entryId: id,
+          quantity: quantity,
+          now: now,
+          purchasePrice: purchasePrice,
+          purchaseDate: purchaseDate,
+          notes: notes,
         );
         return id;
       }
-      final id = await txn.insert('collection_entries', {
+      final id = await txn.insert('collection_entries', <String, Object?>{
         'game': game.id,
         'card_id': cardId,
         'finish': finish.code,
         'condition': condition.code,
         'language': language,
-        'quantity': quantity,
-        'purchase_price': purchasePrice,
-        'purchase_date': purchaseDate?.millisecondsSinceEpoch,
         'binder': binder,
-        'notes': notes,
+        ..._stackValues(
+          quantity: quantity,
+          purchasePrice: purchasePrice,
+          purchaseDate: purchaseDate,
+          notes: notes,
+        ),
         'created_at': now.millisecondsSinceEpoch,
         'updated_at': now.millisecondsSinceEpoch,
       });
-      await LotsDao.insertLot(
+      await _recordPurchase(
         txn,
-        CardLot(
-          game: game,
-          cardId: cardId,
-          entryId: id,
-          quantity: quantity,
-          unitCost: purchasePrice,
-          acquiredOn: purchaseDate ?? now,
-          note: notes ?? '',
-        ),
+        game: game,
+        cardId: cardId,
+        entryId: id,
+        quantity: quantity,
+        now: now,
+        purchasePrice: purchasePrice,
+        purchaseDate: purchaseDate,
+        notes: notes,
       );
       return id;
     });
   }
 
+  /// What a stack carries apart from the five values that identify it.
+  ///
+  /// One definition for a stack arriving for the first time and for one being
+  /// added back after a removal, because "the same card added twice" must not
+  /// mean one thing on a fresh row and another on a revived one. The trade flag
+  /// is here rather than left alone on a revival: a card the collector just
+  /// entered is not up for trade because the stack they deleted three months
+  /// ago was.
+  static Map<String, Object?> _stackValues({
+    required int quantity,
+    double? purchasePrice,
+    DateTime? purchaseDate,
+    String? notes,
+  }) => <String, Object?>{
+    'quantity': quantity,
+    'purchase_price': purchasePrice,
+    'purchase_date': purchaseDate?.millisecondsSinceEpoch,
+    'notes': notes,
+    'for_trade': 0,
+  };
+
+  /// The purchase behind a stack, as a lot of its own.
+  ///
+  /// The stack keeps a blended average, which is the number the valuation and
+  /// the purchases screen want. The purchase itself is kept as a lot, because
+  /// what a *part* of the stack cost is a different question and the average
+  /// cannot answer it.
+  static Future<void> _recordPurchase(
+    DatabaseExecutor txn, {
+    required CardGame game,
+    required String cardId,
+    required int entryId,
+    required int quantity,
+    required DateTime now,
+    double? purchasePrice,
+    DateTime? purchaseDate,
+    String? notes,
+  }) => LotsDao.insertLot(
+    txn,
+    CardLot(
+      game: game,
+      cardId: cardId,
+      entryId: entryId,
+      quantity: quantity,
+      unitCost: purchasePrice,
+      acquiredOn: purchaseDate ?? now,
+      note: notes ?? '',
+    ),
+  );
+
   static DateTime? _dateFrom(Object? v) =>
       v is int ? DateTime.fromMillisecondsSinceEpoch(v) : null;
 
-  /// Sets an entry's quantity, deleting the row when it reaches zero.
-  /// Sets an entry's quantity, deleting the row when it reaches zero.
+  /// Sets an entry's quantity, removing the stack when it reaches zero.
   ///
   /// The lots follow: copies added by hand become a lot of their own at the
   /// stack's own price, and copies taken off the shelf are disposed of oldest
@@ -231,7 +330,7 @@ class CollectionDao {
     await _db.transaction((txn) async {
       final rows = await txn.query(
         'collection_entries',
-        where: 'id = ?',
+        where: 'id = ? AND $_live',
         whereArgs: <Object?>[id],
         limit: 1,
       );
@@ -309,17 +408,24 @@ class CollectionDao {
 
   /// Removes a stack, and its lots with it.
   ///
-  /// A deleted stack is a disposal the app knows nothing about: the copies are
-  /// off the shelf and the purchases behind them go with them, so the cost
-  /// basis does not sit there waiting to be matched against a sale that was
-  /// never recorded. Whatever was sold is recorded as a sale, and that is what
-  /// survives.
+  /// The row stays behind with `deleted_at` set, because the account holds that
+  /// row too: a stack that merely disappears from this database is a stack the
+  /// account still has, and the next sync hands it straight back. The mark is
+  /// what makes the removal travel, so this is the same removal stated rather
+  /// than performed.
+  ///
+  /// The lots do go, for real. A deleted stack is a disposal the app knows
+  /// nothing about: the copies are off the shelf and the purchases behind them
+  /// go with them, so the cost basis does not sit there waiting to be matched
+  /// against a sale that was never recorded. Whatever was sold is recorded as a
+  /// sale, and that is what survives.
   Future<void> delete(int id) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
       final rows = await txn.query(
         'collection_entries',
         columns: ['game'],
-        where: 'id = ?',
+        where: 'id = ? AND $_live',
         whereArgs: <Object?>[id],
         limit: 1,
       );
@@ -333,41 +439,66 @@ class CollectionDao {
           whereArgs: <Object?>[id],
         );
       }
-      await txn.delete('collection_entries', where: 'id = ?', whereArgs: [id]);
+      await txn.update(
+        'collection_entries',
+        <String, Object?>{'deleted_at': now, 'updated_at': now},
+        where: 'id = ?',
+        whereArgs: <Object?>[id],
+      );
     });
   }
 
+  /// Removes every stack of one printing, the way [delete] removes one.
   Future<void> deleteAllForCard(CardGame game, String cardId) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
       await txn.delete(
         'card_lots',
         where: 'game = ? AND card_id = ?',
         whereArgs: <Object?>[game.id, cardId],
       );
-      await txn.delete(
+      await txn.update(
         'collection_entries',
-        where: 'game = ? AND card_id = ?',
-        whereArgs: [game.id, cardId],
+        <String, Object?>{'deleted_at': now, 'updated_at': now},
+        where: 'game = ? AND card_id = ? AND $_live',
+        whereArgs: <Object?>[game.id, cardId],
       );
     });
   }
 
   /// Clears one game's collection, or every game when [game] is null.
+  ///
+  /// Every stack goes the way one stack goes, so that clearing the collection
+  /// genuinely empties it. Forty cards removed one at a time and then synced
+  /// must not differ from the game cleared and then synced, and it would if
+  /// this were the one path that still dropped rows outright - the account
+  /// would offer all forty back on the next pull.
   Future<void> clear({CardGame? game}) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
     await _db.transaction((txn) async {
+      final Map<String, Object?> mark = <String, Object?>{
+        'deleted_at': now,
+        'updated_at': now,
+      };
       if (game == null) {
         await txn.delete('card_lots');
-        await txn.delete('collection_entries');
+        await txn.update(
+          'collection_entries',
+          mark,
+          where: _live,
+          whereArgs: const <Object?>[],
+        );
       } else {
         await txn.delete(
           'card_lots',
           where: 'game = ?',
           whereArgs: <Object?>[game.id],
         );
-        await txn.delete(
+        await txn.update(
           'collection_entries',
-          where: 'game = ?',
-          whereArgs: [game.id],
+          mark,
+          where: 'game = ? AND $_live',
+          whereArgs: <Object?>[game.id],
         );
       }
     });

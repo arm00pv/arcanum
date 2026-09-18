@@ -589,6 +589,109 @@ void main() {
     });
   });
 
+  group('collection tombstones (v15)', () {
+    /// The collection table as it stood before v15: a stack that was removed
+    /// simply stopped existing, which is the bug the column fixes.
+    const String v14Entries = '''
+  CREATE TABLE collection_entries (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    game           TEXT NOT NULL DEFAULT 'mtg',
+    card_id        TEXT NOT NULL,
+    finish         TEXT NOT NULL DEFAULT 'nonfoil',
+    condition      TEXT NOT NULL DEFAULT 'near_mint',
+    language       TEXT NOT NULL DEFAULT 'en',
+    quantity       INTEGER NOT NULL DEFAULT 1,
+    purchase_price REAL,
+    purchase_date  INTEGER,
+    binder         TEXT NOT NULL DEFAULT '',
+    notes          TEXT,
+    for_trade      INTEGER NOT NULL DEFAULT 0,
+    created_at     INTEGER NOT NULL,
+    updated_at     INTEGER NOT NULL
+  )
+  ''';
+
+    const String v14Unique = '''
+  CREATE UNIQUE INDEX idx_entries_unique ON collection_entries(
+    game, card_id, finish, condition, language, binder)
+  ''';
+
+    Future<Database> openV14() async {
+      final Database db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+      );
+      await db.execute(v14Entries);
+      await db.execute(v14Unique);
+      return db;
+    }
+
+    test('marks every stack that is already there as still held', () async {
+      final Database db = await openV14();
+      await db.insert('collection_entries', <String, Object?>{
+        'game': 'mtg',
+        'card_id': 'lotus-1',
+        'quantity': 4,
+        'purchase_price': 9.0,
+        'binder': 'Binder A',
+        'created_at': 1755000000000,
+        'updated_at': 1755000000000,
+      });
+
+      await AppDatabase.addCollectionTombstones(db);
+
+      final List<Map<String, Object?>> rows = await db.query(
+        'collection_entries',
+      );
+      expect(rows, hasLength(1));
+      expect(rows.single['quantity'], 4);
+      expect(rows.single['binder'], 'Binder A');
+      expect(rows.single['purchase_price'], 9.0);
+      // Null means held, which is what every row that existed already was, so
+      // there is nothing for the step to decide and nothing it can get wrong.
+      expect(rows.single['deleted_at'], isNull);
+      await db.close();
+    });
+
+    test('leaves the unique index that makes a revival possible', () async {
+      final Database db = await openV14();
+      await db.insert('collection_entries', <String, Object?>{
+        'card_id': 'lotus-1',
+        'quantity': 1,
+        'created_at': 1755000000000,
+        'updated_at': 1755000000000,
+      });
+
+      await AppDatabase.addCollectionTombstones(db);
+
+      // The slot a removed stack keeps is the slot a re-added card has to land
+      // in. Losing the index here would turn every revival into a second row.
+      await expectLater(
+        db.insert('collection_entries', <String, Object?>{
+          'card_id': 'lotus-1',
+          'quantity': 1,
+          'created_at': 1755000000000,
+          'updated_at': 1755000000000,
+        }),
+        throwsA(isA<DatabaseException>()),
+      );
+      await db.close();
+    });
+
+    test('a database created from scratch has the column too', () async {
+      // The schema and its migration are two spellings of one shape, and a
+      // fresh install that never runs the step has to arrive at the same place.
+      final db = await AppDatabase.openInMemory();
+      final List<Map<String, Object?>> columns = await db.db.rawQuery(
+        'PRAGMA table_info(collection_entries)',
+      );
+      expect(
+        columns.map((Map<String, Object?> c) => c['name']),
+        contains('deleted_at'),
+      );
+      await db.close();
+    });
+  });
+
   group('card identity scoped to the game (v14)', () {
     /// The cards table as it stood before v14: the id was the whole primary
     /// key, and the game was only a column on the row.

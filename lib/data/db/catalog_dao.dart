@@ -236,7 +236,8 @@ class CatalogDao {
              (SELECT COUNT(DISTINCT lower(c.name) || '#' || c.collector_number)
                 FROM collection_entries e
                 JOIN cards c ON c.id = e.card_id AND c.game = e.game
-               WHERE e.game = s.game AND c.set_code = s.code) AS owned
+               WHERE e.game = s.game AND c.set_code = s.code
+                 AND e.deleted_at IS NULL) AS owned
         FROM sets s
        WHERE s.game = ?
     ''',

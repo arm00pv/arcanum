@@ -158,8 +158,14 @@ class LotsDao {
 
       final left = held - quantity;
       if (left <= 0) {
-        await txn.delete(
+        // Selling the last copy takes the stack off the shelf, and a stack
+        // leaving the shelf is marked rather than dropped everywhere in this
+        // app: a row deleted here is a row the account still holds, and the
+        // next sync would put the card they just sold back in the collection.
+        final int at = DateTime.now().millisecondsSinceEpoch;
+        await txn.update(
           'collection_entries',
+          <String, Object?>{'deleted_at': at, 'updated_at': at},
           where: 'id = ?',
           whereArgs: <Object?>[entryId],
         );
@@ -197,11 +203,16 @@ class LotsDao {
               whereArgs: <Object?>[entryId],
               limit: 1,
             );
-      if (rows.isEmpty) {
-        // The stack was sold down to nothing and removed, so undoing the sale
-        // brings the stack itself back: the same printing, finish, condition,
-        // language and binder the sale recorded.
-        entryId = await txn.insert('collection_entries', <String, Object?>{
+      final Map<String, Object?>? row = rows.isEmpty ? null : rows.first;
+      if (row == null || row['deleted_at'] != null) {
+        // The stack is not on the shelf - sold down to nothing, or removed
+        // since - so undoing the sale brings it back with the printing,
+        // finish, condition, language and binder the sale recorded. When its
+        // row is still there it comes back on that row: inserting a fresh one
+        // would collide with the unique index, and writing the copies onto a
+        // marked row without clearing the mark would leave them invisible.
+        final int at = DateTime.now().millisecondsSinceEpoch;
+        final Map<String, Object?> back = <String, Object?>{
           'game': sale.game.id,
           'card_id': sale.cardId,
           'finish': sale.finish.code,
@@ -215,9 +226,23 @@ class LotsDao {
           'binder': sale.binder,
           'notes': null,
           'for_trade': 0,
-          'created_at': DateTime.now().millisecondsSinceEpoch,
-          'updated_at': DateTime.now().millisecondsSinceEpoch,
-        });
+          'deleted_at': null,
+          'updated_at': at,
+        };
+        entryId = row == null
+            ? await txn.insert('collection_entries', <String, Object?>{
+                ...back,
+                'created_at': at,
+              })
+            : (row['id'] as num).toInt();
+        if (row != null) {
+          await txn.update(
+            'collection_entries',
+            back,
+            where: 'id = ?',
+            whereArgs: <Object?>[entryId],
+          );
+        }
       } else {
         entryId = (rows.first['id'] as num).toInt();
         await txn.update(
@@ -291,11 +316,15 @@ class LotsDao {
 
   // ------------------------------------------------------------------ private
 
-  /// The quantity of a stack, or null when it is gone.
+  /// The quantity of a stack, or null when it is not on the shelf.
+  ///
+  /// A stack that was removed is not here to be sold out of: its row survives
+  /// so the removal can travel, but its copies are gone and selling from it
+  /// would take copies that are not there.
   Future<int?> _held(DatabaseExecutor txn, int entryId) async {
     final rows = await txn.query(
       'collection_entries',
-      where: 'id = ?',
+      where: 'id = ? AND deleted_at IS NULL',
       whereArgs: <Object?>[entryId],
       limit: 1,
     );

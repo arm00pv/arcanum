@@ -71,6 +71,25 @@ void main() {
       expect(row['updated_at'], '2026-09-10T12:00:00.000Z');
     });
 
+    test('a removal travels as a timestamp on the row', () {
+      // Sent every time, null included. The account writes an upsert as an
+      // update of the columns the payload names, so a key left out means
+      // "leave what is there" - and what is there for a card being added back
+      // is the tombstone that would keep it deleted.
+      final Map<String, Object?> liveRow = AccountCollection.row(
+        holding(),
+        CardGame.mtg,
+      );
+      expect(liveRow.containsKey('deleted_at'), isTrue);
+      expect(liveRow['deleted_at'], isNull);
+
+      final Map<String, Object?> removed = AccountCollection.row(
+        holding().copyWith(deletedAt: DateTime.utc(2026, 9, 12, 9)),
+        CardGame.mtg,
+      );
+      expect(removed['deleted_at'], '2026-09-12T09:00:00.000Z');
+    });
+
     test('nothing absent is sent as an empty value', () {
       // A card bought for nothing and one bought for an unknown amount are
       // different facts, and the account keeps the difference.
@@ -110,6 +129,19 @@ void main() {
       expect(after.forTrade, isTrue);
     });
 
+    test('a removal comes back as a removal', () {
+      final CollectionEntry gone = holding().copyWith(
+        deletedAt: DateTime.utc(2026, 9, 12, 9),
+      );
+
+      final CollectionEntry? after = AccountCollection.entry(
+        AccountCollection.row(gone, CardGame.mtg),
+      );
+
+      expect(after!.isDeleted, isTrue);
+      expect(after.deletedAt!.toUtc(), DateTime.utc(2026, 9, 12, 9));
+    });
+
     test('a row with no card id is not a holding', () {
       // Better to bring nothing back than to invent a holding out of a row
       // that lost the one field nothing can default.
@@ -135,6 +167,33 @@ void main() {
           'updated_at': '2026-09-10T11:00:00.000Z',
         }),
         isFalse,
+      );
+    });
+
+    test('a removal is an edit like any other', () {
+      // Nothing about the comparison changes for a tombstone, and that is the
+      // point of the tombstone being a timestamp: the later edit wins whether
+      // it says "I hold this" or "I do not".
+      final CollectionEntry local = holding(
+        updated: DateTime.utc(2026, 9, 10, 12),
+      );
+      final DateTime moment = DateTime.utc(2026, 9, 11, 12);
+
+      expect(
+        AccountCollection.accountWins(local, <String, Object?>{
+          'updated_at': moment.toIso8601String(),
+          'deleted_at': moment.toIso8601String(),
+        }),
+        isTrue,
+        reason: 'a removal made after this edit is the newer of the two',
+      );
+      expect(
+        AccountCollection.accountWins(local, <String, Object?>{
+          'updated_at': DateTime.utc(2026, 9, 9, 12).toIso8601String(),
+          'deleted_at': DateTime.utc(2026, 9, 9, 12).toIso8601String(),
+        }),
+        isFalse,
+        reason: 'adding a card back after a removal beats the removal',
       );
     });
 

@@ -429,11 +429,14 @@ void main() {
       await browser.settleCollection(CardGame.digimon);
 
       expect(digimon.showing.totalCards, 2, reason: 'what it already held');
+      // The account is merged in before anything is pushed, so a push waits for
+      // the connection it needs rather than racing one. Nothing is written here
+      // - and nothing is lost either: the rows are still on this browser, and
+      // the first sync that reaches the account carries them up.
       expect(
         browser.account.written.length,
-        2,
-        reason:
-            'what this browser held was sent up before the account was asked',
+        0,
+        reason: 'a push waits for a connection rather than racing one',
       );
       expect(
         browser.scope.read(collectionOverviewProvider(CardGame.digimon)),

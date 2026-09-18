@@ -42,6 +42,12 @@ abstract final class AccountCollection {
       'binder': entry.binder,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
       'for_trade': entry.forTrade,
+      // Sent even when it is null, unlike every other absent value here. The
+      // account writes an upsert as an insert ... on conflict do update of the
+      // columns the payload names, so a key left out means "leave whatever is
+      // there" - and what is there for a card being added back is the tombstone
+      // that would keep it deleted forever. A present row has to say so.
+      'deleted_at': entry.deletedAt?.toUtc().toIso8601String(),
       'created_at': entry.createdAt.toUtc().toIso8601String(),
       'updated_at': entry.updatedAt.toUtc().toIso8601String(),
     };
@@ -67,6 +73,9 @@ abstract final class AccountCollection {
       binder: (row['binder'] as String?) ?? '',
       notes: row['notes'] as String?,
       forTrade: row['for_trade'] == true,
+      deletedAt: row['deleted_at'] == null
+          ? null
+          : _parseInstant(row['deleted_at']),
       createdAt: _parseInstant(row['created_at']),
       updatedAt: _parseInstant(row['updated_at']),
     );
@@ -78,6 +87,12 @@ abstract final class AccountCollection {
   /// device can see, so letting the local one win a tie would make two phones
   /// disagree about the same moment. The phone stamps its own edits when they
   /// happen, so in practice the two only tie when they hold the same edit.
+  ///
+  /// A removal is not a special case here, and that is the point of it being a
+  /// timestamp on the row: deleting a card is an edit made at a moment, so it
+  /// beats an older edit and loses to a newer one, which is exactly what
+  /// re-adding the card is. Nothing in this file has to know it is looking at
+  /// a tombstone.
   static bool accountWins(CollectionEntry local, Map<String, Object?> row) {
     final DateTime remote = _parseInstant(row['updated_at']);
     return !remote.isBefore(local.updatedAt);
