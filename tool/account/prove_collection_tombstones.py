@@ -42,6 +42,15 @@ import shutil
 import subprocess
 import sys
 
+# psql is told its connection through the environment rather than through its
+# argv, so the password is not in a process listing. catalog_store owns that
+# split and is deployed alongside the importer, so it is imported here rather
+# than copied: a second copy of a rule about credentials is a second thing to
+# get wrong.
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+import catalog_store  # noqa: E402
+
 # The table as it stood on 2026-09-19, read from the live project before the
 # migration was written. Asserting these afterwards is how "one column was
 # added" becomes a check: a migration that also, say, rewrote a policy or
@@ -97,11 +106,16 @@ def psql(db_url, sql):
     The whole script is one process, which matters for the probe below: its
     statements have to share a transaction, and that transaction has to be
     rolled back whether or not an assertion in the middle failed.
+
+    The URL is split into the variables libpq reads from the environment and
+    never passed as an argument, so the password is not visible to ps while a
+    statement runs.
     """
     proc = subprocess.run(
-        ["psql", db_url, "-X", "-q", "-A", "-t", "-F", "|",
+        ["psql", "-X", "-q", "-A", "-t", "-F", "|",
          "-v", "ON_ERROR_STOP=1", "-f", "-"],
         input=sql, capture_output=True, text=True, timeout=120,
+        env=catalog_store.psql_environment(db_url),
     )
     if proc.returncode != 0:
         raise RuntimeError(f"psql: {proc.stderr.strip()[:600]}")

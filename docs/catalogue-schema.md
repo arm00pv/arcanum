@@ -16,6 +16,12 @@ Lorcana - that import is `catalogue-import.md`'s record, not this file's - so
 `catalog_cards` holds 3,208 rows rather than none, and the measurements below
 were taken on them.
 
+Amended again by `tool/catalog/0003_read_functions.sql`, which is step 4 and is
+three read functions rather than schema. The one thing in it that belongs in
+this file is `catalog_cards_number_bare`: 0003 replaced it with
+`catalog_cards_number_nocase` on the expression §4's number read now compares,
+which is recorded in its own section below.
+
 If this file and the SQL disagree, the SQL is what ran.
 
 ## What was applied
@@ -72,7 +78,9 @@ generated columns. Nothing was added beyond the design's list: an index is a
 claim about which queries matter, and those queries are listed in §4. The two
 trigram indexes were rebuilt by 0002 onto the raw `name` and `oracle_text`
 columns, because a trigram index on an expression the predicate does not compare
-is an index the planner refuses - see that section below.
+is an index the planner refuses - see that section below. 0003 has since
+replaced the number index with one on the expression its read compares; the
+count is still fifteen, because an index was swapped rather than added.
 
 **`catalog_meta` is seeded with nine rows**, one per `CardGame.id`
 (`mtg, pokemon, lorcana, yugioh, onepiece, swu, digimon, dragonball, gundam`,
@@ -260,6 +268,57 @@ search went back to a `Seq Scan` with 345 buffers, which is what reversing this
 migration means; after the up file the plans above were back and `catalog_cards`
 still held its 3,208 rows and 24 sets. Nothing else needs undoing - 0002 changed
 two index definitions and no column, policy, grant or row.
+
+## 0003: the number index, on the expression its read compares
+
+Step 4 is the three reads that cannot be written as one PostgREST filter -
+`catalog_cards_by_ids`, `catalog_search` and `catalog_cards_by_number` - and it
+is `tool/catalog/0003_read_functions.sql`. Three functions are not a schema
+change, so what this file records of it is the one index it moved, and the fact
+that it moved nothing else.
+
+§4 compared `c.number_bare` to `ltrim(p_number, '0')`, so 0001 built
+`catalog_cards_number_bare` on `(game, number_bare)` for exactly that predicate.
+0003 corrected the comparison to `lower(number_bare)` on both sides, because the
+case-sensitive one was a bug rather than a simplification: thirteen imported
+Lorcana collector numbers carry letters, so the server answered nothing for
+`24b` where the phone's own SQLite answered, and the two paths disagreeing about
+one query is the failure the folding rules of §2.3 exist to prevent. That
+correction is recorded where the predicate is written -
+`catalogue-server-side.md` §4 - with the measurement that found it.
+
+A btree index is matched by the expression in the predicate and by nothing that
+merely means the same thing, so the corrected predicate would have left the old
+index unused and the read on `catalog_cards_number` alone. 0003 creates the
+replacement before dropping the old one, so there is no moment at which the read
+has no index to use:
+
+~~~sql
+create index if not exists catalog_cards_number_nocase
+  on public.catalog_cards (game, lower(number_bare));
+
+drop index if exists public.catalog_cards_number_bare;
+~~~
+
+Measured on the live table the same day, with the deployed body taken out of
+`pg_proc` and prepared with its parameters bound, `'24b'` against Lorcana is a
+BitmapOr of the two indexes - `catalog_cards_number` for the exact comparison
+and `catalog_cards_number_nocase` for the folded one, whose index condition is
+`(game = $1) AND (lower(number_bare) = lower(ltrim($3, '0')))` - and it answers
+the single row it should. The index is on the expression rather than on the
+column, and `number_bare` itself is untouched, deliberately: its expression is
+asserted against the committed collector-number vectors by two proofs, and
+changing the column to fold case would change what those vectors mean.
+
+### Reversing 0003
+
+`tool/catalog/0003_read_functions_down.sql` drops the three functions and puts
+`catalog_cards_number_bare` back, creating it before dropping its replacement.
+Nothing else needs undoing: 0003 added no table, no column, no policy and no
+privilege on any table, so the four tables, the posture and the account tables
+are exactly as they were. The index is undone with the predicate rather than
+left behind, because an index on `lower(number_bare)` with nothing comparing
+`lower(number_bare)` is a nightly write cost for no reader at all.
 
 ## The RLS posture, and why it is both barriers
 

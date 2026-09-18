@@ -66,6 +66,15 @@ import sys
 import urllib.error
 import urllib.request
 
+# psql is told its connection through the environment rather than through its
+# argv, so the password is not in a process listing. catalog_store owns that
+# split and is deployed alongside the importer, so it is imported here rather
+# than copied: a second copy of a rule about credentials is a second thing to
+# get wrong.
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+import catalog_store  # noqa: E402
+
 TIMEOUT = 60
 
 GAME = "lorcana"
@@ -125,11 +134,17 @@ SEPARATOR = ""
 
 
 def psql(db_url, sql):
-    """One batch of statements, separated by a character SQL never contains."""
+    """One batch of statements, separated by a character SQL never contains.
+
+    The URL is split into the variables libpq reads from the environment and
+    never passed as an argument, so the password is not visible to ps while a
+    statement runs.
+    """
     proc = subprocess.run(
-        ["psql", db_url, "-X", "-q", "-A", "-t", "-F", SEPARATOR,
+        ["psql", "-X", "-q", "-A", "-t", "-F", SEPARATOR,
          "-v", "ON_ERROR_STOP=1", "-c", sql],
         capture_output=True, text=True, timeout=300,
+        env=catalog_store.psql_environment(db_url),
     )
     if proc.returncode != 0:
         raise RuntimeError(f"psql: {proc.stderr.strip()[:600]}")
@@ -190,9 +205,10 @@ def explain(db_url, source, call):
         f"explain (analyze, buffers) execute probe({', '.join(call)});"
     )
     proc = subprocess.run(
-        ["psql", db_url, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
+        ["psql", "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
          statement],
         capture_output=True, text=True, timeout=300,
+        env=catalog_store.psql_environment(db_url),
     )
     if proc.returncode != 0:
         raise RuntimeError(f"psql: {proc.stderr.strip()[:600]}")
@@ -334,11 +350,12 @@ def check_the_search_trap_is_still_a_trap(db_url):
         return
     lowered = body.replace("c.name ilike", "lower(c.name) like")
     proc = subprocess.run(
-        ["psql", db_url, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
+        ["psql", "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
          "set plan_cache_mode = force_generic_plan;\n"
          f"prepare trap ({', '.join(source['types'])}) as {lowered};\n"
          "explain (analyze, buffers) execute trap('lorcana','elsa',80);"],
         capture_output=True, text=True, timeout=300,
+        env=catalog_store.psql_environment(db_url),
     )
     if proc.returncode != 0:
         bad("a_lowered_predicate_reads_the_table_instead",

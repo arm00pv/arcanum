@@ -69,6 +69,15 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
+# psql is told its connection through the environment rather than through its
+# argv, so the password is not in a process listing. catalog_store owns that
+# split and is deployed alongside the importer, so it is imported here rather
+# than copied: a second copy of a rule about credentials is a second thing to
+# get wrong.
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+import catalog_store  # noqa: E402
+
 # The schema fingerprints, read from the live project before the tombstone
 # migration and left unchanged by it. Asserting them again here is what makes
 # "this migration only touched the publication" a check: a step that also
@@ -121,10 +130,17 @@ def skip(name, detail):
 
 
 def psql(db_url, sql):
+    """One script, as the owner.
+
+    The URL is split into the variables libpq reads from the environment and
+    never passed as an argument, so the password is not visible to ps while a
+    statement runs.
+    """
     proc = subprocess.run(
-        ["psql", db_url, "-X", "-q", "-A", "-t", "-F", "|",
+        ["psql", "-X", "-q", "-A", "-t", "-F", "|",
          "-v", "ON_ERROR_STOP=1", "-f", "-"],
         input=sql, capture_output=True, text=True, timeout=120,
+        env=catalog_store.psql_environment(db_url),
     )
     if proc.returncode != 0:
         raise RuntimeError(f"psql: {proc.stderr.strip()[:600]}")

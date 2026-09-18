@@ -228,7 +228,7 @@ alter table public.catalog_cards add column number_bare text
   generated always as (ltrim(collector_number, '0')) stored;
 
 create index catalog_sets_code_folded on public.catalog_sets (game, code_folded);
-create index catalog_cards_number_bare on public.catalog_cards (game, number_bare);
+create index catalog_cards_number_nocase on public.catalog_cards (game, lower(number_bare));
 ~~~
 
 Zero padding is a separate rule and stays separate: Digimon prints `001` where
@@ -239,6 +239,24 @@ A test-vector file - a few hundred (input, folded) pairs generated from the Dart
 functions and committed - is asserted against both the SQL expression and the Dart
 one. Two hand-written implementations of one rule is the likeliest way this design
 quietly stops working.
+
+**The number index is on the expression its read compares, too.** This section
+first specified `catalog_cards_number_bare` on `(game, number_bare)`, and §4
+compared `c.number_bare` to the padded number, so the two agreed. §4's
+comparison then turned out to be wrong - case-sensitively wrong, which is a bug
+rather than a simplification, and it is recorded in full there - and the fix to
+it is the same lesson §2.2 has already learnt twice above: a btree index is
+matched by the expression in the predicate and by nothing that merely means the
+same thing. So the index moved with the predicate rather than being joined by
+another one. `tool/catalog/0003_read_functions.sql` creates
+`catalog_cards_number_nocase` on `(game, lower(number_bare))` before dropping
+`catalog_cards_number_bare`, and the number read is a BitmapOr of the new index
+and `catalog_cards_number`. The count is still fifteen indexes: one was
+replaced, not added, because two indexes on one column where only one can ever
+be chosen is a write cost paid nightly for nothing. `number_bare` itself is
+deliberately untouched - its expression is asserted against the committed
+collector-number vectors by two proofs, and folding the column would change what
+those vectors mean.
 
 ### 2.4 RLS for shared read-only data
 
@@ -428,7 +446,8 @@ as $$
     left join matched m on m.code = c.set_code
    where c.game = p_game
      and (p_standalone or m.code is not null)
-     and (c.collector_number = p_number or c.number_bare = ltrim(p_number, '0'))
+     and (c.collector_number = p_number
+          or lower(c.number_bare) = lower(ltrim(p_number, '0')))
    order by (c.collector_number = p_number) desc,
             m.rank,
             c.released_at desc nulls last,
@@ -436,6 +455,23 @@ as $$
    limit least(greatest(p_limit, 1), 200);
 $$;
 ~~~
+
+**The number comparison above is case-insensitive, and this section had it
+wrong.** As first written it compared `c.number_bare = ltrim(p_number, '0')`,
+which is case-sensitive, while the implementation the function exists to agree
+with - `CatalogDao.searchByNumber` - compares `collector_number = ? COLLATE
+NOCASE`. Thirteen collector numbers in the imported Lorcana catalogue carry
+letters (`1f`, `24B`, `25ja`, `125f`, `2f`, `3f`, `4a`, `4b`, `4c`, `4d`,
+`4e`, `65f`, `25zh`), so a collector typing `24b` was answered by their own
+phone's SQLite and by nothing on the server: the same query answering
+differently depending on which path served it, which is the failure §2.3 was
+written to prevent. Measured on the live table on 2026-09-18, before the
+correction: `'24b'` matched 0 rows through the predicate as this section
+spelled it and 1 row through the case-insensitive one.
+`tool/catalog/0003_read_functions.sql` applied the `lower()` on both sides, and
+§2.2's number index moved onto the expression with it. The exact comparison
+stays, and still ranks a match first: it is what makes `001` and `001` the same
+printing, while the folded comparison is what makes `001` and `1` the same one.
 
 `catalog_cards_by_ids` is the unglamorous one that matters most on the web. It
 exists because a browser that has just signed in holds a collection of thousands

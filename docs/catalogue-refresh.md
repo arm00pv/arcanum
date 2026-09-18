@@ -344,13 +344,13 @@ nothing at all. Nothing checks the two against each other.
 back. If it comes back after 06:30 the watcher has already reported the catalogue
 stale, correctly, and the run that fixes it happens shortly afterwards.
 
-**The importer hands the connection URL to `psql` as an argument.** This change
-does not make that worse - the poller's own command line is clean, which is what
-`EnvironmentFile` above is for - but it is worth writing down, because it was
-found while arguing that the password stays out of a process listing and it does
-not. `catalog_store._run` passes `self.db_url` in `psql`'s argv, and `ps` shows
-it, password included, for as long as each statement runs - measured on the host,
-not inferred from the source. Two fixes were tried against the live pooler:
+**The importer used to hand the connection URL to `psql` as an argument, and no
+longer does.** This change does not make that worse - the poller's own command
+line is clean, which is what `EnvironmentFile` above is for - but it was found
+while arguing that the password stays out of a process listing and it did not:
+`catalog_store._run` passed `self.db_url` in `psql`'s argv, and `ps` showed it,
+password included, for as long as each statement ran - measured on the host, not
+inferred from the source. Two fixes were tried against the live pooler:
 
 ~~~
 PGDATABASE=<the URI> psql ...        -> ignored; psql fell back to the local socket
@@ -358,10 +358,35 @@ PGHOST/PGPORT/PGUSER/PGDATABASE/     -> connected, and nothing sensitive in ps
   PGPASSWORD/PGSSLMODE=<split out>
 ~~~
 
-so the fix is to split the URL into the `PG*` variables before spawning `psql`,
-not to put the URI in an environment variable. It belongs to whoever owns the
+so the fix was to split the URL into the `PG*` variables before spawning `psql`,
+not to put the URI in an environment variable. It belonged to whoever owns the
 shared write path rather than to the schedule, because every importer inherits
-`_run` - and it is a one-line change there rather than a change here.
+`_run`, and that is where it was made: `catalog_store.libpq_environment` now
+does the split and `_run` spawns `psql` with the connection in the environment
+and nothing but `-f /tmp/....sql` in its argv.
+
+Three things about it are worth keeping, because each cost something to find.
+The split has to be done by a URL parser and not by string surgery: this
+password is percent-encoded, and a split that handed libpq the encoded text
+fails authentication with `FATAL: password authentication failed` - measured,
+and the error names neither the encoding nor the parameter. `sslmode` travels
+as a query parameter rather than as a URL part, so a split that forgets it
+leaves libpq on its default of `prefer`, which still negotiates TLS with this
+server and would have looked like success; the variable is set, and raising the
+URL to `sslmode=verify-full` is refused for want of a root certificate, which is
+how the parameter is known to be in force. And a URL naming no host is refused
+rather than passed on, because libpq answers a missing host by connecting over
+the local socket - a silent connection to the wrong database, and a worse bug
+than the one being fixed.
+
+Measured after the change, on the host, with a watcher sampling `ps` twenty
+times a second: the same sleeping statement that put the whole URL into 75 of
+48,859 samples through the old module put nothing naming the pooler host into
+49,918 through the new one, and an import of all 24 Lorcana sets put nothing
+into 226,310 samples while 198 of them caught a `psql` mid-statement - the line
+reads `psql -X -q -A -t -v ON_ERROR_STOP=1 -f /tmp/tmpymwnp60a.sql`. The other
+scripts in `tool/` that spoke to `psql` were moved onto the same function, so
+there is no second copy of the rule to drift.
 
 **`last_import_note` is only as good as the importer's counting.** It says how
 many sets were written, unchanged and failed, and nothing about which - so the

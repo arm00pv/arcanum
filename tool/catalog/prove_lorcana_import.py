@@ -70,6 +70,13 @@ TOOL = os.path.dirname(HERE)
 VECTORS = os.path.join(HERE, "catalog_id_vectors.json.gz")
 FOLD_VECTORS = os.path.join(HERE, "fold_vectors.json")
 
+# psql is told its connection through the environment rather than through its
+# argv, so the password is not in a process listing. catalog_store owns that
+# split and is the module the importer itself runs, so this proof uses it
+# rather than keeping a second copy of a rule about credentials.
+sys.path.insert(0, TOOL)
+import catalog_store  # noqa: E402
+
 RESULTS = []
 
 
@@ -114,6 +121,10 @@ def psql(db_url, sql, want_json=False):
     The JSON form is used for anything that reads card text: a card's rules text
     contains pipes, tabs and newlines, and the pipe-separated text protocol
     would turn any of them into a column boundary.
+
+    The URL is split into the variables libpq reads from the environment and
+    never passed as an argument, so the password is not visible to ps while a
+    statement runs.
     """
     # Adjacent string literals concatenate in Python; a line ending in a comma
     # instead turns the whole call into a tuple of fragments. psql cannot read
@@ -125,9 +136,10 @@ def psql(db_url, sql, want_json=False):
     if want_json:
         sql = f"select coalesce(json_agg(x), '[]'::json) from (\n{sql}\n) x;"
     proc = subprocess.run(
-        ["psql", db_url, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1",
+        ["psql", "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1",
          "-c", sql],
         capture_output=True, text=True, timeout=TIMEOUT,
+        env=catalog_store.psql_environment(db_url),
     )
     if proc.returncode != 0:
         raise RuntimeError(f"psql: {proc.stderr.strip()[:500]}")
@@ -419,10 +431,11 @@ def check_generated_columns_refuse_writes(db_url):
     # ON_ERROR_STOP propagates it. Run it in its own call so the refusal can be
     # read rather than aborting the checks around it.
     proc = subprocess.run(
-        ["psql", db_url, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
+        ["psql", "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
          f"begin; update public.catalog_sets set code_folded = 'zz' "
          f"where game = {sql_text(GAME)}; rollback;"],
-        capture_output=True, text=True, timeout=TIMEOUT)
+        capture_output=True, text=True, timeout=TIMEOUT,
+        env=catalog_store.psql_environment(db_url))
     if proc.returncode != 0 and "generated column" in proc.stderr:
         ok("generated_columns_refuse_a_write",
            "an update naming code_folded is refused, so the folded form cannot be "

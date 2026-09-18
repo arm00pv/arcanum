@@ -54,7 +54,12 @@ Two boundaries this module holds deliberately:
     with an API key. The catalogue's RLS posture grants `anon` and
     `authenticated` SELECT and nothing else; `postgres` owns these tables and
     has BYPASSRLS, which is the write path design section 2.4 describes. The
-    URL therefore comes from the host's credentials file and is never printed.
+    URL therefore comes from the host's credentials file and is never printed -
+    and it is never handed to `psql` as an argument either. `libpq_environment`
+    splits it into the variables libpq reads from the environment, so what a
+    process listing shows is `psql -f /tmp/...` and no password. That function
+    is where the reasons are; the short version is that a command line is
+    readable by every user on the host and a process's environment is not.
 
 There is no Postgres driver on the host - no psycopg, no asyncpg - and adding
 one would mean a dependency the rest of the deployment does not have. This
@@ -84,6 +89,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 # The columns an importer supplies for a set, in a fixed order. Everything else
 # on catalog_sets is bookkeeping this module owns: cards_revision,
@@ -242,6 +248,148 @@ def _normalise(value):
     return value
 
 
+# ---------------------------------------------------------------------------
+# The connection, as libpq reads it
+# ---------------------------------------------------------------------------
+
+# The five parts a Postgres URL carries, and the environment variable libpq
+# reads each one from. These are libpq's own names; nothing here is invented,
+# because a misspelt one is not an error anywhere - it is a psql that connects
+# to the wrong place.
+_URL_PARTS = {
+    "host": "PGHOST",
+    "port": "PGPORT",
+    "user": "PGUSER",
+    "password": "PGPASSWORD",
+    "dbname": "PGDATABASE",
+}
+
+# The connection settings a URL carries as query parameters, and the variable
+# each one becomes. sslmode is the one that matters here, and the reason this
+# list exists at all: the session pooler's URL says ?sslmode=require, and a
+# split that dropped it would leave libpq on its default of prefer - which
+# still negotiates TLS with this server, so nothing would look wrong while the
+# requirement had quietly stopped being one.
+_URL_PARAMETERS = {
+    "sslmode": "PGSSLMODE",
+    "sslrootcert": "PGSSLROOTCERT",
+    "sslcert": "PGSSLCERT",
+    "sslkey": "PGSSLKEY",
+    "sslcrl": "PGSSLCRL",
+    "application_name": "PGAPPNAME",
+    "connect_timeout": "PGCONNECT_TIMEOUT",
+    "options": "PGOPTIONS",
+    "target_session_attrs": "PGTARGETSESSIONATTRS",
+    "channel_binding": "PGCHANNELBINDING",
+    "gssencmode": "PGGSSENCMODE",
+    "client_encoding": "PGCLIENTENCODING",
+    "keepalives": "PGKEEPALIVES",
+    "keepalives_idle": "PGKEEPALIVESIDLE",
+    "keepalives_interval": "PGKEEPALIVESINTERVAL",
+    "keepalives_count": "PGKEEPALIVESCOUNT",
+    "passfile": "PGPASSFILE",
+}
+
+# Parameters a client library reads and libpq does not. Ignored rather than
+# refused: the refusal below is for a setting that would have reached libpq and
+# changed the connection, and these never do.
+_DRIVER_PARAMETERS = frozenset({"pgbouncer"})
+
+
+def _decoded(part):
+    """One URL part with its percent-encoding removed, or None.
+
+    urlsplit hands userinfo back exactly as the URL spells it, which is the
+    right thing for it to do and the wrong thing to give libpq.
+    """
+    return None if part is None else unquote(part)
+
+
+def libpq_environment(db_url):
+    """The connection, as the environment libpq reads, not as an argument.
+
+    A psql given its connection as a URL has that URL in its command line, and
+    a command line is readable by every user on the host: ps shows the
+    password, percent-encoding and all, for as long as each statement runs.
+    Splitting the URL into the variables libpq actually reads leaves a process
+    listing showing `psql -f /tmp/...` and nothing else.
+
+    The split is done with urlsplit rather than by cutting the string at its
+    punctuation, and that is the whole reason this function exists. A password
+    containing '@' or '!' arrives percent-encoded - this deployment's contains
+    both - and a split that handed libpq the encoded text would fail
+    authentication with an error that names nothing useful: libpq would be
+    asking to authenticate as a user whose password literally contains '%40'.
+    Every part is unquoted here, which is the decode a URL is defined to have.
+
+    Two refusals, both deliberately loud. A URL that names no host or no
+    database is refused rather than passed on, because libpq answers a missing
+    host by connecting over the local socket - a psql talking to whatever
+    Postgres happens to be on this machine, silently, which is a worse bug than
+    the one being fixed here. And a query parameter libpq has no variable for
+    is refused rather than dropped, because sslmode is one of them.
+
+    PGPASSWORD is in the result, so the password is in the environment of the
+    psql this module spawns. That is as far as a subprocess can be hidden: a
+    process's environment is readable by its owner and by root, while its
+    command line is readable by every user on the host.
+    """
+    parts = urlsplit(db_url)
+    if parts.scheme not in ("postgres", "postgresql"):
+        raise CatalogError(
+            f"the database URL is not a Postgres URL: scheme {parts.scheme!r}")
+    try:
+        # .hostname strips an IPv6 literal's brackets; .port raises on anything
+        # that is not a number, which is a URL this module will not guess at.
+        found = {
+            "host": parts.hostname,
+            "port": None if parts.port is None else str(parts.port),
+            "user": _decoded(parts.username),
+            "password": _decoded(parts.password),
+            "dbname": _decoded(parts.path[1:]),
+        }
+    except ValueError as exc:
+        raise CatalogError(f"could not read the database URL: {exc}") from exc
+
+    environment = {_URL_PARTS[part]: value
+                   for part, value in found.items() if value}
+
+    for name, value in parse_qsl(parts.query, keep_blank_values=True):
+        variable = _URL_PARTS.get(name) or _URL_PARAMETERS.get(name)
+        if variable:
+            # A parameter wins over the part it duplicates: a URL carrying both
+            # has said the second one more specifically.
+            environment[variable] = value
+        elif name not in _DRIVER_PARAMETERS:
+            raise CatalogError(
+                f"the database URL carries a parameter libpq has no variable "
+                f"for: {name!r}. Dropping it could change the connection with "
+                "nothing to show for it, so it is refused instead")
+
+    for variable, what in (("PGHOST", "host"), ("PGDATABASE", "database")):
+        if not environment.get(variable):
+            raise CatalogError(
+                f"the database URL names no {what}: libpq answers a missing "
+                "host or database by connecting over the local socket rather "
+                "than by failing, which would be a worse bug than the one "
+                "this split exists to fix")
+    return environment
+
+
+def psql_environment(db_url):
+    """os.environ with this URL's connection merged into it.
+
+    The ambient environment comes first and stays: psql needs PATH and HOME
+    like any other program, and the host hands this importer its credentials by
+    exporting them in the first place. The URL's own parts overwrite the
+    connection variables, because the URL is the more specific statement of
+    what this run is connecting to.
+    """
+    environment = dict(os.environ)
+    environment.update(libpq_environment(db_url))
+    return environment
+
+
 @contextmanager
 def single_flight(path):
     """Holds an exclusive lock so two importers cannot interleave.
@@ -291,8 +439,23 @@ class CatalogStore:
         self.psql = psql
         self.timeout = timeout
         self._checked = False
+        self._environment = None
 
     # ----------------------------------------------------------------- psql
+
+    def _connection(self):
+        """The environment psql is spawned with, parsed once per process.
+
+        Parsed on first use rather than in __init__ so that a dry run - which
+        spawns no psql at all, and which the proofs construct around a
+        placeholder URL - does not need a connection string that resolves.
+        It is still parsed before any statement runs, so a URL this module
+        refuses is refused before anything is written rather than halfway
+        through a set.
+        """
+        if self._environment is None:
+            self._environment = psql_environment(self.db_url)
+        return self._environment
 
     def _run(self, sql, workdir=None):
         """Runs one SQL script, from a file, with ON_ERROR_STOP.
@@ -303,6 +466,12 @@ class CatalogStore:
         closes, and the open transaction rolls back - which is what makes "a
         failed import leaves the previous revision serving" true rather than
         hoped for.
+
+        The connection arrives in the environment and never in the argv below.
+        That is the difference between a password only its owner can read out
+        of /proc and one every user on the host can read out of ps; see
+        libpq_environment, which does the splitting and is the only place that
+        has to know how.
         """
         _forbid_account_tables(sql)
         if self.dry_run:
@@ -315,9 +484,10 @@ class CatalogStore:
             path = fh.name
         try:
             proc = subprocess.run(
-                [self.psql, self.db_url, "-X", "-q", "-A", "-t",
+                [self.psql, "-X", "-q", "-A", "-t",
                  "-v", "ON_ERROR_STOP=1", "-f", path],
                 capture_output=True, text=True, timeout=self.timeout,
+                env=self._connection(),
             )
         finally:
             os.unlink(path)
