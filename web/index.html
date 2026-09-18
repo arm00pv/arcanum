@@ -18,19 +18,63 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Arcanum - a precision Magic: The Gathering collection vault with on-device price analytics.">
 
   <!-- iOS meta tags & icons -->
+  <!--
+    The app is handed over as a home screen web app rather than a bookmark. iOS
+    treats a home screen web app as something other than Safari, which is what
+    spares the local catalogue the seven-day cap Safari puts on script-writable
+    storage, and what opens the app without Safari's chrome around it. iOS 11.3
+    and later take the display mode from the manifest; the prefixed tag is what
+    the versions before that read.
+  -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Arcanum">
+  <!--
+    Black rather than black-translucent. Nothing in Flutter's web rendering
+    reads the safe-area insets, so a status bar the app were allowed to draw
+    under would put its own bars beneath the clock with no way to inset them.
+  -->
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="arcanum">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!--
+    What colours the status bar of an installed iOS app, from iOS 15 on. The
+    app's own overlay style is dark and carries no colour, so this is the one
+    that shows.
+  -->
+  <meta name="theme-color" content="#07070C">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>arcanum</title>
+  <title>Arcanum</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    No viewport meta tag, and that is deliberate - see docs/web-on-ios.md.
+    Flutter's web engine deletes any viewport tag it is given and writes its own
+    without viewport-fit, and nothing in its rendering reads
+    env(safe-area-inset-*). So viewport-fit=cover would change nothing today,
+    and would be wrong if only one half of that ever changed. With viewport-fit
+    absent, iOS keeps the page inside the safe area, which is where the app
+    already lays itself out.
+  -->
+
+  <!--
+    The colour behind everything: the strips a notched iPhone holds back from
+    the viewport, and the moment before Flutter has painted anything. Both are
+    white without this - a flash on launch, and a bright frame around a dark
+    app.
+  -->
+  <style>
+    html,
+    body {
+      background-color: #07070C;
+    }
+  </style>
 </head>
 <body>
   <!--

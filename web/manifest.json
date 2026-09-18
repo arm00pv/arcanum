@@ -1,11 +1,11 @@
 {
-    "name": "arcanum",
-    "short_name": "arcanum",
+    "name": "Arcanum",
+    "short_name": "Arcanum",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#07070C",
+    "theme_color": "#07070C",
+    "description": "Arcanum - a precision Magic: The Gathering collection vault with on-device price analytics.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
