@@ -8,11 +8,13 @@ import 'package:arcanum/app.dart';
 import 'package:arcanum/core/platform/web_database.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/auth/account_service.dart';
+import 'package:arcanum/data/sync/account_changes.dart';
 import 'package:arcanum/data/sync/account_table.dart';
 import 'package:arcanum/data/sync/collection_sync.dart';
 import 'package:arcanum/features/auth/account_gate.dart';
 import 'package:arcanum/features/auth/account_providers.dart';
 import 'package:arcanum/features/auth/account_reconcile.dart';
+import 'package:arcanum/features/auth/collection_listener.dart';
 import 'package:arcanum/features/auth/collection_watcher.dart';
 import 'package:arcanum/data/backup/backup_scheduler.dart';
 import 'package:arcanum/data/db/app_database.dart';
@@ -101,6 +103,17 @@ Future<void> main() async {
         sync: collection,
         signedIn: () => service.isSignedIn,
       );
+      // The other half of the same promise. The watcher carries this browser's
+      // work up to the account; this is what brings another browser's work
+      // down without the collector having to reload the page. Made here, in the
+      // branch that has an account, for the same reason the watcher is: a phone
+      // keeps its vault to itself and has nobody to hear from.
+      final CollectionListener listener = CollectionListener(
+        sync: collection,
+        changes: SupabaseAccountChanges(Supabase.instance.client),
+        signedIn: () => service.isSignedIn,
+        accountId: () => service.user?.id,
+      );
       app = AccountGate(
         service: service,
         onSignedIn: (ProviderContainer scope) async {
@@ -113,8 +126,18 @@ Future<void> main() async {
           // same game up at once is work nobody asked for, and the watcher
           // knows what has been carried up precisely because that sync says so.
           watcher.begin(scope);
+          // After the reconcile rather than alongside it, because the first
+          // thing this does on a live subscription is pull every game, and a
+          // second pass over a collection the sign-in is still writing would be
+          // two passes racing for no gain. Nothing is missed by waiting: the
+          // catch-up is a pull of the whole account as it stands at the moment
+          // the subscription goes live, whenever that turns out to be.
+          listener.begin(scope);
         },
-        onSignedOut: watcher.end,
+        onSignedOut: () {
+          watcher.end();
+          listener.end();
+        },
         child: app,
       );
     }

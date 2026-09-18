@@ -151,11 +151,40 @@ class CollectionSync {
   Future<int> pull(CardGame game) async {
     final List<Map<String, Object?>> remote = await table.fetch(game);
     for (final Map<String, Object?> row in remote) {
-      final CollectionEntry? entry = AccountCollection.entry(row);
-      if (entry == null) continue;
-      await _merge(game, row, entry);
+      await mergeRow(game, row);
     }
     return remote.length;
+  }
+
+  /// Writes one account holding here, if the account's copy is the newer one.
+  ///
+  /// The same comparison a pull makes, for a row that arrived on its own. A
+  /// change the account announces and a change a pull brings down are the same
+  /// fact, and a second rule for weighing them would be a second answer to
+  /// which copy of a holding the collection is - so there is one, and both
+  /// paths go through it.
+  ///
+  /// Answers whether it changed anything, which is what a caller that has to
+  /// decide whether to disturb a screen needs to know.
+  Future<bool> mergeRow(CardGame game, Map<String, Object?> row) async {
+    final CollectionEntry? entry = AccountCollection.entry(row);
+    if (entry == null) return false;
+    return _merge(game, row, entry);
+  }
+
+  /// Brings the account's holdings for one game down, answering whether any of
+  /// them was newer than this device's copy.
+  ///
+  /// [pull] asked a different question - how many holdings the account has -
+  /// and that count cannot answer this one: nine games the account holds
+  /// thousands of rows for would be nine games announced every time a browser
+  /// reconnects, most of them to show the collection that is already on screen.
+  Future<bool> pullChanged(CardGame game) async {
+    bool moved = false;
+    for (final Map<String, Object?> row in await table.fetch(game)) {
+      if (await mergeRow(game, row)) moved = true;
+    }
+    return moved;
   }
 
   /// Brings the account's collection down, then this device's back up.
@@ -177,7 +206,10 @@ class CollectionSync {
   }
 
   /// Writes one account holding here, if the account's copy is the newer one.
-  Future<void> _merge(
+  ///
+  /// Answers whether it wrote, so that whoever asked can tell a change that
+  /// moved this collection from one that was already here.
+  Future<bool> _merge(
     CardGame game,
     Map<String, Object?> row,
     CollectionEntry remote,
@@ -205,16 +237,17 @@ class CollectionSync {
 
     if (existing.isEmpty) {
       await db.insert(_local, payload);
-      return;
+      return true;
     }
 
     final CollectionEntry local = CollectionEntry.fromRow(existing.first);
-    if (!AccountCollection.accountWins(local, row)) return;
+    if (!AccountCollection.accountWins(local, row)) return false;
     await db.update(
       _local,
       payload,
       where: 'id = ?',
       whereArgs: <Object?>[existing.first['id']],
     );
+    return true;
   }
 }

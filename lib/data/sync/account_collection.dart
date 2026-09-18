@@ -81,6 +81,25 @@ abstract final class AccountCollection {
     );
   }
 
+  /// The game a row belongs to, or null when it names one this build cannot
+  /// place.
+  ///
+  /// Read out of the row rather than known in advance, because a change arrives
+  /// on its own with nothing to say which vault it belongs to. [CardGame.fromId]
+  /// answers Magic for anything it does not recognise, which is the right
+  /// default for a preference somebody edited by hand and the wrong one here: a
+  /// row for a game this build has never heard of would be filed under Magic,
+  /// and a new game shipped on the account would quietly put its holdings into
+  /// a collection they are not in.
+  static CardGame? gameOf(Map<String, Object?> row) {
+    final Object? id = row['game'];
+    if (id is! String) return null;
+    for (final CardGame game in CardGame.values) {
+      if (game.id == id) return game;
+    }
+    return null;
+  }
+
   /// Which of the two copies of a holding is the one to keep.
   ///
   /// The later edit wins, and a tie goes to the account - it is the copy every
