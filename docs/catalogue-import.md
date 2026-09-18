@@ -268,12 +268,14 @@ that was deployed over is kept at
 
 Note that `/home/zixen/arcanum/tool/` now mirrors `tool/` from this repository, so the
 proof and its vectors can be run on the host from the same relative paths. The systemd
-unit still runs the flat `/home/zixen/arcanum/poll_lorcana_prices.py`, and **that unit
-has not been changed**: the nightly job still samples prices and still does not import
-the catalogue. Wiring it up is one argument - add `--catalog` to `ExecStart` in
-`arcanum-lorcana-poll.service` - and it is deliberately left to whoever decides the
-timing, because the import and the sample now compete for the same 04:40 window and the
-import is the slower half.
+unit runs the flat `/home/zixen/arcanum/poll_lorcana_prices.py`.
+
+**Amended 2026-09-18, after the section above was written:** that unit has since been
+changed. It now runs the sweep with `--catalog` and an `EnvironmentFile`, so the
+nightly job samples prices and imports the catalogue in one pass, and a second unit
+watches the result. The argument the paragraph here used to leave open - which job owns
+the 04:40 window, and what the import costs the sample - is made in
+[catalogue-refresh.md](catalogue-refresh.md), with the measurement it is made on.
 
 ## Notes for whoever does step 2
 

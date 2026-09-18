@@ -21,8 +21,8 @@ Paths on the host:
       sync_server.py                  the service
       slice_prices.py                 builds the Magic database from MTGJSON
       poll_pokemon_prices.py          samples Pokemon prices once a day
-  check_catalog_freshness.py      reports a stale shared catalogue, to the same
-                                  notify path the price alerts use
+      check_catalog_freshness.py      reports a stale shared catalogue, to the same
+                                      notify path the price alerts use
       rebuild_mtg_history.sh          download + slice + swap, in one step
       watch_slice_and_restart.sh      restart the service after a manual rebuild
       patch_caddy.py                  adds the public route (idempotent)
