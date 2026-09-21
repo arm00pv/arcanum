@@ -107,7 +107,7 @@ void main() {
       await db.close();
     });
 
-    test('setting a count to zero removes the line', () async {
+    test('setting a count to zero takes the line out of the deck', () async {
       final db = await AppDatabase.openInMemory();
       final dao = DeckDao(db.db);
       final id = await dao.createDeck(
@@ -120,6 +120,20 @@ void main() {
       await dao.setQuantity(id, 'goblin', DeckBoard.main, 0);
 
       expect(await dao.entries(id, CardGame.mtg), isEmpty);
+      expect((await dao.decks(CardGame.mtg)).single.cardCount, 0);
+      // Marked rather than dropped, since v16: the account holds this row too,
+      // and a row that simply vanishes is a row a sync cannot see a removal in.
+      // The mark is also what makes adding the card back a revival of this row
+      // with the new count rather than a second line beside it.
+      final lines = await db.db.query('deck_cards');
+      expect(lines, hasLength(1));
+      expect(lines.single['deleted_at'], isNotNull);
+      expect(lines.single['quantity'], 3, reason: 'what the row remembered');
+
+      await dao.addCard(id, 'goblin');
+      final entries = await dao.entries(id, CardGame.mtg);
+      expect(entries.single.quantity, 1, reason: 'the new count, not a sum');
+      expect((await db.db.query('deck_cards')), hasLength(1));
       await db.close();
     });
 
@@ -141,7 +155,12 @@ void main() {
       await db.close();
     });
 
-    test('deleting a deck takes its lines with it', () async {
+    test('deleting a deck marks it and leaves its lines alone', () async {
+      // Since v16 a deck is deleted by stamping it, for the reason a removed
+      // stack is marked: the account holds the row, and a push that cannot see
+      // the removal brings the deck back on every device. The lines stay because
+      // a deck revived by a newer edit - a card added on a device that never
+      // heard about the deletion - has to be revived whole rather than empty.
       final db = await AppDatabase.openInMemory();
       final dao = DeckDao(db.db);
       final id = await dao.createDeck(
@@ -153,8 +172,18 @@ void main() {
 
       await dao.deleteDeck(id);
 
+      expect(await dao.decks(CardGame.mtg), isEmpty, reason: 'gone from the list');
+      expect(await dao.deck(id), isNull);
+      expect(await dao.decksContaining(CardGame.mtg, 'goblin'), isEmpty);
+      expect(await dao.decksHolding(CardGame.mtg, 'goblin'), 0);
+      expect(await dao.cardIdsInDecks(CardGame.mtg), isEmpty);
+      expect(await dao.entries(id, CardGame.mtg), isEmpty);
+
+      final decks = await db.db.query('decks');
+      expect(decks.single['deleted_at'], isNotNull);
       final left = await db.db.query('deck_cards');
-      expect(left, isEmpty, reason: 'the cascade should have cleaned up');
+      expect(left, hasLength(1), reason: 'the lines are what a revival needs');
+      expect(left.single['deleted_at'], isNull);
       await db.close();
     });
 

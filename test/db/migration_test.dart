@@ -692,6 +692,269 @@ void main() {
     });
   });
 
+  group('decks that can travel (v16)', () {
+    /// The deck tables as they stood before v16: a deck had no identity the
+    /// client owned, no clocks and no mark, and a line had no clock of its own.
+    const List<String> v15DeckSql = <String>[
+      '''
+    CREATE TABLE decks (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      game       TEXT NOT NULL DEFAULT 'mtg',
+      name       TEXT NOT NULL,
+      format_id  TEXT NOT NULL DEFAULT '',
+      notes      TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  ''',
+      'CREATE INDEX idx_decks_game ON decks(game, updated_at DESC)',
+      '''
+    CREATE TABLE deck_cards (
+      deck_id  INTEGER NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
+      card_id  TEXT NOT NULL,
+      board    TEXT NOT NULL DEFAULT 'main',
+      quantity INTEGER NOT NULL DEFAULT 1,
+      sort     INTEGER NOT NULL DEFAULT 0,
+      category TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (deck_id, card_id, board)
+    )
+  ''',
+      'CREATE INDEX idx_deck_cards_deck ON deck_cards(deck_id, board, sort)',
+    ];
+
+    /// A v15 database with one deck and two lines of it in it.
+    Future<Database> openV15() async {
+      final Database db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+      for (final String sql in v15DeckSql) {
+        await db.execute(sql);
+      }
+      return db;
+    }
+
+    /// The deck a collector has been using since v7, with the stamp it carries.
+    Future<int> putDeck(Database db, {int updatedAt = 1755000000000}) => db.insert(
+      'decks',
+      <String, Object?>{
+        'game': 'mtg',
+        'name': 'Krenko',
+        'format_id': 'commander',
+        'notes': 'goblins',
+        'created_at': 1754000000000,
+        'updated_at': updatedAt,
+      },
+    );
+
+    List<String> namesOf(List<Map<String, Object?>> columns) =>
+        <String>[for (final Map<String, Object?> c in columns) c['name']! as String];
+
+    test('every deck that is already here is given an identity', () async {
+      final Database db = await openV15();
+      final int id = await putDeck(db);
+
+      await AppDatabase.addDeckSyncColumns(db);
+
+      final List<Map<String, Object?>> rows = await db.query('decks');
+      expect(rows, hasLength(1));
+      expect(
+        rows.single['id'],
+        id,
+        reason: 'a deck keeps the local id every screen addresses it by',
+      );
+      expect(rows.single['name'], 'Krenko');
+      expect(rows.single['format_id'], 'commander');
+      expect(rows.single['notes'], 'goblins');
+      final String syncId = rows.single['sync_id']! as String;
+      expect(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        ).hasMatch(syncId),
+        isTrue,
+        reason: 'one uuid per deck, minted in Dart rather than in SQL: $syncId',
+      );
+      await db.close();
+    });
+
+    test('two decks are given two different identities', () async {
+      // The identity is what tells two decks apart on the account, and two
+      // devices each numbering their decks 1, 2, 3 are the reason it has to be
+      // minted rather than derived.
+      final Database db = await openV15();
+      await putDeck(db);
+      await putDeck(db);
+
+      await AppDatabase.addDeckSyncColumns(db);
+
+      final List<Map<String, Object?>> rows = await db.query('decks');
+      expect(
+        rows.map((Map<String, Object?> r) => r['sync_id']).toSet(),
+        hasLength(2),
+      );
+      await db.close();
+    });
+
+    test('every line takes the stamp of the deck that owns it', () async {
+      // A line has never been edited on its own before this version, so the last
+      // moment its deck changed is the honest clock for it.
+      final Database db = await openV15();
+      final int id = await putDeck(db, updatedAt: 1755000000123);
+      await db.insert('deck_cards', <String, Object?>{
+        'deck_id': id,
+        'card_id': 'goblin-chieftain',
+        'quantity': 4,
+        'sort': 0,
+      });
+      await db.insert('deck_cards', <String, Object?>{
+        'deck_id': id,
+        'card_id': 'mogg-war-marshal',
+        'board': 'side',
+        'quantity': 1,
+        'sort': 1,
+      });
+
+      await AppDatabase.addDeckSyncColumns(db);
+
+      final List<Map<String, Object?>> lines = await db.query('deck_cards');
+      expect(lines, hasLength(2));
+      for (final Map<String, Object?> line in lines) {
+        expect(line['updated_at'], 1755000000123, reason: 'took the deck stamp');
+        expect(line['deleted_at'], isNull);
+      }
+      expect(
+        lines.map((Map<String, Object?> r) => r['quantity']).toSet(),
+        <Object?>{4, 1},
+        reason: 'nothing about a line was changed but its clock',
+      );
+      await db.close();
+    });
+
+    test('nothing is marked deleted, and no field claims an edit', () async {
+      // Every deck that exists is present, and no name has been edited since the
+      // clocks appeared - so null is the correct value for all of it and there
+      // is no backfill to get wrong. A field with no stamp loses to any stamped
+      // edit, which is how an old deck merges correctly the first time it meets
+      // the account.
+      final Database db = await openV15();
+      final int id = await putDeck(db);
+      await db.insert('deck_cards', <String, Object?>{
+        'deck_id': id,
+        'card_id': 'goblin-chieftain',
+      });
+
+      await AppDatabase.addDeckSyncColumns(db);
+
+      final Map<String, Object?> deck = (await db.query('decks')).single;
+      for (final String column in <String>[
+        'name_at',
+        'format_at',
+        'notes_at',
+        'deleted_at',
+      ]) {
+        expect(deck[column], isNull, reason: column);
+      }
+      expect(
+        (await db.query('deck_cards')).single['deleted_at'],
+        isNull,
+        reason: 'a line that is in a deck is in the deck',
+      );
+      await db.close();
+    });
+
+    test('the identity is unique, so an arriving deck lands on the one here', () async {
+      // SQLite cannot add a unique constraint in place, so it is an index. It is
+      // what makes a deck pulled from the account land on the deck that is
+      // already here rather than beside it.
+      final Database db = await openV15();
+      await putDeck(db);
+      await AppDatabase.addDeckSyncColumns(db);
+      final String syncId = (await db.query('decks')).single['sync_id']! as String;
+
+      await expectLater(
+        db.insert('decks', <String, Object?>{
+          'game': 'mtg',
+          'name': 'a second deck with one identity',
+          'format_id': 'modern',
+          'created_at': 1755000000000,
+          'updated_at': 1755000000000,
+          'sync_id': syncId,
+        }),
+        throwsA(isA<DatabaseException>()),
+      );
+      await db.close();
+    });
+
+    test('a database created from scratch has the same shape', () async {
+      // The schema and its migration are two spellings of one shape, and a fresh
+      // install that never runs the step has to arrive at the same place - which
+      // is the rule _deckSql is shared by both for.
+      final Database upgraded = await openV15();
+      await AppDatabase.addDeckSyncColumns(upgraded);
+      final AppDatabase fresh = await AppDatabase.openInMemory(own: true);
+
+      for (final String table in <String>['decks', 'deck_cards']) {
+        final List<Map<String, Object?>> fromMigration = await upgraded.rawQuery(
+          'PRAGMA table_info($table)',
+        );
+        final List<Map<String, Object?>> fromSchema = await fresh.db.rawQuery(
+          'PRAGMA table_info($table)',
+        );
+        expect(
+          namesOf(fromMigration),
+          namesOf(fromSchema),
+          reason: '$table must be the same table either way',
+        );
+      }
+
+      final List<Map<String, Object?>> indexes = await fresh.db.rawQuery(
+        "PRAGMA index_list('decks')",
+      );
+      expect(
+        indexes.map((Map<String, Object?> i) => i['name']),
+        contains('idx_decks_sync'),
+        reason: 'the schema needs the identity index too',
+      );
+      await upgraded.close();
+      await fresh.close();
+    });
+
+    test('the deck tables createDecks builds are already this shape', () async {
+      // The v16 step adds its columns to decks that are already there. A
+      // database below v7 has no deck at all, and createDecks hands it the shape
+      // this version is - so there is nothing to add and nothing to backfill
+      // there, which is what the upgrade switch reads when it skips the step.
+      final Database db = await databaseFactory.openDatabase(
+        inMemoryDatabasePath,
+        options: OpenDatabaseOptions(singleInstance: false),
+      );
+
+      await AppDatabase.createDecks(db);
+
+      for (final String table in <String>['decks', 'deck_cards']) {
+        final List<Map<String, Object?>> columns = await db.rawQuery(
+          'PRAGMA table_info($table)',
+        );
+        expect(namesOf(columns), contains('deleted_at'), reason: table);
+      }
+      expect(
+        namesOf(await db.rawQuery('PRAGMA table_info(decks)')),
+        containsAll(<String>['sync_id', 'name_at', 'format_at', 'notes_at']),
+      );
+      expect(
+        namesOf(await db.rawQuery('PRAGMA table_info(deck_cards)')),
+        contains('updated_at'),
+      );
+      // And so the step would fail on it rather than being quietly harmless,
+      // which is the reason the switch does not run it there.
+      await expectLater(
+        AppDatabase.addDeckSyncColumns(db),
+        throwsA(isA<DatabaseException>()),
+      );
+      await db.close();
+    });
+  });
+
   group('card identity scoped to the game (v14)', () {
     /// The cards table as it stood before v14: the id was the whole primary
     /// key, and the game was only a column on the row.

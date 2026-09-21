@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import 'package:arcanum/core/utils/uuid.dart';
+
 /// Opens and migrates the Arcanum SQLite database.
 ///
 /// The database is the app's single source of truth. Everything the user sees
@@ -66,7 +68,12 @@ class AppDatabase {
   ///      sync that cannot see what left brings it straight back. The mark is a
   ///      timestamp on the same row, so a deletion travels through the same
   ///      push and pull as every other change.
-  static const _version = 15;
+  /// v16 - decks and their cards can travel between devices. A deck gets an
+  ///      identity the client owns - the account's own id is generated always as
+  ///      identity and a client cannot supply one - a mark instead of a delete,
+  ///      and a clock per field it can be edited by independently; a line gets a
+  ///      clock of its own and a mark of its own. See addDeckSyncColumns.
+  static const _version = 16;
 
   static AppDatabase? _instance;
 
@@ -99,6 +106,11 @@ class AppDatabase {
         if (from < 13) await markPromotionalPrintings(d);
         if (from < 14) await scopeCardIdsToGame(d);
         if (from < 15) await addCollectionTombstones(d);
+        // The deck tables arrive with their v16 columns for a database that has
+        // just been handed them - createDecks builds the shape this version is,
+        // and there is no deck of it to backfill - so this step is for the decks
+        // a collector already has.
+        if (from >= 7 && from < 16) await addDeckSyncColumns(d);
       },
     );
     _instance = AppDatabase._(db);
@@ -147,10 +159,18 @@ class AppDatabase {
   }
 
   /// A database backed by memory, for tests.
-  static Future<AppDatabase> openInMemory() async {
+  ///
+  /// [own] asks for a database of its own rather than the one every other call
+  /// in this process is sharing. sqflite answers a second open of the in-memory
+  /// path with the *same* database - which is what makes one call here
+  /// convenient, and what makes two of them useless to a test that needs two
+  /// devices: a test that wants a second one has to say so, and gets a fresh
+  /// schema built from scratch rather than a second handle on the first.
+  static Future<AppDatabase> openInMemory({bool own = false}) async {
     final db = await openDatabase(
       inMemoryDatabasePath,
       version: _version,
+      singleInstance: !own,
       onConfigure: (d) => d.execute('PRAGMA foreign_keys = ON'),
       onCreate: (d, v) => _createSchema(d),
     );
@@ -410,6 +430,12 @@ class AppDatabase {
   /// `deck_cards` references `decks` so that deleting a deck cannot leave its
   /// lines behind: the app opens its database with foreign keys on, and a
   /// cascade is one statement instead of two that can disagree.
+  ///
+  /// Everything below the v7 columns is v16's, for the reason every `_xSql` here
+  /// is shared by the schema and its migration: a database created from scratch
+  /// has to arrive at the same shape as one that was upgraded, or the two drift
+  /// into two definitions of a deck. See [addDeckSyncColumns] for what each
+  /// column means and why it is there.
   static const _deckSql = <String>[
     '''
     CREATE TABLE decks (
@@ -419,10 +445,23 @@ class AppDatabase {
       format_id  TEXT NOT NULL DEFAULT '',
       notes      TEXT,
       created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
+      updated_at INTEGER NOT NULL,
+      -- The identity this device minted for the deck, and the only one that
+      -- crosses the wire. Null only for a row an archive written before v16 put
+      -- back, which the sync gives an identity before it travels.
+      sync_id    TEXT,
+      -- When each of the three fields below was last edited. Null means "never
+      -- edited since v16", which loses to any edit that carries a stamp.
+      name_at    INTEGER,
+      format_at  INTEGER,
+      notes_at   INTEGER,
+      -- Null while the deck is there; a timestamp once it is not. Its lines are
+      -- deliberately left alone, so a revival is whole rather than empty.
+      deleted_at INTEGER
     )
   ''',
     'CREATE INDEX idx_decks_game ON decks(game, updated_at DESC)',
+    'CREATE UNIQUE INDEX idx_decks_sync ON decks(sync_id)',
     '''
     CREATE TABLE deck_cards (
       deck_id  INTEGER NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
@@ -431,6 +470,10 @@ class AppDatabase {
       quantity INTEGER NOT NULL DEFAULT 1,
       sort     INTEGER NOT NULL DEFAULT 0,
       category TEXT NOT NULL DEFAULT '',
+      -- The line's own clock and its own mark. A line is edited on its own -
+      -- one card added, one count changed - so it is resolved on its own.
+      updated_at INTEGER NOT NULL DEFAULT 0,
+      deleted_at INTEGER,
       PRIMARY KEY (deck_id, card_id, board)
     )
   ''',
@@ -465,6 +508,68 @@ class AppDatabase {
     await d.execute(
       'ALTER TABLE collection_entries ADD COLUMN deleted_at INTEGER',
     );
+  }
+
+  /// v16: decks and their lines can travel between devices.
+  ///
+  /// A deck gets an identity the client owns, because the account's own id is
+  /// `generated always as identity` and a client cannot supply a value for such
+  /// a column - and a client cannot name a conflict target it cannot supply a
+  /// value for, which is the upsert every push is built on. It gets a mark
+  /// instead of a delete, for the reason v15 marked a stack: the account holds
+  /// the row too, and a sync that cannot see a removal undoes it. And it gets a
+  /// stamp per field it can be edited by independently, because `DeckDao._touch`
+  /// stamps the deck's `updated_at` on every change to its contents, and one
+  /// row-level clock would let an afternoon of adding cards on one device revert
+  /// a rename made on another. Its lines get a clock and a mark of their own, for
+  /// the same reason one step down: a line is edited on its own.
+  ///
+  /// Every deck that is already here is given a uuid, minted in Dart rather than
+  /// in SQL so that [Uuid.v4] stays the one place the app decides what an
+  /// identity is. A line's clock is backfilled from the deck that owns it, with
+  /// one correlated `UPDATE` - the shape [addAlertLabels] already uses. A line
+  /// has never been edited on its own before this version, so the last moment
+  /// its deck changed is the honest stamp for it.
+  ///
+  /// Nothing is marked deleted. Every deck that exists is present, so null is
+  /// the correct value for all of them and there is no backfill to get wrong -
+  /// as [addCollectionTombstones] said about v15.
+  static Future<void> addDeckSyncColumns(DatabaseExecutor d) async {
+    await d.execute('ALTER TABLE decks ADD COLUMN sync_id TEXT');
+    await d.execute('ALTER TABLE decks ADD COLUMN name_at INTEGER');
+    await d.execute('ALTER TABLE decks ADD COLUMN format_at INTEGER');
+    await d.execute('ALTER TABLE decks ADD COLUMN notes_at INTEGER');
+    await d.execute('ALTER TABLE decks ADD COLUMN deleted_at INTEGER');
+    await d.execute(
+      'ALTER TABLE deck_cards '
+      'ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0',
+    );
+    await d.execute('ALTER TABLE deck_cards ADD COLUMN deleted_at INTEGER');
+
+    // The local twin of the account's `unique (user_id, sync_id)`. SQLite cannot
+    // add a unique constraint in place, so it is an index, exactly as
+    // idx_entries_unique is one. It is what makes a deck arriving from the
+    // account land on the deck that is already here rather than beside it.
+    await d.execute('CREATE UNIQUE INDEX idx_decks_sync ON decks(sync_id)');
+
+    final List<Map<String, Object?>> decks = await d.query(
+      'decks',
+      columns: <String>['id'],
+    );
+    for (final Map<String, Object?> deck in decks) {
+      await d.update(
+        'decks',
+        <String, Object?>{'sync_id': Uuid.v4()},
+        where: 'id = ?',
+        whereArgs: <Object?>[deck['id']],
+      );
+    }
+
+    await d.execute('''
+      UPDATE deck_cards SET updated_at = COALESCE((
+        SELECT decks.updated_at FROM decks
+         WHERE decks.id = deck_cards.deck_id), 0)
+    ''');
   }
 
   /// v9: alerts learn the name of what they are watching.

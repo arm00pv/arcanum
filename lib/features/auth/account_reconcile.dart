@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:arcanum/data/db/deck_dao.dart';
 import 'package:arcanum/data/sync/collection_sync.dart';
+import 'package:arcanum/data/sync/deck_sync.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/providers.dart';
 
@@ -53,10 +55,19 @@ import 'package:arcanum/providers.dart';
 /// announcement that turns out to change nothing costs one query and no pixels,
 /// since a screen being handed its own answer again goes on showing it while it
 /// looks.
+///
+/// [decks] is the deck half of the same sign-in, and it is passed rather than
+/// required because a phone has no account and no deck sync at all: the whole
+/// deck path is absent there rather than present and unused. When it is here it
+/// is worked through as a pass of its own, after the collection's and before any
+/// catalogue download - a deck's lines name printings this browser may never have
+/// fetched, and the pass that fetches them has to run once, over both, rather
+/// than twice with the first finishing before the decks have landed.
 Future<void> reconcileAccount({
   required CollectionSync sync,
   required Bootstrap bootstrap,
   required ProviderContainer scope,
+  DeckSync? decks,
 }) async {
   for (final CardGame game in _inSignInOrder(bootstrap.settings.activeGame)) {
     try {
@@ -65,6 +76,26 @@ Future<void> reconcileAccount({
       debugPrint('[sync] $game did not reconcile: $error');
     }
     announceCollectionChange(scope, game);
+  }
+
+  // One door to the decks' table for the whole pass rather than one per game.
+  // Absent with [decks] on a phone, so the deck half of this function is a
+  // branch that is never taken there rather than work that is done and thrown
+  // away.
+  final DeckDao? deckDao = decks == null ? null : DeckDao(bootstrap.database.db);
+
+  if (decks != null) {
+    for (final CardGame game in _inSignInOrder(bootstrap.settings.activeGame)) {
+      try {
+        await decks.sync(game);
+      } catch (error) {
+        debugPrint('[sync] $game decks did not reconcile: $error');
+      }
+    }
+    // Once for the pass and not once per game: every deck provider watches one
+    // counter, so what a screen has to hear is that the decks moved, and nine
+    // games' worth of that is one fact.
+    announceDeckChange(scope);
   }
 
   for (final CardGame game in _inSignInOrder(bootstrap.settings.activeGame)) {
@@ -78,8 +109,29 @@ Future<void> reconcileAccount({
     } catch (error) {
       debugPrint('[sync] $game cards did not resolve: $error');
     }
+    if (deckDao != null) {
+      try {
+        // The same second pass, one table along: a pulled line names a printing
+        // the device may never have downloaded, and a deck that shows every card
+        // as "--" is a deck that arrived without its cards. This is the query
+        // that answers precisely "every card id any deck of this game holds",
+        // and it is asked only where there is a deck sync to have pulled one.
+        final List<String> inDecks = await deckDao.cardIdsInDecks(game);
+        if (inDecks.isNotEmpty) {
+          await bootstrap.catalog.resolveMissingCards(game, inDecks);
+        }
+      } catch (error) {
+        debugPrint('[sync] $game deck cards did not resolve: $error');
+      }
+    }
     announceCollectionChange(scope, game);
   }
+
+  // And once more now that the cards behind the pulled lines have arrived. A
+  // deck screen drawn between the two passes would have had the lines and none
+  // of their cards, and it keeps whatever it answered with until it is told the
+  // answer has moved.
+  if (deckDao != null) announceDeckChange(scope);
 }
 
 /// Every game, with the one on screen at the front.
@@ -114,4 +166,15 @@ List<CardGame> _inSignInOrder(CardGame active) => <CardGame>[
 void announceCollectionChange(ProviderContainer scope, CardGame game) {
   scope.invalidate(collectionOverviewProvider(game));
   scope.invalidate(ownedCardsProvider(game));
+}
+
+/// Tells the screens showing decks that the decks are not what they said.
+///
+/// One counter rather than one provider per game, which is the one place the deck
+/// announcement is not shaped like the collection's: every deck provider already
+/// watches `deckRevisionProvider`, so a sign-in that brought nine games of decks
+/// down tells the screens once instead of nine times, and a watcher that carried
+/// one game's work up tells them the same way.
+void announceDeckChange(ProviderContainer scope) {
+  scope.read(deckRevisionProvider.notifier).bump();
 }

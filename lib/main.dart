@@ -17,11 +17,14 @@ import 'package:arcanum/data/catalog/supabase_catalog.dart';
 import 'package:arcanum/data/sync/account_changes.dart';
 import 'package:arcanum/data/sync/account_table.dart';
 import 'package:arcanum/data/sync/collection_sync.dart';
+import 'package:arcanum/data/sync/deck_sync.dart';
+import 'package:arcanum/data/sync/deck_table.dart';
 import 'package:arcanum/features/auth/account_gate.dart';
 import 'package:arcanum/features/auth/account_providers.dart';
 import 'package:arcanum/features/auth/account_reconcile.dart';
 import 'package:arcanum/features/auth/collection_listener.dart';
 import 'package:arcanum/features/auth/collection_watcher.dart';
+import 'package:arcanum/features/auth/deck_watcher.dart';
 import 'package:arcanum/data/backup/backup_scheduler.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/domain/models/card_game.dart';
@@ -149,11 +152,26 @@ Future<void> main() async {
         table: SupabaseAccountTable(Supabase.instance.client),
         db: database.db,
       );
+      // The decks' half of the same arrangement, made here beside the
+      // collection's and for the same reason: a phone has no account and keeps
+      // its decks to itself, so nothing about any of this exists there.
+      final DeckSync deckSync = DeckSync(
+        table: SupabaseDeckTable(Supabase.instance.client),
+        db: database.db,
+      );
       // Signing in reconciles the account once; this is what keeps it current
       // for the rest of the session. Made here, inside the branch that has an
       // account, so nothing about it exists on a phone.
       final CollectionWatcher watcher = CollectionWatcher(
         sync: collection,
+        signedIn: () => service.isSignedIn,
+      );
+      // The decks' own watch, beside the collection's rather than folded into
+      // it: the two answer different questions of different tables, and a pass
+      // that carried one up while the other was still being written would be
+      // two runs racing for no gain.
+      final DeckWatcher deckWatcher = DeckWatcher(
+        sync: deckSync,
         signedIn: () => service.isSignedIn,
       );
       // The other half of the same promise. The watcher carries this browser's
@@ -176,6 +194,7 @@ Future<void> main() async {
         onSignedIn: (ProviderContainer scope) async {
           await reconcileAccount(
             sync: collection,
+            decks: deckSync,
             bootstrap: bootstrap,
             scope: scope,
           );
@@ -183,6 +202,7 @@ Future<void> main() async {
           // same game up at once is work nobody asked for, and the watcher
           // knows what has been carried up precisely because that sync says so.
           watcher.begin(scope);
+          deckWatcher.begin(scope);
           // After the reconcile rather than alongside it, because the first
           // thing this does on a live subscription is pull every game, and a
           // second pass over a collection the sign-in is still writing would be
@@ -193,6 +213,7 @@ Future<void> main() async {
         },
         onSignedOut: () {
           watcher.end();
+          deckWatcher.end();
           listener.end();
         },
         child: app,

@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 
+import 'package:arcanum/core/utils/uuid.dart';
 import 'package:arcanum/domain/decks/deck.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 
@@ -9,6 +10,13 @@ import 'package:arcanum/domain/models/card_game.dart';
 /// the same shape as the collection and deliberately a different table: a card
 /// in a deck is not a card in a box. Moving a card from one to the other is a
 /// decision the collector makes, not something the app should infer.
+///
+/// Since v16 nothing here deletes a row. A deck that is removed is marked, a
+/// line that is removed is marked, and every read filters the marks out - for
+/// the reason v15 stopped deleting a stack: the account holds these rows too,
+/// and a row that simply vanishes is a row a sync cannot see a removal in. A
+/// deck's mark does not touch its lines, so a deck revived by a newer edit is
+/// revived whole rather than empty.
 class DeckDao {
   DeckDao(this._db);
 
@@ -21,6 +29,10 @@ class DeckDao {
   /// The counts come from one grouped join rather than a query per deck: a
   /// collector with twenty decks should not pay twenty round trips to draw a
   /// list.
+  ///
+  /// Both sides of the join are filtered by their marks. A deck that has been
+  /// deleted is not in the list, and neither is a line that has been removed
+  /// from it - otherwise a removal would still be counted in the deck's size.
   Future<List<Deck>> decks(CardGame game) async {
     final rows = await _db.rawQuery(
       '''
@@ -31,8 +43,9 @@ class DeckDao {
                AS side_count,
              COUNT(c.card_id) AS unique_cards
         FROM decks d
-        LEFT JOIN deck_cards c ON c.deck_id = d.id
-       WHERE d.game = ?
+        LEFT JOIN deck_cards c
+          ON c.deck_id = d.id AND c.deleted_at IS NULL
+       WHERE d.game = ? AND d.deleted_at IS NULL
        GROUP BY d.id
        ORDER BY d.updated_at DESC, d.id DESC
     ''',
@@ -52,8 +65,9 @@ class DeckDao {
                AS side_count,
              COUNT(c.card_id) AS unique_cards
         FROM decks d
-        LEFT JOIN deck_cards c ON c.deck_id = d.id
-       WHERE d.id = ?
+        LEFT JOIN deck_cards c
+          ON c.deck_id = d.id AND c.deleted_at IS NULL
+       WHERE d.id = ? AND d.deleted_at IS NULL
        GROUP BY d.id
     ''',
       <Object?>[id],
@@ -62,6 +76,15 @@ class DeckDao {
   }
 
   /// Creates a deck and returns its id.
+  ///
+  /// The identity the account will know this deck by is minted here, before the
+  /// account has ever seen the deck: the account's own id is `generated always as
+  /// identity` and a client cannot supply one, so a deck built offline has to
+  /// carry a name its own device chose. The name and the format are edits being
+  /// made now and are stamped as such - a deck that reached the account with
+  /// neither stamped would lose to any edit somebody else had made, which is
+  /// right for a deck from before v16 and wrong for one being created in front
+  /// of the collector.
   Future<int> createDeck({
     required CardGame game,
     required String name,
@@ -76,6 +99,9 @@ class DeckDao {
       'notes': notes,
       'created_at': now,
       'updated_at': now,
+      'sync_id': Uuid.v4(),
+      'name_at': now,
+      'format_at': now,
     });
   }
 
@@ -83,6 +109,11 @@ class DeckDao {
   ///
   /// Only the fields passed are written, so a rename cannot quietly clear the
   /// notes the way a whole-row update would.
+  ///
+  /// Each field passed is stamped with the moment it was edited, and that stamp -
+  /// not the row's `updated_at` - is what resolves a disagreement with the
+  /// account. A card added to this deck on another device stamps that row and
+  /// only that row, so a rename here is not competing with it.
   Future<void> updateDeck(
     int id, {
     String? name,
@@ -90,15 +121,22 @@ class DeckDao {
     String? notes,
     bool clearNotes = false,
   }) async {
-    final values = <String, Object?>{
-      'updated_at': DateTime.now().millisecondsSinceEpoch,
-    };
-    if (name != null) values['name'] = name;
-    if (formatId != null) values['format_id'] = formatId;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final values = <String, Object?>{'updated_at': now};
+    if (name != null) {
+      values['name'] = name;
+      values['name_at'] = now;
+    }
+    if (formatId != null) {
+      values['format_id'] = formatId;
+      values['format_at'] = now;
+    }
     if (clearNotes) {
       values['notes'] = null;
+      values['notes_at'] = now;
     } else if (notes != null) {
       values['notes'] = notes;
+      values['notes_at'] = now;
     }
     await _db.update(
       'decks',
@@ -108,18 +146,35 @@ class DeckDao {
     );
   }
 
-  /// Deletes a deck. Its lines go with it, by the cascade on `deck_cards`.
+  /// Marks a deck as deleted, leaving its lines exactly where they are.
+  ///
+  /// A mark rather than a delete, for the reason v15 marked a stack: the account
+  /// holds this row too, and a push that cannot see the removal undoes it, so a
+  /// deck deleted here would come back on the next pull. The lines are
+  /// deliberately untouched - a deck revived by a later edit has to be revived
+  /// whole, and a cascade here would hand the collector a one-card deck with the
+  /// same name.
   Future<void> deleteDeck(int id) async {
-    await _db.delete('decks', where: 'id = ?', whereArgs: <Object?>[id]);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _db.update(
+      'decks',
+      <String, Object?>{'deleted_at': now, 'updated_at': now},
+      where: 'id = ?',
+      whereArgs: <Object?>[id],
+    );
   }
 
   /// Every deck of a game, as bare records, for the picker on a card.
+  ///
+  /// A deck that has been deleted is not one of them, and neither is a line that
+  /// has been removed from a deck - a card screen that says "in 1 deck" about a
+  /// deck the collector deleted, or about a card they took out of it, is a lie.
   Future<List<Deck>> decksContaining(CardGame game, String cardId) async {
     final rows = await _db.rawQuery(
       '''
       SELECT d.* FROM decks d
-        JOIN deck_cards c ON c.deck_id = d.id
-       WHERE d.game = ? AND c.card_id = ?
+        JOIN deck_cards c ON c.deck_id = d.id AND c.deleted_at IS NULL
+       WHERE d.game = ? AND c.card_id = ? AND d.deleted_at IS NULL
        ORDER BY d.updated_at DESC
     ''',
       <Object?>[game.id, cardId],
@@ -130,14 +185,24 @@ class DeckDao {
   // ------------------------------------------------------------- deck cards
 
   /// The lines of a deck, in board order, with no catalogue data attached.
+  ///
+  /// Two marks are filtered here and both matter. A line that has been removed
+  /// is not a line - it is still in the table, because that is what carries a
+  /// removal to the account, and it is not part of the deck. And a line of a
+  /// deck that has been deleted is not shown either: the deck is gone from the
+  /// list, and the lines of a deck nobody can open are not something any screen
+  /// asks for. They are still there, which is what makes a revival whole.
   Future<List<DeckEntry>> entries(int deckId, CardGame game) async {
-    final rows = await _db.query(
-      'deck_cards',
-      where: 'deck_id = ?',
-      whereArgs: <Object?>[deckId],
-      orderBy:
-          "CASE board WHEN 'commander' THEN 0 WHEN 'main' THEN 1 "
-          "WHEN 'side' THEN 2 ELSE 3 END, sort ASC, card_id ASC",
+    final rows = await _db.rawQuery(
+      '''
+      SELECT c.* FROM deck_cards c
+        JOIN decks d ON d.id = c.deck_id
+       WHERE c.deck_id = ? AND c.deleted_at IS NULL AND d.deleted_at IS NULL
+       ORDER BY CASE c.board WHEN 'commander' THEN 0 WHEN 'main' THEN 1
+                            WHEN 'side' THEN 2 ELSE 3 END,
+                c.sort ASC, c.card_id ASC
+    ''',
+      <Object?>[deckId],
     );
     return <DeckEntry>[
       for (final r in rows)
@@ -152,12 +217,17 @@ class DeckDao {
   }
 
   /// Every card id any deck of this game holds.
+  ///
+  /// The ids a sign-in has to fetch the cards for, so it is the decks that are
+  /// there and the lines that are in them: a printing named only by a deck the
+  /// collector deleted, or by a line they removed from one, is not a printing
+  /// this screen will ever have to draw.
   Future<List<String>> cardIdsInDecks(CardGame game) async {
     final rows = await _db.rawQuery(
       '''
       SELECT DISTINCT c.card_id AS card_id FROM deck_cards c
         JOIN decks d ON d.id = c.deck_id
-       WHERE d.game = ?
+       WHERE d.game = ? AND d.deleted_at IS NULL AND c.deleted_at IS NULL
     ''',
       <Object?>[game.id],
     );
@@ -168,26 +238,43 @@ class DeckDao {
   ///
   /// Adding to a deck that already holds the card increases the count rather
   /// than replacing it, which is what pressing "add" twice means.
+  ///
+  /// Adding to a line that has been removed revives it in place with the new
+  /// count, and not as a sum. A collector who removed four Chieftains and then
+  /// added one owns one, so the count is what they just added rather than what
+  /// the row still remembered - which is the same rule the account applies to a
+  /// removed holding. The row is revived rather than inserted beside, because
+  /// the primary key is the only thing that decides whether two lines are one
+  /// line.
   Future<void> addCard(
     int deckId,
     String cardId, {
     DeckBoard board = DeckBoard.main,
     int quantity = 1,
   }) async {
+    final int now = DateTime.now().millisecondsSinceEpoch;
     await _db.rawInsert(
       '''
-      INSERT INTO deck_cards (deck_id, card_id, board, quantity, sort)
+      INSERT INTO deck_cards (deck_id, card_id, board, quantity, sort, updated_at)
       VALUES (?, ?, ?, ?, COALESCE(
-        (SELECT MAX(sort) + 1 FROM deck_cards WHERE deck_id = ?), 0))
-      ON CONFLICT(deck_id, card_id, board)
-      DO UPDATE SET quantity = quantity + excluded.quantity
+        (SELECT MAX(sort) + 1 FROM deck_cards WHERE deck_id = ?), 0), ?)
+      ON CONFLICT(deck_id, card_id, board) DO UPDATE SET
+        quantity = CASE WHEN deck_cards.deleted_at IS NULL
+                        THEN deck_cards.quantity + excluded.quantity
+                        ELSE excluded.quantity END,
+        deleted_at = NULL,
+        updated_at = excluded.updated_at
     ''',
-      <Object?>[deckId, cardId, board.code, quantity, deckId],
+      <Object?>[deckId, cardId, board.code, quantity, deckId, now],
     );
     await _touch(deckId);
   }
 
   /// Sets the exact number of copies on a board, removing the line at zero.
+  ///
+  /// Setting a count on a line that has been removed revives it the same way
+  /// [addCard] does: the count the collector asked for, on the row that is
+  /// already there.
   Future<void> setQuantity(
     int deckId,
     String cardId,
@@ -198,19 +285,29 @@ class DeckDao {
       await removeCard(deckId, cardId, board);
       return;
     }
+    final int now = DateTime.now().millisecondsSinceEpoch;
     await _db.rawInsert(
       '''
-      INSERT INTO deck_cards (deck_id, card_id, board, quantity, sort)
+      INSERT INTO deck_cards (deck_id, card_id, board, quantity, sort, updated_at)
       VALUES (?, ?, ?, ?, COALESCE(
-        (SELECT MAX(sort) + 1 FROM deck_cards WHERE deck_id = ?), 0))
-      ON CONFLICT(deck_id, card_id, board) DO UPDATE SET quantity = excluded.quantity
+        (SELECT MAX(sort) + 1 FROM deck_cards WHERE deck_id = ?), 0), ?)
+      ON CONFLICT(deck_id, card_id, board) DO UPDATE SET
+        quantity = excluded.quantity,
+        deleted_at = NULL,
+        updated_at = excluded.updated_at
     ''',
-      <Object?>[deckId, cardId, board.code, quantity, deckId],
+      <Object?>[deckId, cardId, board.code, quantity, deckId, now],
     );
     await _touch(deckId);
   }
 
   /// Moves a line to another board, keeping its count.
+  ///
+  /// A move is a removal and an addition, and after v16 a removal is a mark: the
+  /// line on the old board is stamped and a line on the new board is written,
+  /// which is what the collector sees and what the account is told. A line that
+  /// has already been removed is not moved, because there is nothing there to
+  /// move.
   Future<void> moveCard(
     int deckId,
     String cardId,
@@ -220,7 +317,7 @@ class DeckDao {
     if (from == to) return;
     final rows = await _db.query(
       'deck_cards',
-      where: 'deck_id = ? AND card_id = ? AND board = ?',
+      where: 'deck_id = ? AND card_id = ? AND board = ? AND deleted_at IS NULL',
       whereArgs: <Object?>[deckId, cardId, from.code],
       limit: 1,
     );
@@ -230,15 +327,23 @@ class DeckDao {
     await addCard(deckId, cardId, board: to, quantity: quantity);
   }
 
-  /// Removes a card from one board of a deck.
+  /// Removes a card from one board of a deck, by marking the line.
+  ///
+  /// The line keeps its quantity and its sort: what the collector did is take
+  /// the card out of the deck, and the row is what remembers that it was there.
+  /// The mark is a timestamp on the line, so it travels through the same push
+  /// and pull as every other change, and it beats an older edit and loses to a
+  /// newer one - which is what re-adding the card is.
   Future<void> removeCard(
     int deckId,
     String cardId,
     DeckBoard board, {
     bool touch = true,
   }) async {
-    await _db.delete(
+    final int now = DateTime.now().millisecondsSinceEpoch;
+    await _db.update(
       'deck_cards',
+      <String, Object?>{'deleted_at': now, 'updated_at': now},
       where: 'deck_id = ? AND card_id = ? AND board = ?',
       whereArgs: <Object?>[deckId, cardId, board.code],
     );
@@ -246,9 +351,15 @@ class DeckDao {
   }
 
   /// Empties a deck of its cards, leaving the deck itself.
+  ///
+  /// Every line is marked rather than dropped, for the reason [removeCard] marks
+  /// one: the account holds these rows, and a push that cannot see the removal
+  /// brings the cards back.
   Future<void> clearDeck(int deckId) async {
-    await _db.delete(
+    final int now = DateTime.now().millisecondsSinceEpoch;
+    await _db.update(
       'deck_cards',
+      <String, Object?>{'deleted_at': now, 'updated_at': now},
       where: 'deck_id = ?',
       whereArgs: <Object?>[deckId],
     );
@@ -256,12 +367,16 @@ class DeckDao {
   }
 
   /// How many decks hold this printing, so a card can say so.
+  ///
+  /// The decks that are there and the lines that are in them, for the reason
+  /// [decksContaining] filters the same two marks.
   Future<int> decksHolding(CardGame game, String cardId) async {
     final rows = await _db.rawQuery(
       '''
       SELECT COUNT(*) AS n FROM deck_cards c
         JOIN decks d ON d.id = c.deck_id
        WHERE d.game = ? AND c.card_id = ?
+         AND d.deleted_at IS NULL AND c.deleted_at IS NULL
     ''',
       <Object?>[game.id, cardId],
     );
@@ -269,6 +384,11 @@ class DeckDao {
   }
 
   /// Stamps a deck as changed, which is what orders the list.
+  ///
+  /// Deliberately the row's own clock and not a field's: a card added here
+  /// changed the deck, and did not edit its name, its format or its notes. The
+  /// merge reads those three stamps, so an afternoon of adding cards cannot
+  /// compete with a rename somebody made on another device.
   Future<void> _touch(int deckId) async {
     await _db.update(
       'decks',
