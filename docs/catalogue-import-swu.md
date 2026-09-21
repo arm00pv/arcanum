@@ -163,12 +163,39 @@ the card it is a printing of, and the two hyperspace and standard-foil rows the
 sample's own check counts (218 of them) keeping their base's number while the other
 519 treatments take it back from the base they point at.
 
-**What is not here: the proof.** The other games have a `tool/catalog/prove_*.py` -
-thirty or forty checks run against the live database - and this one does not. What
-stands in its place is the parity test above (995 card rows and 27 set rows, both
-languages, column by column), the named checks in tool/catalog/test_id_parity.py,
-and the SQL readings quoted in this section. That is a real gap and it is stated
-rather than papered over.
+## The proof
+
+`tool/catalog/prove_swu_import.py`, 20 checks, run against the live database:
+
+~~~
+20 passed, 0 failed, 0 skipped
+~~~
+
+**It found something on its first run, which is what a proof is for.** `jtlp` was
+stored as a promotional run while the importer had since learned to read a set's
+name before its code, which makes JTLP weekly play rather than a promo - and a set's
+*type* is not part of a card checksum, so nothing about the import noticed. The row
+was stale relative to the rule that writes it. Re-running the import rewrote that one
+set and left the other 26 alone (sets_revision 2 to 3), and the proof then passed.
+
+The checks this game has rather than a repeat of Gundam's:
+
+* **the count against the rows** - for all 27 sets, `catalog_sets.card_count` equals
+  the distinct oracle ids the set's own rows carry, with a null oracle id asserted
+  to be impossible rather than coalesced away;
+* **a treatment is its own row** - over every stored row that points at a base
+  (6,927 of them, not just the sample's): the base exists, the ids differ, the
+  collector numbers match and the oracle id is that base;
+* **tokens are absent**, by id from the sample and by type line over every row, so a
+  token from an unsampled set is caught too;
+* **the art is the publisher's own address** on every one of the 9,909 rows, with the
+  56 landscape cards that have a second face stored as that face;
+* **the write probe**: a POST of an empty JSON array to `catalog_sets` with the
+  publishable key must be refused, which Gundam's proof does not ask and which
+  writes nothing if the posture has broken;
+* and the row parity over the sample - 995 card rows over all 34 columns, 27 set
+  rows over 17 - taken from the same driver the parity test uses, so the database is
+  compared against the rows both languages already agreed on.
 
 ## Undoing it
 
