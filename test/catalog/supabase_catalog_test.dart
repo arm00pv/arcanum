@@ -41,6 +41,20 @@ Map<String, dynamic> _vectors() {
       as Map<String, dynamic>;
 }
 
+/// The Lorcana block of the committed id vectors.
+///
+/// The file holds one block per game, because the same file is asserted by the
+/// Yu-Gi-Oh! and Pokemon halves of tool/catalog/test_id_parity.py as well. This
+/// reader is only ever asked about Lorcana, and asks for that block by name
+/// rather than by position.
+Map<String, dynamic> _lorcanaVectors(Map<String, dynamic> vectors) {
+  for (final dynamic raw in vectors['games'] as List<dynamic>) {
+    final Map<String, dynamic> block = raw as Map<String, dynamic>;
+    if (block['game'] == 'lorcana') return block;
+  }
+  fail('the committed vectors hold no lorcana block');
+}
+
 /// A catalogue that answers out of a list, the way PostgREST answers out of a
 /// table.
 ///
@@ -326,11 +340,12 @@ void main() {
   setUpAll(() {
     vectors = _vectors();
     cardVectors = <Map<String, Object?>>[
-      for (final dynamic raw in vectors['cards'] as List<dynamic>)
+      for (final dynamic raw
+          in _lorcanaVectors(vectors)['cards'] as List<dynamic>)
         Map<String, Object?>.from(raw as Map<dynamic, dynamic>),
     ];
     setVectors = <Map<String, Object?>>[
-      for (final dynamic raw in vectors['sets'] as List<dynamic>)
+      for (final dynamic raw in _lorcanaVectors(vectors)['sets'] as List<dynamic>)
         Map<String, Object?>.from(raw as Map<dynamic, dynamic>),
     ];
   });

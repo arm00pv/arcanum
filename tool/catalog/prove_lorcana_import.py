@@ -173,6 +173,19 @@ def read_json_gz(path):
         return json.loads(fh.read().decode("utf-8"))
 
 
+def lorcana_vectors():
+    """The Lorcana block of the committed id vectors.
+
+    The file holds one block per game: the same vectors are asserted by the
+    Yu-Gi-Oh! and Pokemon halves of test_id_parity.py as well. This proof is
+    only ever about Lorcana, so it asks for that block by name.
+    """
+    for block in read_json_gz(VECTORS).get("games", []):
+        if block.get("game") == GAME:
+            return block
+    raise SystemExit(f"{VECTORS} holds no {GAME} block")
+
+
 def sql_text(value):
     """A Python string as a SQL literal. The same rule the importer uses."""
     return "'" + str(value).replace("'", "''") + "'"
@@ -304,8 +317,7 @@ def check_id_parity_against_the_database(db_url):
     different statement - an import that predates a rule change satisfies the
     first and fails this.
     """
-    vectors = read_json_gz(VECTORS)
-    cards = vectors["cards"]
+    cards = lorcana_vectors()["cards"]
     ids = [row["id"] for row in cards]
     array = "array[" + ", ".join(sql_text(i) for i in ids) + "]::text[]"
 
@@ -806,7 +818,7 @@ def main():
     # The set list to compare against comes from the committed sample, which
     # holds every set the provider publishes, rather than from a constant typed
     # in here. Nothing else in this file is compared against a remembered number.
-    provider_sets = len(read_json_gz(VECTORS)["sets"])
+    provider_sets = len(lorcana_vectors()["sets"])
     sets, cards = check_counts(db_url, provider_sets)
     if sets is None or cards is None:
         print()

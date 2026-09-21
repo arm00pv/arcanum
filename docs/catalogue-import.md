@@ -113,9 +113,11 @@ each other over real data.
 | File | What it asserts |
 | --- | --- |
 | `tool/catalog/lorcana_sample.json.gz` | 440 real Lorcast card objects and all 24 sets, cut by `make_lorcana_sample.py` with a written-down selection rule |
-| `tool/catalog/catalog_id_vectors.json.gz` | the 35 `catalog_cards` columns for each of those cards, derived from the Dart client |
-| `test/catalog/catalog_id_parity_test.dart` | runs the real `LorcanaCatalog` over the sample and asserts the committed vectors are still what it derives |
-| `tool/catalog/test_id_parity.py` | runs the importer{s} own functions over the same sample and asserts the same vectors |
+| `tool/catalog/pokemon_sample.json.gz` | 323 real TCGdex card objects and the five sets they were cut from, cut by `make_pokemon_sample.py` with the same kind of rule |
+| `tool/catalog/yugioh_sample.json.gz` | 252 real YGOPRODeck card objects, all 1,035 published sets and the set downloads sampled, cut by `make_yugioh_sample.py` |
+| `tool/catalog/catalog_id_vectors.json.gz` | one block per game: the 35 `catalog_cards` columns and the `catalog_sets` columns that game{s} client derives over its sample |
+| `test/catalog/catalog_id_parity_test.dart` | runs the real provider clients over the samples and asserts the committed vectors are still what they derive |
+| `tool/catalog/test_id_parity.py` | runs each importer{s} own functions over the same samples and asserts the same vectors, over the columns that importer actually derives |
 | `tool/catalog/fold_vectors.json` | 60 code vectors and 246 collector-number vectors, generated from `Codes.fold`, `Codes.separators` and `Codes.foldedSql` |
 | `test/catalog/code_fold_vectors_test.dart` | asserts the Dart half of those vectors |
 | `tool/catalog/prove_lorcana_import.py` | asserts the live database: counts, ids, generated columns, scoping, idempotency, posture |
