@@ -131,7 +131,11 @@ enum CardGame {
     // chart, so they only have to be told apart at a glance.
     accent: Color(0xFFF0812F),
     deep: Color(0xFF8C3D0E),
-    dataSource: 'TCGplayer',
+    // Heroicc, a community database built from Bandai's own card data, and not
+    // the TCGplayer catalogue this line used to name: it is the source whose
+    // set list carries a count and a date per set, whose ids separate the
+    // parallel printings, and whose API a browser may read directly.
+    dataSource: 'Heroicc',
     catalogueSince: 2020,
     collectionNoun: 'binder',
     cardAspectRatio: 488 / 680,

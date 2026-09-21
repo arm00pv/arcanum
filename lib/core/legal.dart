@@ -128,6 +128,13 @@ abstract final class Legal {
       url: 'https://ygoprodeck.com/api-guide/',
     ),
     (
+      name: 'Heroicc',
+      purpose:
+          'Digimon card data, card images, sets and search (CC BY-NC-SA 4.0, '
+          'non-commercial)',
+      url: 'https://heroi.cc/docs/api',
+    ),
+    (
       name: 'Star Wars: Unlimited card database',
       purpose:
           'Star Wars: Unlimited card data, card images, sets and search, from '

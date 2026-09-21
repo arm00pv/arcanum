@@ -6,6 +6,7 @@ import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/backup/backup_service.dart';
 import 'package:arcanum/data/catalog/catalog_meta.dart';
+import 'package:arcanum/data/catalog/digimon_catalog.dart';
 import 'package:arcanum/data/catalog/gundam_catalog.dart';
 import 'package:arcanum/data/catalog/lorcana_catalog.dart';
 import 'package:arcanum/data/catalog/mtg_catalog.dart';
@@ -208,11 +209,19 @@ class Bootstrap {
             CardGame.starWarsUnlimited,
             SwuCatalog(),
           ),
-          // The three games TCGplayer catalogs itself share one adapter: the
-          // provider's shape is the same for all of them and only the category
-          // id and the name of the colour field differ.
+          // Digimon is served by Heroicc, a community database built from
+          // Bandai's own card data, whose API a browser may read directly and
+          // whose set list carries a real count and date per set. Its pictures
+          // still come through Arcanum's relay - the image host sends no CORS
+          // header at all - which is the one request of this game's that does.
+          CardGame.digimon: throughTheServer(
+            CardGame.digimon,
+            DigimonCatalog(),
+          ),
+          // The two games TCGplayer catalogs itself share one adapter: the
+          // provider's shape is the same for both and only the category id and
+          // the name of the colour field differ.
           CardGame.onePiece: TcgcsvCatalog.onePiece(),
-          CardGame.digimon: TcgcsvCatalog.digimon(),
           CardGame.dragonBall: TcgcsvCatalog.dragonBall(),
         };
 

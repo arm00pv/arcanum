@@ -44,6 +44,12 @@ ART_ORIGINS = {
     # measured 2026-09-21, none of the 1,912 Gundam product images carried an
     # Access-Control-Allow-Origin, so a browser refused every one of them.
     "gundam": "https://www.gundam-gcg.com",
+    # Heroicc's card pictures. Its API answers a browser directly - every route
+    # sends a single "*" - and its image host sends nothing at all: measured
+    # 2026-09-21, `images.heroi.cc/cards/en/BT8-022.webp` is 200 with no
+    # Access-Control-Allow-Origin, so a browser refuses it and the Digimon grid
+    # draws the card-back placeholder.
+    "heroic": "https://images.heroi.cc",
 }
 
 # A year, and immutable: the shop names a picture after the product it shows

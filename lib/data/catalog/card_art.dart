@@ -51,6 +51,12 @@ abstract final class CardArt {
     // the game whose move off tcgcsv leaves exactly one request still going
     // through Arcanum's host.
     'https://www.gundam-gcg.com': 'gundam',
+    // Heroicc's card pictures, which is where the Digimon catalogue's art URLs
+    // point. Its API is fully browser-callable - every route sends a single
+    // `Access-Control-Allow-Origin: *` - and its images send none at all
+    // (measured 2026-09-21), so Digimon is the second game whose data needs no
+    // relay and whose pictures do.
+    'https://images.heroi.cc': 'heroic',
   };
 
   /// The address art published at [direct] is fetched from.
