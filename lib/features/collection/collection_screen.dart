@@ -19,6 +19,7 @@ import 'package:arcanum/features/scan/scan_screen.dart';
 import 'package:arcanum/features/sealed/sealed_screen.dart';
 import 'package:arcanum/features/transfer/paste_import_screen.dart';
 import 'package:arcanum/providers.dart';
+import 'package:arcanum/widgets/card_grid.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
 import 'package:arcanum/widgets/common.dart';
 import 'package:arcanum/widgets/glass.dart';
@@ -32,6 +33,21 @@ enum _CollectionSort { value, name, recent, quantity, change }
 /// The screen is scoped end to end to [activeGameProvider]: the overview, the
 /// card data behind every row and the header line all describe one game's
 /// collection, never a blend of two.
+/// The padding the card grid lays out inside.
+///
+/// A constant because the tile width is worked out from the space left after
+/// it, and a second copy of these numbers is a second thing to get wrong.
+const EdgeInsets _gridPadding = EdgeInsets.fromLTRB(14, 8, 14, 120);
+
+/// The height the grid's caption takes at text size 1: the six-pixel gap and
+/// the two lines under a card here - its name, and what it is worth.
+///
+/// Reserved rather than measured, because a grid delegate sizes every tile
+/// before any tile is built - see [CardTileMetrics]. Deliberately a little more
+/// than the caption needs: too much is a few pixels of air under a card, and too
+/// little is a clipped caption.
+const double _entryCaptionBase = 42;
+
 class CollectionScreen extends ConsumerStatefulWidget {
   const CollectionScreen({super.key});
 
@@ -267,27 +283,39 @@ class _CollectionScreenState extends ConsumerState<CollectionScreen> {
                               ),
                             ),
                           )
-                        : SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(14, 8, 14, 120),
-                            sliver: SliverGrid.builder(
+                        // The tile's height is derived from the card's own
+                        // shape rather than left to a fixed ratio, which is what
+                        // stops the art being cropped down its sides. See
+                        // [CardTileMetrics] for the measurement.
+                        : SliverLayoutBuilder(
+                            builder: (BuildContext context, constraints) {
                               // Bounded by the card, not by a count, so a
                               // desktop window shows the collection rather than
                               // three cards the size of a plate.
-                              gridDelegate:
-                                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                                    maxCrossAxisExtent: 190,
-                                    mainAxisSpacing: 12,
-                                    crossAxisSpacing: 10,
-                                    childAspectRatio: 0.5,
+                              final CardTileMetrics metrics = CardTileMetrics(
+                                availableWidth:
+                                    constraints.crossAxisExtent -
+                                    _gridPadding.horizontal,
+                                cardAspectRatio: game.cardAspectRatio,
+                                captionHeight: cardTileCaptionHeight(
+                                  context,
+                                  _entryCaptionBase,
+                                ),
+                              );
+                              return SliverPadding(
+                                padding: _gridPadding,
+                                sliver: SliverGrid.builder(
+                                  gridDelegate: metrics.delegate,
+                                  itemCount: rows.length,
+                                  itemBuilder: (context, i) => _EntryGridTile(
+                                    valued: rows[i],
+                                    card: cards[rows[i].entry.cardId],
+                                    game: game,
+                                    index: i,
                                   ),
-                              itemCount: rows.length,
-                              itemBuilder: (context, i) => _EntryGridTile(
-                                valued: rows[i],
-                                card: cards[rows[i].entry.cardId],
-                                game: game,
-                                index: i,
-                              ),
-                            ),
+                                ),
+                              );
+                            },
                           );
                   },
                 ),
@@ -533,11 +561,14 @@ class _EntryGridTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints box) =>
-                  CardThumbnail(
-                    imageUrl: card?.imageUrl(
+          // No Expanded: the art takes the shape of the card rather than
+          // whatever the tile had left over, and the grid hands the tile exactly
+          // that plus the caption.
+          LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints box) =>
+                CardThumbnail(
+                  width: box.maxWidth,
+                  imageUrl: card?.imageUrl(
                       size: CardThumbnail.renditionFor(
                         width: box.maxWidth,
                         devicePixelRatio: MediaQuery.devicePixelRatioOf(
@@ -549,21 +580,33 @@ class _EntryGridTile extends StatelessWidget {
                     rarity: CardRarity.fromCode(card?.rarity),
                     quantity: valued.entry.quantity.toDouble(),
                     borderRadius: BorderRadius.circular(10),
-                  ),
-            ),
+                ),
           ),
           const SizedBox(height: 6),
-          Text(
-            card?.name ?? '--',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.t.bodySmall?.copyWith(color: c.textPrimary),
-          ),
-          Text(
-            valued.totalValue == null
-                ? '--'
-                : Fmt.moneyAdaptive(valued.totalValue),
-            style: context.t.labelMedium?.copyWith(color: c.textSecondary),
+          // The caption takes exactly what the grid reserved for it, so the art
+          // above keeps the card's own shape even if that reservation turns out
+          // to be a pixel short. The cost of being short is a clipped caption,
+          // never a cropped card.
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  card?.name ?? '--',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.t.bodySmall?.copyWith(color: c.textPrimary),
+                ),
+                Text(
+                  valued.totalValue == null
+                      ? '--'
+                      : Fmt.moneyAdaptive(valued.totalValue),
+                  style: context.t.labelMedium?.copyWith(
+                    color: c.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

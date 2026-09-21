@@ -15,6 +15,7 @@ import 'package:arcanum/features/sets/set_filter_sheet.dart';
 import 'package:arcanum/features/sets/set_filters.dart';
 import 'package:arcanum/features/sets/sets_screen.dart' show SetGlyph;
 import 'package:arcanum/providers.dart';
+import 'package:arcanum/widgets/card_grid.dart';
 import 'package:arcanum/widgets/card_thumbnail.dart';
 import 'package:arcanum/widgets/common.dart';
 import 'package:arcanum/widgets/glass.dart';
@@ -28,6 +29,26 @@ import 'package:arcanum/widgets/sample_art_note.dart';
 /// collated — which is what a collector expects when working through a set. The
 /// ordering logic is shared across games, so it handles Magic's `1a` suffixes
 /// and Pokémon's `TG01`/`SV001` prefixes alike.
+/// The padding the card grid lays out inside.
+///
+/// A constant because the tile width is worked out from the space left after
+/// it, and a second copy of these numbers is a second thing to get wrong.
+const EdgeInsets _gridPadding = EdgeInsets.fromLTRB(14, 10, 14, 120);
+
+/// The height the grid's caption takes at text size 1.
+///
+/// Three lines, not one: the six-pixel gap, the row carrying the collector
+/// number and the price, and the row carrying the card's name and its rarity.
+/// Measured off the styles they use - a label line of about 16 logical pixels,
+/// two pixels of gap, and a body line of about 22.
+///
+/// Reserved rather than measured, because a grid delegate sizes every tile
+/// before any tile is built - see [CardTileMetrics]. Deliberately a little more
+/// than the caption needs: too much is a few pixels of air under a card, and
+/// too little is a clipped caption. The caption is given exactly this height
+/// either way, so being short costs the caption and never the card.
+const double _setCaptionBase = 56;
+
 class SetDetailScreen extends ConsumerStatefulWidget {
   const SetDetailScreen({super.key, required this.game, required this.setCode});
 
@@ -337,29 +358,45 @@ class _SetDetailScreenState extends ConsumerState<SetDetailScreen> {
                       );
                     }
                     return _grid
-                        ? SliverPadding(
-                            padding: const EdgeInsets.fromLTRB(14, 10, 14, 120),
-                            sliver: SliverGrid.builder(
-                              // Sized by the space a card wants, not by a
-                              // count: three columns is right on a phone and
-                              // absurd on a desktop, where the same rule puts
-                              // eight on the screen instead of three enormous
-                              // ones.
-                              gridDelegate:
-                                  const SliverGridDelegateWithMaxCrossAxisExtent(
-                                    maxCrossAxisExtent: 190,
-                                    mainAxisSpacing: 12,
-                                    crossAxisSpacing: 10,
-                                    childAspectRatio: 0.52,
-                                  ),
-                              itemCount: visible.length,
-                              itemBuilder: (context, i) => _SlotGridTile(
-                                slot: visible[i],
-                                owned: visible[i].ownedWith(owned),
-                                price: _filter.summarise(visible[i]),
-                                index: i,
-                              ),
-                            ),
+                        // The tile's height is derived from the card's own shape
+                        // rather than left to a fixed ratio, which is what stops
+                        // the art being cropped down its sides. The old fixed
+                        // ratio put a 190-wide tile's art in a 190x322.4 box -
+                        // 0.589 against a card's 0.718 - so every game lost
+                        // about 9% off each edge. See [CardTileMetrics].
+                        ? SliverLayoutBuilder(
+                            builder: (BuildContext context, constraints) {
+                                  // Sized by the space a card wants, not by a
+                                  // count: two columns is right on a phone and
+                                  // absurd on a desktop, where the same rule
+                                  // puts eight on the screen instead of three
+                                  // enormous ones.
+                                  final CardTileMetrics metrics =
+                                      CardTileMetrics(
+                                        availableWidth:
+                                            constraints.crossAxisExtent -
+                                            _gridPadding.horizontal,
+                                        cardAspectRatio:
+                                            widget.game.cardAspectRatio,
+                                        captionHeight: cardTileCaptionHeight(
+                                          context,
+                                          _setCaptionBase,
+                                        ),
+                                      );
+                                  return SliverPadding(
+                                    padding: _gridPadding,
+                                    sliver: SliverGrid.builder(
+                                      gridDelegate: metrics.delegate,
+                                      itemCount: visible.length,
+                                      itemBuilder: (context, i) => _SlotGridTile(
+                                        slot: visible[i],
+                                        owned: visible[i].ownedWith(owned),
+                                        price: _filter.summarise(visible[i]),
+                                        index: i,
+                                      ),
+                                    ),
+                                  );
+                                },
                           )
                         : SliverPadding(
                             padding: const EdgeInsets.fromLTRB(16, 10, 16, 120),
@@ -512,13 +549,16 @@ class _CardGridTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                // The box decides which rendition is worth its bytes, and only
-                // the box knows how wide it turned out.
-                child: LayoutBuilder(
-                  builder: (BuildContext context, BoxConstraints box) =>
-                      CardThumbnail(
-                        imageUrl: card.imageUrl(
+              // No Expanded: the art takes the shape of the card rather than
+              // whatever the tile had left over, and the grid hands the tile
+              // exactly that plus the caption. The box still decides which
+              // rendition is worth its bytes, because only it knows how wide it
+              // turned out.
+              LayoutBuilder(
+                builder: (BuildContext context, BoxConstraints box) =>
+                    CardThumbnail(
+                      width: box.maxWidth,
+                      imageUrl: card.imageUrl(
                           size: CardThumbnail.renditionFor(
                             width: box.maxWidth,
                             devicePixelRatio: MediaQuery.devicePixelRatioOf(
@@ -531,11 +571,15 @@ class _CardGridTile extends StatelessWidget {
                         rarity: rarity,
                         quantity: owned > 0 ? owned.toDouble() : null,
                         borderRadius: BorderRadius.circular(10),
-                      ),
-                ),
+                    ),
               ),
               const SizedBox(height: 6),
-              Row(
+              // The caption takes exactly what the grid reserved for it, so the
+              // art above keeps the card's shape even if that reservation turns
+              // out to be a pixel short - the cost of being short is a clipped
+              // caption rather than a cropped card.
+              Expanded(
+                child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -567,6 +611,7 @@ class _CardGridTile extends StatelessWidget {
                       ),
                     ),
                 ],
+                ),
               ),
               const SizedBox(height: 2),
               Row(
