@@ -752,11 +752,16 @@ release.
 
 These need a person, not more design.
 
-1. **Does the catalogue fit the plan we are willing to pay for?** Measure a real
+1. **Does the catalogue fit the plan we are willing to pay for?** ~~Measure a real
    import in step 1 and extrapolate to nine games with rules text before importing
-   Magic. If it does not fit, the fallback is to store card rows without
-   `oracle_text` and keep rules-text search on the provider path - which costs a
-   feature, so it should be a decision rather than a discovery.
+   Magic.~~ **Measured 2026-09-21: no, not with margin.** The nine games come to
+   about 190,000–204,000 rows and 370–400 MB against a 500 MB ceiling, and the
+   free plan carries no automatic backup at all, which is the larger half of the
+   problem. `docs/catalogue-size.md` records the measurements and the three ways
+   out. The fallback this question proposed - card rows without `oracle_text`,
+   which is 25% of the table once its trigram index goes with it - is one of
+   them, and it still costs a feature. **This needs a person to choose; it gates
+   step 5.**
 2. **Is the catalogue readable without an account?** `anon` makes the Sets tab work
    for a lapsed session and makes the whole catalogue publicly mirrorable.
    `authenticated`-only is a one-line policy change with a real consequence either
