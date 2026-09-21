@@ -37,7 +37,7 @@ Map<String, Object?> release(
   'meta': <String, Object?>{
     'name': name,
     'cards': cards,
-    if (date != null) 'date': date,
+    'date': ?date,
   },
 };
 
@@ -71,13 +71,13 @@ Map<String, Object?> card(
     'image': 'https://images.heroi.cc/cards/en/$id.webp',
     'language': 'en',
     'notes': 'Booster TEST SET',
-    if (type != null) 'type': type,
-    if (form != null) 'form': form,
-    if (level != null) 'level': level,
-    if (dp != null) 'dp': dp,
-    if (playCost != null) 'play-cost': playCost,
-    if (effect != null) 'effect': effect,
-    if (inherited != null) 'inherited-effect': inherited,
+    'type': ?type,
+    'form': ?form,
+    'level': ?level,
+    'dp': ?dp,
+    'play-cost': ?playCost,
+    'effect': ?effect,
+    'inherited-effect': ?inherited,
   },
   'relationships': <String, Object?>{
     'releases': <String, Object?>{

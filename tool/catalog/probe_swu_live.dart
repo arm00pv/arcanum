@@ -1,3 +1,6 @@
+// A probe prints what it finds, and composes those lines by hand: the two lints
+// below are about production code, and this file is a script that is run by naming it.
+// ignore_for_file: avoid_print, prefer_interpolation_to_compose_strings
 // A live probe of the Star Wars: Unlimited catalogue, against the real source.
 //
 //   flutter test tool/catalog/probe_swu_live.dart
