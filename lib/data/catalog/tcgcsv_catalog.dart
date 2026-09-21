@@ -10,8 +10,8 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// Card data for the games TCGplayer catalogs itself.
 ///
-/// One Piece, Digimon and Dragon Ball have no free catalogue API of their own,
-/// and the sites that carry them are either keyed, dead or unlicensed. What they
+/// One Piece and Dragon Ball have no free catalogue API of their own, and the
+/// sites that carry them are either keyed, dead or unlicensed. What they
 /// do have is TCGplayer, which is where those games are actually bought and sold,
 /// and a daily mirror of TCGplayer's own catalog and pricing endpoints: tcgcsv,
 /// which publishes, per category and per set, exactly what the shop knows.

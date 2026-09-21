@@ -144,7 +144,7 @@ abstract final class Legal {
     (
       name: 'tcgcsv (TCGplayer)',
       purpose:
-          'Card data and current prices for One Piece, Digimon and Dragon Ball',
+          'Card data and current prices for One Piece and Dragon Ball',
       url: 'https://tcgcsv.com',
     ),
     (
