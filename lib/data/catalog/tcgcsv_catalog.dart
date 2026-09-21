@@ -10,12 +10,18 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// Card data for the games TCGplayer catalogs itself.
 ///
-/// Three of the games Arcanum tracks - One Piece, Star Wars: Unlimited and
-/// Digimon - have no free catalogue API of their own, and the sites that carry
-/// them are either keyed, dead or unlicensed. What they do have is TCGplayer,
-/// which is where those games are actually bought and sold, and a daily mirror
-/// of TCGplayer's own catalog and pricing endpoints: tcgcsv, which publishes,
-/// per category and per set, exactly what the shop knows.
+/// One Piece, Digimon and Dragon Ball have no free catalogue API of their own,
+/// and the sites that carry them are either keyed, dead or unlicensed. What they
+/// do have is TCGplayer, which is where those games are actually bought and sold,
+/// and a daily mirror of TCGplayer's own catalog and pricing endpoints: tcgcsv,
+/// which publishes, per category and per set, exactly what the shop knows.
+///
+/// It catalogs fewer games than it used to, and the two that left say why the
+/// rest will: Gundam went to gcgapi and Star Wars: Unlimited to the publisher's
+/// own database, because a source that lets a browser read it needs no relay of
+/// ours - and the relay is the part of this that costs. Their factories are still
+/// here, unwired, because one line in `providers.dart` is what makes either move
+/// reversible.
 ///
 /// It is free, keyless and complete - names, art, collector numbers, rarities,
 /// the game's own categories and a market price per finish - and it is the same
