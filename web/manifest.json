@@ -5,7 +5,7 @@
     "display": "standalone",
     "background_color": "#07070C",
     "theme_color": "#07070C",
-    "description": "Arcanum - a precision Magic: The Gathering collection vault with on-device price analytics.",
+    "description": "Arcanum - a precision trading card collection vault with on-device price analytics.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

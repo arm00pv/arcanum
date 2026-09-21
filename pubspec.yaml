@@ -1,5 +1,5 @@
 name: arcanum
-description: "Arcanum - a precision Magic: The Gathering collection vault with on-device price analytics."
+description: "Arcanum - a precision trading card collection vault with on-device price analytics."
 publish_to: 'none'
 version: 1.27.0+37
 

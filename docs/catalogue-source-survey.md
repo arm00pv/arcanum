@@ -67,6 +67,70 @@ and `api.swu-db.com` - the one tcgcsv-era source that still carries prices - is
 refused by the browser for both. The game that has moved reads its art from
 `cdn.starwarsunlimited.com`, which answers 200 with `*`.
 
+## Why the last two games stay where they are
+
+Written after Gundam, Star Wars: Unlimited and Digimon had moved, and after measuring
+the two that were left more closely than the survey itself did. Both verdicts are
+measurements rather than preferences, and both are the kind of thing that is much
+cheaper to find now than after a move.
+
+### One Piece: optcgapi has no id a collection can hold
+
+The source is attractive - it is the only candidate of the four that carries prices
+(5,374 of its 5,549 records quote a market price, median $0.43, scraped daily) - and
+its API is fully browser-callable: every route answers `Access-Control-Allow-Origin:
+*`. Its art needs the relay (the media host sends no ACAO), which is a cost this
+project has paid twice already.
+
+It fails on the one thing a catalogue cannot be casual about. Four endpoints were
+pulled whole on 2026-09-21 - `/allSetCards/` 3,654, `/allSTCards/` 626, `/allPromos/`
+1,082, `/allDonCards/` 187, 5,549 records between them - and over all of them:
+
+~~~
+distinct card_image_id         5,117 of 5,549
+distinct card_image_id|set_id  5,509 of 5,549
+distinct card_image (the URL)  5,408 of 5,549
+~~~
+
+**No field, and no simple composite of them, is unique.** The near-miss is the image
+URL, and it is the wrong answer twice over: 141 records share one (they are the
+records with no image at all, which would collapse into a single row), and a URL that
+carries a scraper's own hash suffix - `OP04-089_VSSo9UA.jpg` beside `OP04-089.jpg` for
+what the source files as two printings of one card - is not an address anything should
+be keyed by.
+
+What makes a printing distinct here is the *name*: a tournament promo is filed under
+its base card's number with the base set's number spelled without the dash
+(`OP01-077` under `OP01`) and is told apart only by `Perona (Championship 2024
+Finalist Card Set Vol. 2)`. An id built from the name is an id that moves whenever the
+source edits a name, and every holding that names it renders as "--".
+
+The failure this avoids is the one the Gundam report was written about: an id scheme
+that stores, looks unique and silently merges two of a collector's holdings into one
+row. One Piece therefore stays on tcgcsv, whose TCGplayer product ids are stable and
+unique even though its Sets tab and its search are nothing. What would change the
+verdict is a source that names a printing once and never again.
+
+### Dragon Ball: there is nothing to move it to
+
+Measured in the same survey, and unchanged: no keyless JSON source exists for Fusion
+World. `apitcg.com` and JustTCG both answer `401 API key is required`; Bandai's own
+card list is HTML with no `Access-Control-Allow-Origin` and ignores its own `page`
+parameter (pages 1 to 6 byte-identical), and its art host refuses the browser too.
+Without a source, the game keeps tcgcsv and its TCGplayer ids - which is the same
+answer as One Piece's, reached from the opposite direction.
+
+### What that leaves
+
+Three of the five games tcgcsv used to catalogue have left it: Gundam (gcgapi), Star
+Wars: Unlimited (the publisher's own database) and Digimon (Heroicc, client half). The
+two that remain are not a backlog: one has no source, and the other has a source whose
+ids cannot be trusted. The relay still serves their catalogues, and their art is
+served by nobody: tcgplayer-cdn.tcgplayer.com refuses every product image with `403
+AccessDenied` (measured above), so those two games draw the card-back placeholder on
+the web build and on a phone. That is the live cost of their staying, and it is
+written here rather than in a bug tracker because nothing in this project can fix it.
+
 ## How to read CORS below
 
 A browser is allowed to read a cross-origin response only if the response
