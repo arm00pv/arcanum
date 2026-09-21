@@ -737,12 +737,41 @@ step requires a big-bang rewrite, and no step breaks the phone.
 | --- | --- | --- |
 | **0. Schema and posture** | The four tables, indexes, generated columns, grants and policies, `catalog_meta` rows for all nine games. Empty. A test asserting `anon` holds only `SELECT`. | Nothing else can be verified until the posture is fixed, and the posture is the expensive thing to change later. Delivers no user value; keep it small. |
 | **1. One game imported** | `tool/catalog_store.py` and an extended `poll_lorcana_prices.py` (23 sets, 3,198 cards), plus the id-parity test and the fold vectors. | Lorcana is the smallest real catalogue and the first game the web build serves badly. It proves the id derivation, the checksum, the revisions and the per-set transaction at a size a person can read. |
-| **2. One game read** | `SupabaseCatalog`, `RoutedCatalog`, the extracted mapper, a Settings flag, web only. `fetchCardsByIds` with its default implementation, and `resolveMissingCards` using it. | The first user-visible step: Lorcana's Sets tab stops being empty and its search covers the whole game. It also delivers the batch card fetch, which helps every game on the web today. |
+| **2. One game read** | `SupabaseCatalog`, `RoutedCatalog`, the extracted mapper, a Settings flag, web only. `fetchCardsByIds` with its default implementation, and `resolveMissingCards` using it. | The first user-visible step: Lorcana's Sets tab stops being empty and its search covers the whole game. It also delivers the batch card fetch, which helps every game on the web today. **Amended 2026-09-21:** the flag shipped off and now defaults on, and the games are listed once in `sharedCatalogueGames` rather than named in the switch's own sentence - see §8.1. |
 | **3. The five tcgcsv games** | The new `arcanum-catalog-tcgcsv.timer`, its importer, and routers for five games. | The web build's worst case: they go through the CORS relay, they have no search at all, and the Sets tab is empty until a group is opened. |
 | **4. Search and numbers** | The `catalog_search` and `catalog_cards_by_number` RPCs, and `CatalogRepository.search` asking the server when the local cache comes up short. | Search is the feature that genuinely needs the whole catalogue, and it needs rows to search: steps 1 to 3. |
 | **5. Magic, Pokemon, Yu-Gi-Oh!** | The Scryfall bulk import and the two extended pollers. | The three big catalogues and the three hardest id derivations, done once the machinery has been proved on six easier games. |
 | **6. Current prices** | `catalog_prices` written by all five importers, `prices_revision` refresh in the client, `observed_on` shown where the app already shows a price date. | Prices are the most volatile and most game-specific part, and the client refresh path touches code that already works. Last, so a bug there cannot delay the catalogue. |
 | **7. Optional: the phone, through the companion** | A read-only proxy on zapp.sytes.net serving the same shapes to a token-holding phone. | Only once the catalogue is proven, and only as an optimisation. The phone must never need it. |
+
+### 8.1 What the flag turned out to mean
+
+It shipped off by default, which was the cautious thing to do while there was one
+game on the server and its import was fresh, and it had a cost that only became
+visible once it was measured: **a switch that is off until somebody finds it
+means the step never runs.** The shared catalogue, the fallback under it, and the
+whole first user-visible improvement were all behind a control nobody had a
+reason to look for. A rollback switch that is off is not a rollback switch; it is
+an opt-in.
+
+It now defaults on, and the thing that makes that safe is not the default but
+`RoutedCatalog`: it answers from the provider whenever the catalogue fails or has
+nothing to say, so the worst case of a server that is wrong, empty or absent is
+one wasted request. That property was already tested before this changed; what
+changed is that a collector now exercises it rather than a test doing so.
+
+Two consequences worth stating, because both were wrong at the moment the second
+game was added to the server:
+
+- **The set of games lives in one place**, `lib/data/catalog/shared_catalogue.dart`,
+  and both `providers.dart` and `main.dart` read it. The factory in `main.dart`
+  builds a server catalogue for whichever game it is asked about and does not
+  decide which games those are.
+- **The switch's sentence is built from that set**, so it cannot go on saying
+  "Read Lorcana from Arcanum" after the server has taken on a second game. That
+  is exactly what it said for the length of one commit, and a control that
+  misdescribes itself is worse than a missing one because the collector trusts
+  it.
 
 Rollback at every step is the same: turn the Settings flag off. The provider path
 is never removed, so a game can go back to being per-device at any time without a

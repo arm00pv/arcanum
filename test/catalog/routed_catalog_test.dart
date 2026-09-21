@@ -17,6 +17,8 @@ import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/catalog/lorcana_catalog.dart';
 import 'package:arcanum/data/catalog/mtg_catalog.dart';
 import 'package:arcanum/data/catalog/routed_catalog.dart';
+import 'package:arcanum/data/catalog/shared_catalogue.dart';
+import 'package:arcanum/data/catalog/ygo_catalog.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/data/security/secret_store.dart';
 import 'package:arcanum/domain/models/card_game.dart';
@@ -370,20 +372,31 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    test('is off until it is asked for, and stays where it is put', () async {
-      // Off by default is the whole rollback story: a browser that never
-      // touches it never reads the shared catalogue, and one that turns it off
-      // is back on the provider path without a release.
+    test('is on until it is turned off, and stays where it is put', () async {
+      // On by default now, and the reasoning is in AppSettings where the
+      // default lives: a switch that is off until somebody finds it means the
+      // shared catalogue never runs, so the fallback underneath it is never
+      // exercised and the improvement is never delivered. What makes on safe is
+      // the router, not the default - which is why the cases above are the
+      // unhappy ones.
       final AppSettings settings = await AppSettings.load(
         secrets: MemorySecretStore(),
       );
-      expect(settings.serverCatalog, isFalse);
+      expect(settings.serverCatalog, isTrue);
 
-      settings.serverCatalog = true;
+      // The rollback still has to survive a restart, or "turn it off" is advice
+      // rather than a setting.
+      settings.serverCatalog = false;
       final AppSettings reopened = await AppSettings.load(
         secrets: MemorySecretStore(),
       );
-      expect(reopened.serverCatalog, isTrue);
+      expect(reopened.serverCatalog, isFalse);
+
+      settings.serverCatalog = true;
+      final AppSettings reopenedAgain = await AppSettings.load(
+        secrets: MemorySecretStore(),
+      );
+      expect(reopenedAgain.serverCatalog, isTrue);
     });
   });
 
@@ -418,16 +431,51 @@ void main() {
       expect(bootstrap.catalogs[CardGame.lorcana], isA<LorcanaCatalog>());
     });
 
-    test('a build with a server routes the one game that has one', () {
+    test('a build with a server routes the games the catalogue holds, and no '
+        'others', () {
       final server = _ScriptedCatalog(label: 'server');
       final Bootstrap bootstrap = Bootstrap.create(
         database: db,
         settings: settings,
-        sharedCatalog: () => server,
+        sharedCatalog: (CardGame _) => server,
         sharedCatalogAllowed: () => settings.serverCatalog,
       );
+      // The comparison is against the set rather than against a list written
+      // out again here, so moving a game onto the server or off it is one edit
+      // in one file and this test still means what it says.
+      for (final CardGame game in CardGame.values) {
+        expect(
+          bootstrap.catalogs[game],
+          sharedCatalogueGames.contains(game)
+              ? isA<RoutedCatalog>()
+              : isNot(isA<RoutedCatalog>()),
+          reason: '$game is routed if and only if the catalogue holds it',
+        );
+      }
       expect(bootstrap.catalogs[CardGame.lorcana], isA<RoutedCatalog>());
+      expect(bootstrap.catalogs[CardGame.pokemon], isA<RoutedCatalog>());
       expect(bootstrap.catalogs[CardGame.mtg], isA<MtgCatalog>());
+      expect(bootstrap.catalogs[CardGame.yugioh], isA<YgoCatalog>());
+      expect(bootstrap.catalogs, hasLength(CardGame.values.length));
+    });
+
+    test('the server is built for the game being routed, one per game', () {
+      // This is the difference the per-game factory makes. Built once for a
+      // single game, a second game routed to the server would have been handed
+      // the first game's catalogue and answered every query from the wrong
+      // table - which is not a crash and not an empty answer, so nothing else
+      // in this file would have caught it.
+      final List<CardGame> asked = <CardGame>[];
+      final Bootstrap bootstrap = Bootstrap.create(
+        database: db,
+        settings: settings,
+        sharedCatalog: (CardGame game) {
+          asked.add(game);
+          return _ScriptedCatalog(label: 'server-${game.id}');
+        },
+        sharedCatalogAllowed: () => settings.serverCatalog,
+      );
+      expect(asked, unorderedEquals(sharedCatalogueGames.toList()));
       expect(bootstrap.catalogs, hasLength(CardGame.values.length));
     });
   });

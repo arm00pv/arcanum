@@ -20,6 +20,7 @@ import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/data/update/update_service.dart';
 import 'package:arcanum/features/report/forecast_audit_screen.dart';
 import 'package:arcanum/data/auth/account_service.dart';
+import 'package:arcanum/data/catalog/shared_catalogue.dart';
 import 'package:arcanum/features/auth/account_providers.dart';
 import 'package:arcanum/features/settings/account_screen.dart';
 import 'package:arcanum/features/settings/sync_screen.dart';
@@ -1087,13 +1088,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           setState(() => settings.serverCatalog = value);
         },
         contentPadding: const EdgeInsets.fromLTRB(16, 4, 12, 4),
-        title: Text('Read Lorcana from Arcanum', style: context.t.titleSmall),
+        // Named from the set rather than written out, so this sentence cannot
+        // go on saying "Lorcana" after the server has taken on a second game.
+        title: Text(
+          'Read ${sharedCatalogueGamesNamed()} from Arcanum',
+          style: context.t.titleSmall,
+        ),
         subtitle: Text(
           'Sets and cards come from Arcanum\'s own catalogue instead of from '
           'the card provider, so the set list is there before anything is '
           'downloaded and a search covers the whole game rather than the part '
-          'of it this browser happens to have. Off is the app as it has always '
-          'been: every game asks its own provider.',
+          'of it this browser happens to have. Any other game, and every one of '
+          'them if this is switched off, asks its own provider.',
           style: context.t.bodySmall?.copyWith(color: c.textTertiary),
         ),
         isThreeLine: true,

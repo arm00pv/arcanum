@@ -85,13 +85,17 @@ Future<void> main() async {
     final bootstrap = Bootstrap.create(
       database: database,
       settings: settings,
-      // A browser reads Lorcana from the shared catalogue, but only while
-      // somebody is signed in and has left the switch in Settings alone. The
-      // phone is handed neither of these, so it keeps the five card providers
-      // and never constructs any part of the server path.
+      // A browser reads a game the shared catalogue holds from there, but only
+      // while somebody is signed in and has left the switch in Settings alone.
+      // The phone is handed neither of these, so it keeps the five card
+      // providers and never constructs any part of the server path.
+      //
+      // This builds one for whichever game it is asked about, and does not
+      // decide which games those are: [sharedCatalogueGames] answers that, in
+      // providers.dart, so the list exists once.
       sharedCatalog: kIsWeb
-          ? () => SupabaseCatalog(
-              game: CardGame.lorcana,
+          ? (CardGame game) => SupabaseCatalog(
+              game: game,
               // Read at the first query rather than here: the client exists
               // only once Supabase.initialize has run, which is after this.
               table: SupabaseCatalogTable(() => Supabase.instance.client),

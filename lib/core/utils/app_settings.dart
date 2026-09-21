@@ -429,12 +429,25 @@ class AppSettings extends ChangeNotifier {
   /// Whether this build reads the card catalogue from Arcanum's own server
   /// rather than from the card providers.
   ///
-  /// Off until it is asked for, and only ever asked for in a browser: the
-  /// switch that writes it is not drawn anywhere else, because a phone has no
-  /// account to read the catalogue through and has to work with the radio off.
-  /// It is the rollback for the whole migration - a browser that turns it off
-  /// is back on the provider path without a release.
-  bool get serverCatalog => _prefs.getBool(_kServerCatalog) ?? false;
+  /// Only ever asked for in a browser: the switch that writes it is not drawn
+  /// anywhere else, because a phone has no account to read the catalogue
+  /// through and has to work with the radio off.
+  ///
+  /// **On by default, and that is the change this line records.** It shipped off
+  /// while there was one game on the server and the import was unproven, which
+  /// was the cautious thing to do and had a cost worth naming: a switch that is
+  /// off until somebody finds it means the feature never runs, so the fallback
+  /// under it is never exercised and the improvement is never delivered. What
+  /// makes on defensible now is [RoutedCatalog], which answers from the provider
+  /// whenever the catalogue fails or has nothing to say - the shared catalogue
+  /// was built as an optimisation with a working fallback rather than a
+  /// dependency, and this is the setting that decides whether that is true in
+  /// practice or only in a test.
+  ///
+  /// It is still the rollback for the whole migration: a browser that turns it
+  /// off is back on the provider path without a release, which is now a thing a
+  /// collector can do rather than a thing this file promises.
+  bool get serverCatalog => _prefs.getBool(_kServerCatalog) ?? true;
 
   set serverCatalog(bool v) {
     _prefs.setBool(_kServerCatalog, v);
