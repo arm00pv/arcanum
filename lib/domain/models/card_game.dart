@@ -110,7 +110,11 @@ enum CardGame {
     // of Lorcana's cyan, the nearest neighbour in the switcher.
     accent: Color(0xFF5B8DEF),
     deep: Color(0xFF1E3A73),
-    dataSource: 'TCGplayer',
+    // Fantasy Flight's own card database, which is where this game's cards,
+    // sets and search come from now - and not the TCGplayer catalogue this
+    // line used to name. TCGplayer still catalogs One Piece, Digimon and
+    // Dragon Ball, and this game is no longer one of them.
+    dataSource: 'FFG',
     catalogueSince: 2024,
     collectionNoun: 'binder',
     cardAspectRatio: 488 / 680,

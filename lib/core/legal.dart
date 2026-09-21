@@ -128,10 +128,16 @@ abstract final class Legal {
       url: 'https://ygoprodeck.com/api-guide/',
     ),
     (
+      name: 'Star Wars: Unlimited card database',
+      purpose:
+          'Star Wars: Unlimited card data, card images, sets and search, from '
+          'the publisher\'s own database',
+      url: 'https://starwarsunlimited.com',
+    ),
+    (
       name: 'tcgcsv (TCGplayer)',
       purpose:
-          'Card data and current prices for One Piece, Digimon, Dragon Ball, '
-          'Gundam and Star Wars: Unlimited',
+          'Card data and current prices for One Piece, Digimon and Dragon Ball',
       url: 'https://tcgcsv.com',
     ),
     (

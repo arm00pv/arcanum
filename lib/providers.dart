@@ -12,6 +12,7 @@ import 'package:arcanum/data/catalog/mtg_catalog.dart';
 import 'package:arcanum/data/catalog/pokemon_catalog.dart';
 import 'package:arcanum/data/catalog/routed_catalog.dart';
 import 'package:arcanum/data/catalog/shared_catalogue.dart';
+import 'package:arcanum/data/catalog/swu_catalog.dart';
 import 'package:arcanum/data/catalog/tcgcsv_catalog.dart';
 import 'package:arcanum/data/catalog/ygo_catalog.dart';
 import 'package:arcanum/data/db/alert_dao.dart';
@@ -199,11 +200,18 @@ class Bootstrap {
             CardGame.gundam,
             GundamCatalog(),
           ),
-          // The four games TCGplayer catalogs itself share one adapter: the
+          // Unlimited is served by the publisher's own card database, which -
+          // unlike tcgcsv - a browser may read directly, art included, so the
+          // relay is not in this game's path at all. `TcgcsvCatalog`'s own
+          // factory is kept in the tree beside it as the way back.
+          CardGame.starWarsUnlimited: throughTheServer(
+            CardGame.starWarsUnlimited,
+            SwuCatalog(),
+          ),
+          // The three games TCGplayer catalogs itself share one adapter: the
           // provider's shape is the same for all of them and only the category
           // id and the name of the colour field differ.
           CardGame.onePiece: TcgcsvCatalog.onePiece(),
-          CardGame.starWarsUnlimited: TcgcsvCatalog.starWarsUnlimited(),
           CardGame.digimon: TcgcsvCatalog.digimon(),
           CardGame.dragonBall: TcgcsvCatalog.dragonBall(),
         };
