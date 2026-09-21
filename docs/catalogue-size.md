@@ -89,6 +89,50 @@ bloat a nightly full rewrite of a game leaves behind. The honest reading is that
 it does not fit with any margin, and it certainly does not fit eight games plus
 Magic while leaving room to grow.
 
+## The first big import, measured
+
+The section above is a forecast, and this document says in as many words to
+replace it with a measurement at the first opportunity. The opportunity was
+Pokemon, imported 2026-09-21 - 23,736 cards, ten times Lorcana. Measured across
+both games together:
+
+| | |
+| --- | --- |
+| rows | 26,944 |
+| heap (the row data) | 19 MB |
+| indexes | 20 MB |
+| **total** | **38 MB** |
+| **per indexed row** | **1,493 B** |
+
+**The forecast was 1.67 kB a row and the measurement is 1.49 kB, so the
+projection was about 12% pessimistic.** The reason is visible in the two games
+side by side: a Pokemon row carries 679 bytes of data against Lorcana's 838,
+because its rules text averages 195 characters against Lorcana's 151 and its
+`extras` is smaller. Applying the measured figure instead of the forecast:
+
+| | rows | at 1.49 kB |
+| --- | --- | --- |
+| the nine games, low | 189,000 | **282 MB** |
+| the nine games, high | 204,000 | **304 MB** |
+
+Magic is still the one that could push past that - it is more than half the rows
+and its rules text is longer than either game measured here - so the honest
+figure for all nine remains **roughly 320 to 350 MB**, against a 500 MB ceiling.
+
+**What the measurement does not change is the decision.** 320 to 350 MB of a
+500 MB database with no automatic backup on the free plan is still the same
+question, and the answer is still a person's to give. It does mean the answer is
+no longer urgent: there is room for the rest of the catalogue at this size, and
+the thing that would have forced the question early - running out of database -
+is not close.
+
+**And the cost of a night is not the size of the table.** An unchanged night
+costs the same 717 seconds as a changed one, because a set's checksum can only be
+computed from cards that have been fetched. The saving the checksum skip buys is
+database writes, not network. Section 6 of the design calls an unchanged night
+"one comparison", which is true of the write and was never true of the fetch;
+`docs/catalogue-import-pokemon.md` records the measurement.
+
 ## The three ways out, and what each costs
 
 **A. Pay for Pro.** $25 a month. 8 GB of database instead of 500 MB, and daily

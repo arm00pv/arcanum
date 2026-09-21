@@ -1,5 +1,5 @@
 [Unit]
-Description=Arcanum - sample Pokemon prices from TCGdex
+Description=Arcanum - sample Pokemon prices from TCGdex and refresh its shared catalogue
 Documentation=https://github.com/arm00pv/arcanum
 After=network-online.target
 Wants=network-online.target
@@ -12,7 +12,19 @@ WorkingDirectory=/home/zixen/arcanum
 # --skip-polled-today makes a re-run cheap: the script keeps its own record of
 # which cards it has already sampled, so an interrupted day resumes rather than
 # starting over.
-ExecStart=/usr/bin/python3 /home/zixen/arcanum/poll_pokemon_prices.py --db /home/zixen/arcanum/data/pokemon_prices.db --skip-polled-today
+#
+# --catalog is the second job and it is why the environment file below is here:
+# the sweep also writes Pokemon's 220 sets and 23,736 cards into the shared
+# catalogue that a browser reads instead of downloading them. It is the same
+# trade Lorcana's unit already makes, and it is not free - a catalogue sweep is
+# 717 seconds on its own, because a set's checksum can only be computed from
+# cards that have been fetched. The lock below that sweep is per game, so it no
+# longer collides with Lorcana's at 04:40.
+ExecStart=/usr/bin/python3 /home/zixen/arcanum/poll_pokemon_prices.py --db /home/zixen/arcanum/data/pokemon_prices.db --catalog --skip-polled-today
+# The database URL, and nothing else, reaches this process. The file is mode 600
+# and systemd reads it as root; the script is given these as variables rather
+# than as arguments of its own.
+EnvironmentFile=/home/zixen/arcanum/supabase.env
 Nice=10
 IOSchedulingClass=idle
 TimeoutStartSec=3600

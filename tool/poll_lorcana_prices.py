@@ -701,8 +701,23 @@ def parse_args(argv=None):
                     help="also write sets and cards into the shared catalogue")
     ap.add_argument("--catalog-only", action="store_true",
                     help="import the catalogue and sample no prices")
-    ap.add_argument("--lock", default="/tmp/arcanum-catalog.lock",
-                    help="flock file, so two catalogue imports cannot interleave")
+    # One lock per game, not one for the whole catalogue.
+    #
+    # The rule the design states is that two runs of one importer cannot
+    # interleave, and every statement the store generates is scoped to a game -
+    # read_sets(game), count_rows(game), retire_sets(game, ...), the card delete,
+    # and the catalog_meta update. Two importers of *different* games write
+    # disjoint rows and have nothing to keep apart.
+    #
+    # A single shared lock made them contend anyway, and the contention is not
+    # theoretical. A Pokemon sweep is 717 seconds and its timer fires anywhere in
+    # a twenty-minute window from 04:20, so it can still be holding the lock when
+    # Lorcana's starts at 04:40. single_flight takes the lock LOCK_NB, so the
+    # loser is refused rather than made to wait - and the refusal happens before
+    # the sweep runs, so Lorcana would lose the day's prices as well as its
+    # catalogue, and a price series built one sample a day cannot be backfilled.
+    ap.add_argument("--lock", default="/tmp/arcanum-catalog-lorcana.lock",
+                    help="flock file, so two imports of this game cannot interleave")
     ap.add_argument("--dry-run", action="store_true",
                     help="print the SQL the catalogue import would run, and run none")
     ap.add_argument("--allow-empty-set", action="store_true",

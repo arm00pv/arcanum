@@ -3,9 +3,17 @@ Description=Arcanum - sample Lorcana prices and refresh its shared catalogue
 Documentation=https://github.com/arm00pv/arcanum
 
 [Timer]
-# The window is unchanged by the catalogue import arriving in this unit: the
-# three nightly samplers are spread across 04:20 to 04:55 and each of them runs
-# in seconds to a couple of minutes, so there is nothing here to contend for.
+# The three nightly samplers are spread across 04:20 to 04:55 and they fit in
+# seconds to a couple of minutes before a catalogue import arrived. They no
+# longer do: Lorcana's own import is minutes, and Pokemon's is 717 seconds fired
+# anywhere inside a twenty-minute window from 04:20 - so the two windows overlap
+# and the clock is no longer what keeps them apart.
+#
+# What keeps them apart now is that each importer takes its own lock file,
+# /tmp/arcanum-catalog-<game>.lock. The catalogue is per game and so is the lock,
+# because every statement the store generates is scoped by game and two
+# importers of different games write disjoint rows. The times below are left
+# where they were, because they no longer carry that responsibility.
 # docs/catalogue-refresh.md records the measurement and the alternatives.
 OnCalendar=*-*-* 04:40:00 UTC
 # Persistent matters more here than for the other timers: if the host is down

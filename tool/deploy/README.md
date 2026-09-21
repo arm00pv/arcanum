@@ -20,7 +20,8 @@ Paths on the host:
     /home/zixen/arcanum/
       sync_server.py                  the service
       slice_prices.py                 builds the Magic database from MTGJSON
-      poll_pokemon_prices.py          samples Pokemon prices once a day
+      poll_pokemon_prices.py          samples Pokemon prices once a day, and refreshes
+                                Pokemon's shared catalogue (--catalog)
       check_catalog_freshness.py      reports a stale shared catalogue, to the same
                                       notify path the price alerts use
       rebuild_mtg_history.sh          download + slice + swap, in one step
@@ -41,7 +42,7 @@ Paths on the host:
 | Unit | What it does | When |
 | --- | --- | --- |
 | `arcanum-sync.service` | serves all four databases on 172.19.0.1:8787 | always |
-| `arcanum-pokemon-poll.timer` | samples TCGdex into the Pokemon database | daily, 04:20 UTC |
+| `arcanum-pokemon-poll.timer` | samples TCGdex into the Pokemon database and refreshes Pokemon's shared catalogue | daily, 04:20 UTC |
 | `arcanum-lorcana-poll.timer` | samples Lorcast into the Lorcana database, and refreshes the shared Lorcana catalogue in Postgres | daily, 04:40 UTC |
 | `arcanum-yugioh-poll.timer` | samples YGOPRODeck into the Yu-Gi-Oh! database | daily, 04:55 UTC |
 | `arcanum-mtg-rebuild.timer` | re-slices the Magic history from MTGJSON | Mondays, 05:30 UTC |

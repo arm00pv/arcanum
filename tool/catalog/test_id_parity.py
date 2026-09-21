@@ -17,16 +17,19 @@ side fails a test rather than quietly moving the goalposts.
 One case per game in the GAMES table below, with the same assertions applied to
 every case: the ids the importer derives are the ids the client derived, for
 every card, and nothing is dropped or repeated. Each case also names the columns
-of a row its importer actually derives, because two of the three games have no
-catalogue importer yet and this file must not claim more than the code it runs:
+of a row its importer actually derives, so this file never claims more than the
+code it runs - Lorcana and Pokemon have an importer and are compared over every
+column of a card row and of a set row, while Yu-Gi-Oh! has none yet and is
+compared over the fields its id derivation produces:
 
   * lorcana - poll_lorcana_prices.card_document() and set_document(): every
     column of the row, because that importer exists and writes it. The ids here
     are forwarded from the provider.
-  * pokemon - the id is the provider's own and both sides forward it; the
-    derived columns beside it (oracle_id, collector_sort) are the shared Dart
-    rules the importer already owns a mirror for, and are compared. Nothing else
-    is claimed, because no Pokemon catalogue importer has been written yet.
+  * pokemon - poll_pokemon_prices.card_document() and set_document(): every
+    column of the row, because that importer exists and writes it. The ids are
+    forwarded from the provider, and everything beside them is derived: the
+    oracle id, the collector sort key, the composed type line, the rules text,
+    the art URLs and the JSON in extras.
   * yugioh - poll_yugioh_prices.printing_id(), slug() and set_index(): the
     synthesised id and the set code inside it. The id derivation is mirrored in
     full and is where the two languages are likeliest to disagree.
@@ -58,6 +61,7 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL = os.path.dirname(HERE)
@@ -71,6 +75,7 @@ VECTORS = os.path.join(HERE, "catalog_id_vectors.json.gz")
 sys.path.insert(0, TOOL)
 import catalog_store  # noqa: E402
 import poll_lorcana_prices as lorcast  # noqa: E402
+import poll_pokemon_prices as tcgdex  # noqa: E402
 import poll_yugioh_prices as ygoprodeck  # noqa: E402
 
 RESULTS = []
@@ -209,71 +214,140 @@ def lorcana_sets(sample):
 # --------------------------------------------------------------------- pokemon
 
 def tcgdex_ids(body):
-    """The card ids one TCGdex set response lists, read the way the poller reads them.
+    """The card ids one TCGdex set response lists, by the importer's own extraction.
 
-    poll_pokemon_prices.card_ids_for_set() fetches the set and extracts the ids
-    in one function, so the extraction - and only the extraction - is written out
-    here. It is the importer's entire relationship with a Pokemon card id: the
-    id the set response lists is the card_id every price is sampled under, and
-    the card detail is fetched by that same id. There is no derivation to
-    mirror, which is what the check below this states as a test.
+    poll_pokemon_prices.stubs_of() is where the sweep, the catalogue importer
+    and this test all read a set's brief card entries from, and card_ids_for_set()
+    is its id-only form. It is the importer's entire relationship with a Pokemon
+    card id: the id a set response lists is the id a card is fetched by and the
+    id every price is sampled under, so there is no derivation to mirror and
+    nothing to get a character wrong - which is what the check below this states
+    as a test.
     """
-    if not isinstance(body, dict):
-        return []
-    return [c.get("id") for c in (body.get("cards") or [])
-            if isinstance(c, dict) and c.get("id")]
+    return [c["id"] for c in tcgdex.stubs_of(body)]
+
+
+def client_addressable_id(card_id):
+    """The key the client's own card lookup uses for a card id.
+
+    The client drops the id into its request path unescaped, and the adapter
+    that serves this sample reads the id back out with Uri.pathSegments, which
+    decodes percent-escapes. An id carrying an escape is therefore looked up
+    under its decoded spelling and is not found: "exu-%3F" is asked for as
+    "exu-?" and answers 404. That is the same card the live provider answers 404
+    for the importer, which is why the two halves of this test agree about which
+    cards the client cannot read.
+
+    Public because tool/catalog/prove_pokemon_import.py asks the same question
+    of the same sample: one rule, one implementation, two callers.
+    """
+    return urllib.parse.unquote(card_id)
+
+
+def pokemon_set_downloads(sample):
+    """Each set the sample holds a response for, as (list entry, body), in order.
+
+    The client lists every set and then downloads the ones it is asked for, so
+    this is the same selection fetchCardsInSet makes: the entry the list carries,
+    which is where a set row's published count comes from, and the set's own
+    response, which is where its cards, its name, its release date and its
+    series come from. A set the sample lists without a response is one the
+    client's download of it 404s, and it contributes no cards.
+
+    The proof script imports this rather than walking the sample a second time,
+    because the two would otherwise be able to disagree about which cards the
+    sample can place in a set.
+    """
+    details = sample.get("details") or {}
+    out = []
+    for item in sample.get("sets") or []:
+        if not isinstance(item, dict):
+            continue
+        body = details.get(item.get("id"))
+        if isinstance(body, dict):
+            out.append((item, body))
+    return out
 
 
 def pokemon_cards(sample):
-    """Every catalog_cards row the Pokemon importer would derive, keyed by its id.
+    """Every catalog_cards row the Pokemon importer derives, keyed by its id.
 
-    The id is the provider's own and is forwarded by both sides. The two columns
-    beside it are derived, and both are shared Dart rules the importer already
-    owns a mirror for: TcgCard.normaliseName fills oracle_id for Pokemon exactly
-    as it does for Lorcana, and TcgCard.collectorNumberSortKey orders a shelf
-    whose numbers are "4", "TG01", "SV001" and "H1" in one set. Those mirrors
-    live in poll_lorcana_prices.py because Lorcana was the first game to need
-    them; they are imported from there rather than transcribed a second time
-    here, because a second transcription of one rule is the failure this file
-    exists to catch.
+    The id is the provider's own and is forwarded by both sides. Everything
+    beside it is derived, and is compared column by column: the oracle id, the
+    collector sort key, the composed type line, the rules text, the rarity, the
+    art URLs and the JSON in extras.
 
-    The set code is the third derived column: PokemonCatalog resolves it from
-    the set the card belongs to rather than from the card's own id, and TCGdex
-    publishes that set id on the card response.
+    The driver mirrors the client's two paths, because the client has two and
+    they derive two different rows for one card - which is a fact about
+    PokemonCatalog rather than about this test.
+
+    A set the sample holds a response for is downloaded whole, the way
+    PokemonCatalog.fetchCardsInSet downloads it: one row per brief entry in the
+    set response, built from the full card object where the sample holds one.
+
+    Every other sampled card is reached the way the app reaches a card it
+    already holds an id for, by the id alone: fetchCardById has no set object,
+    so its row carries no release date, takes its set name from the payload's
+    embedded set and its set code from the id's own last dash. Those rows are
+    why this driver is not simply "the importer's mapping over every card": the
+    importer walks sets, so in a real run it has the set in hand, while the
+    committed sample holds no set response at all for the sets those cards come
+    from - the cut reaches them by id - and the row both languages derive from
+    the responses that do exist is that by-id row.
     """
-    mine = {}
+    full = {}
     for card in sample["cards"]:
-        if not isinstance(card, dict):
+        if isinstance(card, dict) and isinstance(card.get("id"), str):
+            full[card["id"]] = card
+
+    mine = {}
+    for item, body in pokemon_set_downloads(sample):
+        serie = tcgdex.serie_id(body)
+        set_doc = tcgdex.set_document(item, body)
+        for stub in tcgdex.stubs_of(body):
+            # A body the client cannot address yields no card object, exactly as
+            # it yields none for the client, and the row is the stub row built
+            # from the set response instead.
+            card = full.get(client_addressable_id(stub["id"]))
+            row = tcgdex.card_document(card, set_doc=set_doc, stub=stub, serie=serie)
+            if row is not None:
+                mine[row["id"]] = row
+
+    for card_id, card in full.items():
+        if card_id in mine:
             continue
-        card_id = card.get("id")
-        if not isinstance(card_id, str) or not card_id:
-            continue
-        set_map = card.get("set") if isinstance(card.get("set"), dict) else {}
-        number = "" if card.get("localId") is None else str(card.get("localId"))
-        mine[card_id] = {
-            "id": card_id,
-            "oracle_id": lorcast.normalise_name(str(card.get("name") or "")),
-            "collector_sort": lorcast.collector_sort_key(number),
-            "set_code": str(set_map.get("id") or ""),
-        }
+        row = tcgdex.card_document(card, requested_id=card_id)
+        if row is not None:
+            mine[row["id"]] = row
     return mine
 
 
 def pokemon_sets(sample):
-    """Every catalog_sets row the client stores, keyed by its code.
+    """Every catalog_sets row the Pokemon importer derives, keyed by its code.
 
-    The code is the provider's own set id: PokemonCatalog builds the set's id
-    and its code from the id TCGdex published, so nothing here is derived and
-    the only column to hold the importer to is that one.
+    PokemonCatalog lists every set once and then enriches each one with that
+    set's own response, so its row is built from two payloads and both are
+    committed here: the entry the list carries - the id, the name and the card
+    count TCGdex publishes there - and the detail, which carries the release
+    date, the logo and the series. A set whose detail response failed keeps the
+    row the list entry alone describes, which is what fetchAllSets falls back
+    to. All five of the sample's sets have a detail, so the enrich branch and
+    every column it writes are compared.
     """
     mine = {}
-    for item in sample["sets"]:
-        if not isinstance(item, dict):
+    for item, body in pokemon_set_downloads(sample):
+        row = tcgdex.set_document(item, body)
+        if row is not None:
+            mine[row["code"]] = row
+    # A set the list holds without a response still has a row: the client's
+    # download of it 404s and it keeps what the list alone describes.
+    listed = {item.get("id") for item, _ in pokemon_set_downloads(sample)}
+    for item in sample.get("sets") or []:
+        if not isinstance(item, dict) or item.get("id") in listed:
             continue
-        code = item.get("id")
-        if not isinstance(code, str) or not code:
-            continue
-        mine[code] = {"code": code, "id": code}
+        row = tcgdex.set_document(item, None)
+        if row is not None:
+            mine[row["code"]] = row
     return mine
 
 
@@ -399,6 +473,81 @@ def layout_is_the_clients_empty_string(case):
     return False, f"layouts stored: {sorted(layouts)}"
 
 
+def the_unaddressable_card_round_trips(case):
+    """The one card the client cannot address is stored as the row the client stores.
+
+    TCGdex publishes a collector number of "%3F" as the card id "exu-%3F", and
+    that id only addresses as a path segment when the percent sign is escaped
+    again. The Dart client does not escape it, so its request reaches the router
+    as "exu-?" and answers 404, and PokemonCatalog then stores a card built from
+    the set response's brief entry: no rarity, no rules text, no artist, no
+    extras and no release date. A sample that did not hold such a card would let
+    an importer store the fuller row it *can* read and still pass - and the
+    catalogue would then serve a card the phone's own provider path cannot show,
+    which is the two-ways-to-fill-one-table problem the design warns about. So
+    the trap is asserted rather than assumed.
+    """
+    unaddressable = sorted(
+        str(card["id"]) for card in case.sample["cards"]
+        if isinstance(card, dict) and isinstance(card.get("id"), str)
+        and client_addressable_id(card["id"]) != card["id"])
+    if not unaddressable:
+        return False, ("the sample holds no card the client cannot address, so "
+                       "the fallback row this importer has a branch for is "
+                       "untested")
+    problems = []
+    for card_id in unaddressable:
+        row = case.cards.get(card_id)
+        if row is None:
+            problems.append(f"{card_id} produced no row at all")
+            continue
+        if row.get("rarity") != "unknown":
+            problems.append(f"{card_id} carries rarity {row.get('rarity')!r}")
+        if row.get("extras") is not None:
+            problems.append(f"{card_id} carries extras {row.get('extras')!r}")
+        if row.get("oracle_text") is not None or row.get("cmc") is not None:
+            problems.append(f"{card_id} carries rules text or an hp")
+        if row.get("released_at") is not None:
+            problems.append(f"{card_id} carries a release date")
+    if problems:
+        return False, "\n".join(problems)
+    return True, (f"{len(unaddressable)} card(s) the client cannot address "
+                  f"({', '.join(unaddressable)}) are stored as the fallback row "
+                  f"the client itself stores, under their own ids")
+
+
+def the_set_codes_are_the_folded_form_the_catalogue_stores(case):
+    """Every set id in the sample is already the folded code the catalogue stores.
+
+    The catalogue stores a Pokemon set code folded to lower case - see
+    poll_pokemon_prices.set_document, which argues it in full - while
+    PokemonCatalog puts the provider's own id in TcgSet.code. TCGdex publishes
+    fifteen set ids that are not lower case (A1, A1a, A2 ... B2a and P-A), so
+    for those sets the two really do differ; the committed sample holds none of
+    them, because the five sets it cuts whole are base1, swsh9tg, swsh4.5sv, exu
+    and miscp. That makes the whole-row comparison in this case silent about the
+    folding rule, and this check is here so that silence is stated rather than
+    assumed. It fails if the sample is ever re-cut to hold a set whose id is not
+    lower case, so that the row comparison does not report a mismatch whose
+    cause is a decision somebody has to make.
+    """
+    unusual = sorted(
+        str(item["id"]) for item in case.sample["sets"]
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+        and item["id"] != item["id"].lower())
+    if unusual:
+        return False, (
+            f"the sample now holds set id(s) that are not lower case: {unusual}. "
+            "The importer stores the folded code and the client stores the "
+            "provider's own, so those rows differ by construction and the "
+            "vectors need a decision before they can be compared")
+    return True, ("every set id in the sample is already lower case, so the "
+                  "folded code the catalogue stores is the id the client stores: "
+                  "the folding is a no-op over these vectors, and the fifteen "
+                  "live set ids it does change are argued in "
+                  "poll_pokemon_prices.set_document")
+
+
 def the_set_responses_list_the_same_ids(case):
     """The ids the provider's own set responses list are the ids the rows carry.
 
@@ -519,11 +668,13 @@ GAMES = (
     Game("lorcana", lorcana_cards, lorcana_sets,
          checks=(every_id_is_the_providers_own, no_card_was_dropped,
                  layout_is_the_clients_empty_string)),
+    # card_columns and set_columns are None, which means every column: the
+    # Pokemon catalogue importer exists, so there is nothing left to excuse.
     Game("pokemon", pokemon_cards, pokemon_sets,
-         card_columns=("id", "oracle_id", "collector_sort", "set_code"),
-         set_columns=("code", "id"),
          checks=(every_id_is_the_providers_own, no_card_was_dropped,
-                 the_set_responses_list_the_same_ids)),
+                 the_set_responses_list_the_same_ids,
+                 the_unaddressable_card_round_trips,
+                 the_set_codes_are_the_folded_form_the_catalogue_stores)),
     Game("yugioh", yugioh_cards, yugioh_sets,
          card_columns=("id", "set_code"), set_columns=("code",),
          checks=(every_id_begins_with_its_passcode, the_collision_rule_is_exercised,
