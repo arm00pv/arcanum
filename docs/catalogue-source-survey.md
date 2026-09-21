@@ -8,11 +8,13 @@ actually cost; this file is the step before either of those - which sources
 exist for the four games still catalogued only through tcgcsv, and which of
 them a browser can read.
 
-**Its recommendation: move Star Wars: Unlimited next, from the official FFG
-API at `https://admin.starwarsunlimited.com/api/`.** Nothing has been built
-from this survey yet, so that is a proposal rather than a record, and the two
-things to read before accepting it are the costs under it: no price of any
-kind, and an undocumented internal API.
+**Its recommendation was taken: Star Wars: Unlimited moved first, onto the
+official FFG API at `https://admin.starwarsunlimited.com/api/`.**
+[catalogue-import-swu.md](catalogue-import-swu.md) is that move - the client
+half of it, which is what the web build needed, with the server half still to
+come. The survey's other three games stand as written, and the costs it warned
+about for this one - no price of any kind, an undocumented internal API - are
+what the move paid.
 
 A measured survey. Every URL, status code, header value,
 count and byte size below was produced by a real request from this machine
@@ -38,6 +40,31 @@ Method, so the numbers can be reproduced:
   it matters.
 - No source here needs a credential that this session held, and no credential
   was printed or stored.
+
+## Measured after the survey: TCGplayer's image CDN stopped answering
+
+On 2026-09-21, while the Star Wars: Unlimited move was being checked:
+
+~~~
+GET https://tcgplayer-cdn.tcgplayer.com/product/712892_400w.jpg
+  403  application/xml  <Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>
+~~~
+
+Every product image tcgcsv publishes is refused - from the droplet *and* from a
+residential machine, with no `User-Agent` and with a browser's, with and without a
+`Referer`, and for the `200w`, `400w` and `in_1000x1000` forms alike. So it is not
+a block of our host and not a header we can set: the host that tcgcsv's image URLs
+point at no longer serves them. One Piece, Digimon and Dragon Ball art is a
+card-back placeholder in the web build and on a phone until a working address is
+found, and the relay is not at fault - it answers 502 because upstream does, which
+is exactly what `/arcanumweb-api/art/tcgplayer/...` returned when a live browser
+asked for a One Piece set's cards.
+
+It sharpens what the rest of this file is measuring: for the three games that
+remain, a candidate source's **art host** is now worth as much as its data host,
+and `api.swu-db.com` - the one tcgcsv-era source that still carries prices - is
+refused by the browser for both. The game that has moved reads its art from
+`cdn.starwarsunlimited.com`, which answers 200 with `*`.
 
 ## How to read CORS below
 
