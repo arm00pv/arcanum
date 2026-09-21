@@ -5,6 +5,7 @@ import 'package:arcanum/core/theme/mana.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/backup/backup_service.dart';
+import 'package:arcanum/data/catalog/catalog_meta.dart';
 import 'package:arcanum/data/catalog/lorcana_catalog.dart';
 import 'package:arcanum/data/catalog/mtg_catalog.dart';
 import 'package:arcanum/data/catalog/pokemon_catalog.dart';
@@ -133,12 +134,20 @@ class Bootstrap {
   /// [sharedCatalog] takes the game it is being built for rather than being a
   /// single catalogue, because which games the server holds is
   /// [sharedCatalogueGames] and it grows one game at a time.
+  ///
+  /// [sharedCatalogMeta] is the same path's other read: the server's
+  /// `catalog_meta` table, which says whether a game's cached set list is out
+  /// of date. It arrives as one object rather than a factory because it is one
+  /// request for all nine games and holds no per-game state - and it is gated by
+  /// the same [sharedCatalogAllowed], so the Settings switch that turns the
+  /// shared catalogue off turns the revision read off with it.
   static Bootstrap create({
     required AppDatabase database,
     required AppSettings settings,
     Map<CardGame, CardCatalog>? catalogs,
     CardCatalog Function(CardGame game)? sharedCatalog,
     bool Function()? sharedCatalogAllowed,
+    CatalogMetaTable? sharedCatalogMeta,
   }) {
     final catalogDao = CatalogDao(database.db);
     final collectionDao = CollectionDao(database.db);
@@ -195,6 +204,8 @@ class Bootstrap {
     final catalogRepository = CatalogRepository(
       catalogs: resolvedCatalogs,
       dao: catalogDao,
+      metaTable: sharedCatalogMeta,
+      serverAllowed: sharedCatalogAllowed,
     );
 
     final collections = <CardGame, CollectionRepository>{

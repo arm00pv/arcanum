@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:arcanum/core/utils/collector_query.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
+import 'package:arcanum/data/catalog/catalog_meta.dart';
+import 'package:arcanum/data/catalog/shared_catalogue.dart';
 import 'package:arcanum/data/db/catalog_dao.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
@@ -19,13 +21,53 @@ class CatalogRepository {
   CatalogRepository({
     required Map<CardGame, CardCatalog> catalogs,
     required CatalogDao dao,
+    CatalogMetaTable? metaTable,
+    bool Function()? serverAllowed,
   }) : _catalogs = catalogs,
-       _dao = dao;
+       _dao = dao,
+       _meta = metaTable,
+       _serverAllowed = serverAllowed;
 
   final Map<CardGame, CardCatalog> _catalogs;
   final CatalogDao _dao;
 
-  /// Sets are re-fetched when the cache is older than this.
+  /// The server's `catalog_meta` table, when there is one to read.
+  ///
+  /// Absent on a phone and absent in a browser that has not been handed the
+  /// server path at all, which is what keeps "no server" a build-time fact
+  /// rather than a caught error.
+  final CatalogMetaTable? _meta;
+
+  /// Whether the server may be read for the call about to be made.
+  ///
+  /// The same question [RoutedCatalog] asks before it reads a card, asked here
+  /// before a revision is read: the Settings switch and whether anybody is
+  /// signed in, answered at call time because both change while the app is
+  /// open. One answer for both is deliberate - a switch that turns the shared
+  /// catalogue off must not leave something in the app still talking to it.
+  final bool Function()? _serverAllowed;
+
+  /// Sets are re-fetched when the cache is older than this - but only where
+  /// there is no server to ask.
+  ///
+  /// Section 6 offers two ways to keep this TTL and the server's
+  /// `sets_revision` from both invalidating the same set list, and warns about
+  /// what happens if they are simply added together: two independent reasons to
+  /// re-download is how a browser ends up re-downloading the set list on every
+  /// visit. **This implements the simpler of the two - when a server answers,
+  /// the revision wins and this TTL is not consulted at all** - rather than the
+  /// floor, and the reason is that the floor is not one rule but two: it needs
+  /// the revision to be authoritative *and* a per-session memo of what has
+  /// already been fetched, which is a second piece of state that has to be
+  /// right for the first rule to hold. Ignoring the TTL when a server answers
+  /// is a single branch with a single owner: [CatalogDao.isCatalogued] and the
+  /// local row count say whether anything is cached, the revision says whether
+  /// what is cached is old, and this number says nothing at all.
+  ///
+  /// So the TTL keeps exactly the job it has today - the phone, and any browser
+  /// with no session, where no revision exists to act on. It is a week of
+  /// staleness on a device that has no way to learn the catalogue changed, and
+  /// it is the thing the revision replaces rather than the thing it joins.
   static const setCacheTtl = Duration(days: 7);
 
   /// How many missing printings are asked about, and stored, in one go.
@@ -45,10 +87,18 @@ class CatalogRepository {
   /// Whether a catalogue is registered for a game.
   bool supports(CardGame game) => _catalogs.containsKey(game);
 
-  /// Loads a game's full set catalogue, refreshing when stale.
+  /// Loads a game's full set catalogue, refreshing when it is out of date.
   ///
-  /// [forceRefresh] bypasses the TTL. A network failure with a warm cache is not
-  /// an error: the cached catalogue is returned instead.
+  /// "Out of date" has two answers, and which one is asked depends on whether
+  /// there is a server to ask. With one, the server's `sets_revision` for the
+  /// game decides: a revision this device has not read is a set list it does not
+  /// have the current form of, and a set released today appears today rather
+  /// than up to seven days from now. Without one, [setCacheTtl] decides exactly
+  /// as it always has.
+  ///
+  /// [forceRefresh] bypasses both - it is the pull-to-refresh gesture, and a
+  /// collector who asks for the list gets the list. A network failure with a
+  /// warm cache is not an error: the cached catalogue is returned instead.
   Future<List<TcgSet>> loadSets(
     CardGame game, {
     bool forceRefresh = false,
@@ -56,21 +106,110 @@ class CatalogRepository {
     void Function(int done, int total)? onProgress,
   }) async {
     final cachedCount = await _dao.setCount(game);
-    final fetchedAt = await _dao.setsFetchedAt(game);
-    final stale =
-        fetchedAt == null || DateTime.now().difference(fetchedAt) > setCacheTtl;
+    final _SetsRevision? revision = await _revision(game);
 
-    if (forceRefresh || cachedCount == 0 || stale) {
+    final bool mustFetch;
+    if (forceRefresh) {
+      mustFetch = true;
+    } else if (cachedCount == 0) {
+      // Presence, and it is decided by the local rows rather than by any
+      // revision. A revision this client has already read says the sets it has
+      // are current, and says nothing whatever about whether it has any: a
+      // cache that was cleared, evicted by Safari, or never filled all leave a
+      // client that has read revision 2 and holds nothing. Reading that match as
+      // "I have them" is what would leave the Sets tab empty and keep it empty,
+      // which is why this branch comes first and cannot be skipped.
+      mustFetch = true;
+    } else if (revision != null) {
+      // A server answered, so it decides and the TTL is not consulted at all -
+      // see [setCacheTtl]. A revision never read before counts as moved: the
+      // client cannot say that what it holds is the current form of the list,
+      // and one read settles it.
+      mustFetch = revision.server != revision.seen;
+    } else {
+      final fetchedAt = await _dao.setsFetchedAt(game);
+      mustFetch =
+          fetchedAt == null ||
+          DateTime.now().difference(fetchedAt) > setCacheTtl;
+    }
+
+    if (mustFetch) {
       try {
         final sets = await catalogFor(game)
             .fetchAllSets(onProgress: onProgress);
         if (sets.isNotEmpty) await _dao.upsertSets(game, sets);
+        // Written after the read came back and never before it. A revision this
+        // client has written down is a claim that it has read the set list at
+        // that revision, so recording one for a request that failed - or one
+        // that a cancelled tab abandoned - would leave the next visit believing
+        // itself current on the strength of an answer nobody received.
+        //
+        // An empty answer is still an answer and is recorded: the catalogue is
+        // asked and has nothing, which is what a game whose import has not run
+        // looks like - and when that import does run it moves the revision, so
+        // the list arrives without this device having to ask again every visit
+        // in the meantime.
+        //
+        // Two things this cannot tell apart, said plainly because neither is
+        // visible from here: [RoutedCatalog] answers from the provider whenever
+        // the server has nothing or fails, so the rows written may have come
+        // from either half; and the number recorded is the server's, whichever
+        // half produced the list.
+        if (revision != null) await _dao.setSetsRevision(game, revision.server);
       } catch (_) {
         if (cachedCount == 0) rethrow;
-        // Otherwise fall through to the cache.
+        // Otherwise fall through to the cache, and the revision stays where it
+        // was, so the next visit asks again.
       }
     }
     return _dao.sets(game, sort: sort);
+  }
+
+  /// A game's set list revision: the one the server publishes and the one this
+  /// device last read.
+  ///
+  /// Read together because neither half means anything alone, and null whenever
+  /// the server cannot be asked - no `catalog_meta` table in this build, no
+  /// session, the switch off, a request that failed, or a table with no row for
+  /// this game. Every one of those is the same answer on purpose: the seven-day
+  /// TTL governs, which is the app exactly as it was before this read existed.
+  ///
+  /// One request per call, and no memo of it. [loadSets] is asked once per game
+  /// per session by `setsProvider` and again on an explicit refresh, so one
+  /// extra request per set-list read is the whole cost of knowing whether the
+  /// cache is behind - and it is the request the design says to make at boot
+  /// and after sign-in, which is when this happens.
+  ///
+  /// A row for another game is skipped rather than counted, and a table with no
+  /// row for this game is "no revision" rather than revision zero: a game the
+  /// server has never imported is a game whose set list this client cannot learn
+  /// anything about, and the TTL is the honest answer for it.
+  ///
+  /// And only for the games the shared catalogue holds. `catalog_meta` carries
+  /// a row for every game on the server, but a revision is a statement about the
+  /// set list *the server serves*: for a game this app reads from its provider,
+  /// a revision it cannot act on would take the seven-day TTL away and pin that
+  /// game's set list to whatever it happened to read first. Which games those
+  /// are is [sharedCatalogueGames], the one place that answers it.
+  Future<_SetsRevision?> _revision(CardGame game) async {
+    final CatalogMetaTable? meta = _meta;
+    if (meta == null || !sharedCatalogueGames.contains(game)) return null;
+    if (!(_serverAllowed?.call() ?? false)) return null;
+    final List<Map<String, Object?>> rows;
+    try {
+      rows = await meta.meta();
+    } catch (_) {
+      return null;
+    }
+    for (final Map<String, Object?> row in rows) {
+      final CatalogMeta? entry = CatalogMeta.fromRow(row);
+      if (entry == null || entry.game != game) continue;
+      return _SetsRevision(
+        server: entry.setsRevision,
+        seen: await _dao.setsRevision(game),
+      );
+    }
+    return null;
   }
 
   /// All sets currently in the cache for a game, with no network access.
@@ -399,5 +538,25 @@ class CatalogRepository {
   Future<int> cardCount(CardGame game) => _dao.cardCount(game);
 
   /// Removes a game's cached catalogue to reclaim space.
+  ///
+  /// The revision this device has read is deliberately left behind: it is a
+  /// record of what was read, not of what is stored, and the sets are gone -
+  /// which [loadSets] sees as an empty cache and answers by downloading them
+  /// again, whatever the revision says.
   Future<void> clearCachedCatalog(CardGame game) => _dao.clearGame(game);
+}
+
+/// One game's set list revision, both halves of the comparison.
+///
+/// [seen] is null when this device has never recorded one, which is the state a
+/// browser is in the first time it reads a game from the server and the state a
+/// device that has only ever used a provider is permanently in.
+class _SetsRevision {
+  const _SetsRevision({required this.server, required this.seen});
+
+  /// The revision the server publishes for this game.
+  final int server;
+
+  /// The revision this device last read, or null if it never has.
+  final int? seen;
 }

@@ -212,6 +212,55 @@ class CatalogDao {
     return t == null ? null : DateTime.fromMillisecondsSinceEpoch(t);
   }
 
+  /// The key a game's server revision is remembered under.
+  ///
+  /// `meta` rather than a column, because the client's memory of "which
+  /// revision of this game's set list have I read" is not a fact about a set and
+  /// not a fact about a card - it is one number per game, and the local database
+  /// already has a table for exactly that. It also means no schema change: the
+  /// per-set `cards_revision` of section 6 is the half that wants a column, and
+  /// this half deliberately does not need one.
+  ///
+  /// The game is in the key rather than in a second column, so a game that has
+  /// never been read from the server simply has no row, and [clearGame] - which
+  /// deletes sets and cards - cannot take the revision with it by accident.
+  static String setsRevisionKey(CardGame game) => 'catalog_sets_rev:${game.id}';
+
+  /// The revision of a game's set list this device last read, or null.
+  ///
+  /// Null means "never read one", which is not zero and is not "the sets are
+  /// here" - see [setSetsRevision] and [CatalogRepository.loadSets].
+  Future<int?> setsRevision(CardGame game) async {
+    final rows = await _db.query(
+      'meta',
+      columns: <String>['value'],
+      where: 'key = ?',
+      whereArgs: <Object?>[setsRevisionKey(game)],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return int.tryParse((rows.first['value'] as String?) ?? '');
+  }
+
+  /// Records the revision of the set list this device has just read.
+  ///
+  /// Written *after* a read that came back and never before one: the row is a
+  /// claim about what this client has in hand, so a read that failed must leave
+  /// the previous number where it was, or the next visit would believe itself
+  /// up to date on the strength of a request that never arrived.
+  ///
+  /// What this number is not is permission to show an empty Sets tab. A client
+  /// that has read revision 2 and then had its rows deleted - a cleared cache,
+  /// Safari evicting the origin, a game removed to reclaim space - has still
+  /// read revision 2, and its presence question is answered by the local rows
+  /// and by [isCatalogued], exactly as it was before any of this existed.
+  Future<void> setSetsRevision(CardGame game, int revision) async {
+    await _db.insert('meta', <String, Object?>{
+      'key': setsRevisionKey(game),
+      'value': '$revision',
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   /// How much of each cached set the collector owns, keyed by set code.
   ///
   /// Counted in binder slots, not printings, because that is the unit every

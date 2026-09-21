@@ -11,6 +11,7 @@ import 'package:arcanum/core/platform/web_database.dart';
 import 'package:arcanum/core/platform/web_storage.dart';
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/auth/account_service.dart';
+import 'package:arcanum/data/catalog/catalog_meta.dart';
 import 'package:arcanum/data/catalog/catalog_table.dart';
 import 'package:arcanum/data/catalog/supabase_catalog.dart';
 import 'package:arcanum/data/sync/account_changes.dart';
@@ -103,6 +104,14 @@ Future<void> main() async {
           : null,
       sharedCatalogAllowed: kIsWeb
           ? () => settings.serverCatalog && (account?.isSignedIn ?? false)
+          : null,
+      // The other half of the same read path, and the reason a set released
+      // this morning is in the Sets tab this morning: the server's
+      // `catalog_meta` rows carry a revision per game, and a game whose
+      // revision has moved has its set list downloaded again. Gated by the same
+      // callback above, so turning the shared catalogue off stops this too.
+      sharedCatalogMeta: kIsWeb
+          ? SupabaseCatalogMetaTable(() => Supabase.instance.client)
           : null,
     );
 
