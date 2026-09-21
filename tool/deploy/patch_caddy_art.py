@@ -2,7 +2,7 @@
 
     python3 ~/arcanum/tool/deploy/patch_caddy_art.py
     sudo docker exec n8n-docker-caddy-caddy-1 caddy reload \
-        --config /etc/Caddyfile --adapter caddyfile
+        --config /etc/caddy/Caddyfile --adapter caddyfile
 
 Kept as a script rather than a hand edit so the change is repeatable, reviewable
 and always leaves a backup behind, in the same way as patch_caddy_web.py.

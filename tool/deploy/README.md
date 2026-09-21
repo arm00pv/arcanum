@@ -217,7 +217,7 @@ it and the relay is asked for it once. A failure is `no-store` instead, so a CDN
 having a bad minute cannot leave a picture that no reload will mend.
 
     python3 ~/arcanum/tool/deploy/patch_caddy_art.py
-    sudo docker exec n8n-docker-caddy-caddy-1 caddy reload --config /etc/Caddyfile --adapter caddyfile
+    sudo docker exec n8n-docker-caddy-caddy-1 caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
     pkill -f tcgcsv_proxy.py; nohup python3 ~/arcanum/tcgcsv_proxy.py >> ~/arcanum/logs/web-relay.log 2>&1 &
 
 Nothing supervises the relay: it has been started by hand since it was written,
