@@ -468,8 +468,21 @@ class CollectionRepository {
     // Cached prices are only as fresh as the last set download, so without
     // this the snapshot would faithfully record a stale number and the
     // resulting history would be quietly wrong.
+    //
+    // Asked through the revision-aware read rather than the unconditional one,
+    // because a browser signed in to a game the server holds has a second
+    // reason to know whether these prices are behind: the server's
+    // `prices_revision`, which the importer bumps whenever it rewrites that
+    // game's prices. A revision this device has not read refetches - and only
+    // for the cards in this collection, in batches, which is section 6's own
+    // bound - while a revision it has read does not. A phone, a signed-out
+    // browser, a game the server does not serve, and a game whose prices the
+    // server has never observed all take the fallback in
+    // [CatalogRepository.refreshStalePrices], which is this call exactly as it
+    // was written before any of that existed. The snapshot is once a day, so a
+    // refresh is asked for at most once a day either way.
     try {
-      await _catalogs.refreshPrices(
+      await _catalogs.refreshStalePrices(
         game,
         entries.map((e) => e.cardId).toSet().toList(),
       );

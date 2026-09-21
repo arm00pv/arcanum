@@ -261,6 +261,56 @@ class CatalogDao {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  /// The key a game's server price revision is remembered under.
+  ///
+  /// The same `meta` row as [setsRevisionKey], written under the name section 6
+  /// of docs/catalogue-server-side.md gives it. A key of its own rather than a
+  /// second value behind one key, because the two revisions move independently:
+  /// a night's price import moves one of them and a set list that has not changed
+  /// moves neither, so a client that had read one must not be able to mistake it
+  /// for the other. The game is in the key for the reason it is in the sets key -
+  /// a game never read from the server simply has no row, and [clearGame] cannot
+  /// take the revision with it by accident.
+  static String pricesRevisionKey(CardGame game) =>
+      'catalog_prices_rev:${game.id}';
+
+  /// The price revision this device last read for a game, or null.
+  ///
+  /// Null means "never read one", and is not zero and not "the prices are here" -
+  /// see [setPricesRevision] and [CatalogRepository.refreshStalePrices]. A row
+  /// this build cannot parse reads as null too, which sends the next visit to the
+  /// server: the safe direction, and the same one [setsRevision] takes.
+  Future<int?> pricesRevision(CardGame game) async {
+    final rows = await _db.query(
+      'meta',
+      columns: <String>['value'],
+      where: 'key = ?',
+      whereArgs: <Object?>[pricesRevisionKey(game)],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return int.tryParse((rows.first['value'] as String?) ?? '');
+  }
+
+  /// Records the price revision this device has just read.
+  ///
+  /// Written *after* a read that came back and never before one, exactly as
+  /// [setSetsRevision] is: the row is a claim about what this client has in hand,
+  /// so a read that failed must leave the previous number where it was, or the
+  /// next visit would believe its prices current on the strength of a request
+  /// that never arrived.
+  ///
+  /// What it is not is permission to show a price. A client that has read
+  /// revision 3 and then lost its rows - a cleared cache, Safari evicting the
+  /// origin - has still read revision 3, and whether it holds a price is a
+  /// question for the rows themselves.
+  Future<void> setPricesRevision(CardGame game, int revision) async {
+    await _db.insert('meta', <String, Object?>{
+      'key': pricesRevisionKey(game),
+      'value': '$revision',
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
   /// How much of each cached set the collector owns, keyed by set code.
   ///
   /// Counted in binder slots, not printings, because that is the unit every

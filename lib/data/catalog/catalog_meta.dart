@@ -19,12 +19,20 @@ import 'package:arcanum/domain/models/card_game.dart';
 /// [CatalogDao.isCatalogued] and the local row count, exactly as before; the
 /// revision only ever says "what you have is old".
 ///
-/// `prices_revision`, `set_count`, `card_count` and `sets_updated_at` travel
-/// in the same row and are deliberately not read here: section 6's price half
-/// and the per-set `cards_revision` are separate work with separate costs, and
-/// a field nothing acts on is a field that quietly goes wrong.
+/// `prices_revision` and `prices_observed_on` are read beside it, because
+/// section 6's price half acts on them the way the set-list half acts on
+/// `sets_revision`: prices move every night and a set list rarely, so the two
+/// are separate counters and a client that has read one must not be able to
+/// mistake it for the other. `set_count`, `card_count` and `sets_updated_at`
+/// travel in the same row and are still deliberately not read: a field nothing
+/// acts on is a field that quietly goes wrong.
 class CatalogMeta {
-  const CatalogMeta({required this.game, required this.setsRevision});
+  const CatalogMeta({
+    required this.game,
+    required this.setsRevision,
+    required this.pricesRevision,
+    this.pricesObservedOn,
+  });
 
   /// The game this row is about.
   final CardGame game;
@@ -33,6 +41,28 @@ class CatalogMeta {
   ///
   /// Compared against what this device last read, and nothing else.
   final int setsRevision;
+
+  /// The revision of this game's prices on the server.
+  ///
+  /// A counter of its own rather than a second reading of [setsRevision]: the
+  /// importer bumps this one whenever it rewrites the game's price rows, which
+  /// is most nights, while a set list moves a few times a month - so one counter
+  /// for both would have a browser re-downloading a game's whole set list to
+  /// learn that a foil went up.
+  ///
+  /// Zero is the server's own word for "no price import has run for this game",
+  /// and is read as no revision rather than as the first one - see
+  /// [CatalogRepository.refreshStalePrices].
+  final int pricesRevision;
+
+  /// The day the server's prices for this game were sampled, when it says.
+  ///
+  /// The sampler's day rather than the moment of the write, which is the only
+  /// honest answer to "when was this price read" - each price row carries the
+  /// same date, and this is it for the game as a whole. A revision the server
+  /// cannot date is a revision this client does not act on, for the reason
+  /// [CatalogRepository.refreshStalePrices] gives.
+  final DateTime? pricesObservedOn;
 
   /// The row as a game and a revision, or null when it names no game.
   ///
@@ -54,8 +84,20 @@ class CatalogMeta {
     return CatalogMeta(
       game: game,
       setsRevision: _revision(row['sets_revision']),
+      pricesRevision: _revision(row['prices_revision']),
+      pricesObservedOn: _day(row['prices_observed_on']),
     );
   }
+
+  /// A date column as the day it names, or null when it is not one.
+  ///
+  /// PostgREST sends a `date` as `2026-09-21`, which [DateTime.parse] reads as
+  /// midnight in this device's own zone - it carries no zone to read it in.
+  /// Nothing here reads a time of day: the column is a sampler's day, the
+  /// importer writes no other precision into it, and a caller comparing days
+  /// compares days.
+  static DateTime? _day(Object? raw) =>
+      raw is String ? DateTime.tryParse(raw.trim()) : null;
 
   /// A revision as a number.
   ///
