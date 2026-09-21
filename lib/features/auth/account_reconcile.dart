@@ -56,6 +56,17 @@ import 'package:arcanum/providers.dart';
 /// since a screen being handed its own answer again goes on showing it while it
 /// looks.
 ///
+/// Prices are the last thing each game's pass asks for, and they are asked for
+/// after that game's cards rather than beside them: a price is written onto a
+/// row, and a browser handed an account's holdings has no rows to write onto
+/// until the download above has run. The read is
+/// [CatalogRepository.refreshStalePrices] - the server's own invalidation
+/// signal, in front of the provider read - and it asks about the cards this
+/// browser holds and no others, so the cost of it is one small request per game
+/// on a launch where nothing moved. Without it a browser learned about moved
+/// prices only from the dashboard's daily snapshot, which is one game and one
+/// day, and a browser that never opened the dashboard learned about them never.
+///
 /// [decks] is the deck half of the same sign-in, and it is passed rather than
 /// required because a phone has no account and no deck sync at all: the whole
 /// deck path is absent there rather than present and unused. When it is here it
@@ -99,16 +110,45 @@ Future<void> reconcileAccount({
   }
 
   for (final CardGame game in _inSignInOrder(bootstrap.settings.activeGame)) {
+    List<String> owned = const <String>[];
     try {
-      final List<String> owned = await bootstrap.collectionDao.ownedCardIds(
-        game,
-      );
+      owned = await bootstrap.collectionDao.ownedCardIds(game);
       if (owned.isNotEmpty) {
         await bootstrap.catalog.resolveMissingCards(game, owned);
       }
     } catch (error) {
       debugPrint('[sync] $game cards did not resolve: $error');
     }
+
+    // Awaited rather than left running beside the rest of the pass, because the
+    // announcement at the end of this loop is a screen being handed prices that
+    // have landed - and a price that arrives after the screen was told would sit
+    // in the database until something else asked for it.
+    //
+    // The same ids the download above was given, and a browser holding nothing
+    // in this game asks nothing: an account's other eight games are eight empty
+    // lists here and eight requests that are never made.
+    //
+    // The provider fallback is off, and this is the one call site that turns it
+    // off. What a launch is doing here is acting on the server's revision for
+    // the prices it serves; a game the server has no revision for - every game
+    // it does not hold, and any game on a device with the shared catalogue
+    // switched off - is left to the set downloads and to the daily snapshot,
+    // which is where its prices came from before this existed. Left on, a
+    // launch would ask every provider this browser has about every card it
+    // holds, on every page load, to learn what the previous one already knew.
+    try {
+      if (owned.isNotEmpty) {
+        await bootstrap.catalog.refreshStalePrices(
+          game,
+          owned,
+          providerFallback: false,
+        );
+      }
+    } catch (error) {
+      debugPrint('[sync] $game prices did not refresh: $error');
+    }
+
     if (deckDao != null) {
       try {
         // The same second pass, one table along: a pulled line names a printing

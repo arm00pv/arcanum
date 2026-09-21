@@ -632,6 +632,24 @@ class CatalogRepository {
   ///   are refreshed exactly as the app refreshed them before any of this
   ///   existed, which is what keeps a phone and a signed-out browser unchanged.
   ///
+  /// [providerFallback] is the last of those four branches and the one thing
+  /// about this read a caller may want turned off. Left on - the daily snapshot,
+  /// and every call that predates this parameter - a game the server has no
+  /// revision for is priced from its own provider exactly as the app priced it
+  /// before any of this existed. Turned off, a game the server has no revision
+  /// for is left alone: the caller is asking the server's question, and there is
+  /// nothing to ask.
+  ///
+  /// The snapshot can afford the fallback because it runs once a day, for one
+  /// game, and only when somebody opens the screen that keeps the series. A
+  /// sign-in runs it for every game the browser holds cards in, on every launch,
+  /// and [refreshPrices] is documented above as a gesture no caller should make
+  /// more often than daily. With the fallback left on there, a browser opening
+  /// the app would walk every provider it has - five of them the tcgcsv relay, a
+  /// set at a time - to learn what its own set downloads already learned, on a
+  /// launch where the server had nothing to say. That is the one call site that
+  /// turns it off, and it is the launch.
+  ///
   /// Returns how many printings had prices written. A read that failed returns
   /// what arrived before it failed and leaves the previous revision in place, so
   /// the next visit tries the revision that moved again.
@@ -639,6 +657,7 @@ class CatalogRepository {
     CardGame game,
     List<String> heldIds, {
     bool forceRefresh = false,
+    bool providerFallback = true,
   }) async {
     if (heldIds.isEmpty || !supports(game)) return 0;
 
@@ -654,6 +673,12 @@ class CatalogRepository {
     if (held.isEmpty) return 0;
 
     final _PricesRevision? revision = await _pricesRevision(game);
+
+    // Asked before the four-way decision rather than inside it, so that the
+    // order that decision is written in - force, presence, revision, fallback -
+    // is not rearranged to carry one caller's exception. No revision and no
+    // fallback wanted is the one combination with nothing in it.
+    if (revision == null && !providerFallback) return 0;
 
     final bool mustFetch;
     if (forceRefresh) {

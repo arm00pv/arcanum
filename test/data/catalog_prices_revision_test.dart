@@ -589,6 +589,54 @@ void main() {
     });
   });
 
+  group('a caller that did not ask for the fallback', () {
+    // The launch is that caller and it is the only one. What a launch does with
+    // this read is act on the server's revision; asking a game's provider in the
+    // place of a revision the server does not have would be one page load walking
+    // every provider the browser has, which is the gesture [refreshPrices]
+    // documents as daily and never per launch.
+
+    test('asks nothing at all of a game the server has no revision for', () async {
+      await cacheCards(<TcgCard>[_card('card-0', price: 1.0)]);
+      final catalog = _ScriptedCatalog();
+      final meta = _FakeMeta(<Map<String, Object?>>[
+        _metaRowFor(_game, prices: 0, observed: null),
+      ]);
+
+      final written = await repositoryFor(catalog, meta: meta).refreshStalePrices(
+        _game,
+        <String>['card-0'],
+        providerFallback: false,
+      );
+
+      expect(written, 0);
+      expect(catalog.priceCalls, 0, reason: 'and the provider was not asked either');
+      expect(await storedRevision(), isNull);
+    });
+
+    test('and acts on a revision that has moved, exactly as before', () async {
+      // The other half of the same rule: turning the fallback off must not turn
+      // the signal off with it, or a launch would never carry a moved price.
+      await cacheCards(<TcgCard>[_card('card-0', price: 1.0)]);
+      await dao.setPricesRevision(_game, 1);
+      final catalog = _ScriptedCatalog();
+      final meta = _FakeMeta(<Map<String, Object?>>[
+        _metaRowFor(_game, prices: 2),
+      ]);
+
+      final written = await repositoryFor(catalog, meta: meta).refreshStalePrices(
+        _game,
+        <String>['card-0'],
+        providerFallback: false,
+      );
+
+      expect(written, 1);
+      expect(catalog.askedIds, <String>['card-0']);
+      expect(await storedPriceOf('card-0'), _fresh);
+      expect(await storedRevision(), '2');
+    });
+  });
+
   group('the revision in the local meta table', () {
     test('is remembered, and read back', () async {
       await dao.setPricesRevision(_game, 7);

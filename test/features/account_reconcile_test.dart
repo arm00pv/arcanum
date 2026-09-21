@@ -16,6 +16,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
+import 'package:arcanum/data/catalog/catalog_meta.dart';
 import 'package:arcanum/data/db/app_database.dart';
 import 'package:arcanum/data/repositories/collection_repository.dart';
 import 'package:arcanum/data/security/secret_store.dart';
@@ -136,9 +137,52 @@ class _Catalog extends CardCatalog {
   Future<List<TcgCard>> fetchPrintingsOf(String groupId) async =>
       const <TcgCard>[];
 
+  /// The ids every price request carried, in the order the requests were made.
+  ///
+  /// Kept apart from [steps] rather than logged into it: the tests below count
+  /// steps to say how many times a sign-in passed over the games, and a price
+  /// request is not a pass - a game with holdings is priced and a game with none
+  /// is not, and the count they assert is about the games.
+  final List<List<String>> priced = <List<String>>[];
+
   @override
-  Future<List<TcgCard>> refreshPrices(List<TcgCard> cards) async => cards;
+  Future<List<TcgCard>> refreshPrices(List<TcgCard> cards) async {
+    priced.add(<String>[for (final TcgCard card in cards) card.id]);
+    return cards;
+  }
 }
+
+/// The server's `catalog_meta` table, as rows.
+///
+/// Handed to a browser that is to have the shared catalogue switched on, which
+/// is what a row here means: the two are the same fact about a browser, and a
+/// test that has a server to read from is a test of a browser that reads from it.
+class _ServerMeta implements CatalogMetaTable {
+  _ServerMeta(this.rows);
+
+  /// The rows the table holds. A game absent from them is a game the table has
+  /// no row for - which is how a game whose price import has never run looks,
+  /// and is not the same as a row whose `prices_revision` is zero.
+  final List<Map<String, Object?>> rows;
+
+  @override
+  Future<List<Map<String, Object?>>> meta() async => rows;
+}
+
+/// One row of `catalog_meta`, in the shape PostgREST answers `?select=*` with.
+Map<String, Object?> metaRowFor(CardGame game, {int prices = 1}) =>
+    <String, Object?>{
+      'game': game.id,
+      'sets_revision': 1,
+      'prices_revision': prices,
+      'set_count': 0,
+      'card_count': 0,
+      'sets_updated_at': null,
+      'prices_observed_on': prices > 0 ? '2026-09-21' : null,
+      'last_import_ok': true,
+      'last_import_note': null,
+      'source': 'lorcast',
+    };
 
 /// A screen that was already drawn when the account began to arrive.
 ///
@@ -185,7 +229,12 @@ class _Browser {
   });
 
   /// Opens a browser that has just signed in to an empty account.
-  static Future<_Browser> open() async {
+  ///
+  /// [server] is the shared catalogue's own table, and passing one is what
+  /// makes this browser a browser with the shared catalogue switched on: the
+  /// revision reads are gated by that switch, so a test of what the server's
+  /// revisions do has to say the browser may read them.
+  static Future<_Browser> open({_ServerMeta? server}) async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     // A memory store rather than the keystore: the real one is a plugin, and a
     // plugin call in a test is a wait with nothing on the other end.
@@ -204,6 +253,8 @@ class _Browser {
       database: db,
       settings: settings,
       catalogs: catalogs,
+      sharedCatalogMeta: server,
+      sharedCatalogAllowed: server == null ? null : () => true,
     );
     final ProviderContainer scope = ProviderContainer(
       overrides: [bootstrapProvider.overrideWithValue(bootstrap)],
@@ -408,6 +459,58 @@ void main() {
         light.rebuilds,
         lessThan(4),
         reason: 'a couple, not one per chunk',
+      );
+    });
+
+    test('asks for the prices the server has moved, and only there', () async {
+      // Section 6's client trigger. A launch on which the server has rewritten a
+      // game's prices has to reach the screens without waiting for the
+      // dashboard's daily snapshot, which is one game, one day, and only for a
+      // collector who opened that screen - so a browser that never opened it
+      // never learned about a moved price at all.
+      //
+      // That the request happens at all is also the ordering: a price is written
+      // onto a row, the rows here arrived from the download above in this same
+      // pass, and a refresh asked for before that download would have found
+      // nothing to ask about.
+      final _Browser browser = await _Browser.open(
+        server: _ServerMeta(<Map<String, Object?>>[
+          metaRowFor(CardGame.lorcana, prices: 4),
+        ]),
+      );
+      await browser.holds(CardGame.lorcana, 3);
+      await browser.holds(CardGame.gundam, 2);
+      await browser.holds(CardGame.mtg, 1);
+
+      await browser.signIn();
+      for (final CardGame game in <CardGame>[
+        CardGame.lorcana,
+        CardGame.gundam,
+        CardGame.mtg,
+      ]) {
+        await browser.settleCards(game);
+      }
+
+      expect(
+        browser.catalogs[CardGame.lorcana]!.priced.expand((ids) => ids),
+        containsAll(<String>['card-0', 'card-1', 'card-2']),
+        reason: 'the rows were there because the download had stored them',
+      );
+      // Two ways of being a game a launch does not price, and both are the
+      // server's own answer rather than a guess about it: Gundam is a game the
+      // server holds and quotes no price for, and Magic is a game the server
+      // does not hold at all. Asking either one's provider is what the daily
+      // snapshot is for; asking on every page load is the storm the price read
+      // warns callers about, and a browser holds cards in several games at once.
+      expect(
+        browser.catalogs[CardGame.gundam]!.priced,
+        isEmpty,
+        reason: 'no revision for a game the server quotes no prices for',
+      );
+      expect(
+        browser.catalogs[CardGame.mtg]!.priced,
+        isEmpty,
+        reason: 'the server does not hold Magic, so a launch does not price it',
       );
     });
 
