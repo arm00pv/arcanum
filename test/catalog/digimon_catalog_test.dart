@@ -126,7 +126,7 @@ class _FakeHeroicc implements HttpClientAdapter {
     <String, Object?>{
       'type': 'release',
       'id': '/releases/en/st-01',
-      'meta': <String, Object?>{'name': 'GAIA RED [ST-01]', 'cards': 1, 'date': '2021-01-29'},
+      'meta': <String, Object?>{'name': 'GAIA RED [ST-01]', 'cards': 2, 'date': '2021-01-29'},
     },
     <String, Object?>{
       'type': 'release',
@@ -150,6 +150,13 @@ class _FakeHeroicc implements HttpClientAdapter {
           releases: <String>['bt-08']),
       card('ST1-01', name: 'Koromon', number: 'ST1-01', category: 'digi-egg',
           level: 2, colors: <String>['red'], releases: <String>['st-01']),
+      // A printing two releases list: its own set first, and the starter deck it
+      // was reprinted in second. One card is one row, so the release its own
+      // record names first is the one it is filed under - whichever walk found
+      // it, and in whichever order the releases happen to be walked.
+      card('BT8-022_P1', name: 'SnowAgumon', number: 'BT8-022', parallelId: 1,
+          type: 'Dinosaur', form: 'Rookie', level: 3,
+          releases: <String>['bt-08', 'st-01']),
       // A card the source files under no release at all: its number is the only
       // word on which set it belongs to.
       card('P-001', name: 'Promo Agumon', number: 'P-001', releases: <String>[]),
@@ -159,7 +166,7 @@ class _FakeHeroicc implements HttpClientAdapter {
 
   static const Map<String, List<String>> byRelease = <String, List<String>>{
     'bt-08': <String>['BT8-022', 'BT5-007_P3'],
-    'st-01': <String>['ST1-01'],
+    'st-01': <String>['ST1-01', 'BT8-022_P1'],
     'other-promos': <String>[],
   };
 
@@ -362,6 +369,31 @@ void main() {
       expect(parallel.setName, 'NEW AWAKENING [BT-08]');
     });
 
+    test('files a card the walk found elsewhere under the release it names first', () async {
+      // A printing the source lists under two releases - here a starter deck that
+      // reprinted a booster card. The catalogue keeps one row per card, so with the
+      // walk deciding, the set that happened to be walked last owned it and a
+      // release could end up holding a count and no cards at all. The card's own
+      // record decides instead: the first release it names.
+      final List<TcgCard> deck = await _catalogOn(
+        _FakeHeroicc(),
+      ).fetchCardsInSet('st01');
+      final TcgCard reprinted =
+          deck.firstWhere((TcgCard c) => c.id == 'BT8-022_P1');
+
+      expect(reprinted.setCode, 'bt08',
+          reason: 'the release the card names first, not the deck that listed it');
+      expect(reprinted.setName, 'NEW AWAKENING [BT-08]');
+      expect(deck.map((TcgCard c) => c.id),
+          <String>['ST1-01', 'BT8-022_P1'],
+          reason: 'both cards of the deck are still read');
+      // And the same card reached by its id alone is the same row.
+      final TcgCard? byId = await _catalogOn(_FakeHeroicc())
+          .fetchCardById('BT8-022_P1');
+      expect(byId!.setCode, reprinted.setCode);
+      expect(byId.setName, reprinted.setName);
+    });
+
     test('falls back to the number for a card that names no release', () async {
       final TcgCard promo =
           (await _catalogOn(_FakeHeroicc()).fetchCardById('P-001'))!;
@@ -450,7 +482,12 @@ void main() {
       final List<TcgCard> cards = await _catalogOn(api).fetchCardsByNumber(query!);
 
       expect(api.requests.single.queryParameters['q'], 'BT8-022');
-      expect(cards.map((TcgCard c) => c.id), <String>['BT8-022']);
+      // Every printing that carries the number, which is the claim the source's
+      // own search supports: "BT5-007" answers five cards, not one.
+      expect(cards.map((TcgCard c) => c.id), <String>['BT8-022', 'BT8-022_P1']);
+      expect(cards.map((TcgCard c) => c.collectorNumber),
+          everyElement('022'),
+          reason: 'a card whose number only mentions another card must not answer');
     });
   });
 

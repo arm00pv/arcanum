@@ -58,8 +58,10 @@ void main() {
       // import has run costs a wasted round trip on every query. Adding one is
       // a deliberate act and this is where it is written down. Gundam joined
       // with tool/import_gundam_catalogue.py, which fills its tables from
-      // gcgapi, and Star Wars: Unlimited with tool/import_swu_catalogue.py,
-      // which fills them from the publisher's own card database.
+      // gcgapi, Star Wars: Unlimited with tool/import_swu_catalogue.py, which
+      // fills them from the publisher's own card database, and Digimon with
+      // tool/import_digimon_catalogue.py, which fills them from Heroicc - the
+      // one of the three whose terms are a licence rather than an API.
       expect(
         sharedCatalogueGames,
         <CardGame>{
@@ -67,6 +69,7 @@ void main() {
           CardGame.pokemon,
           CardGame.gundam,
           CardGame.starWarsUnlimited,
+          CardGame.digimon,
         },
       );
     });

@@ -19,7 +19,10 @@ All times UTC, as the timers are written.
 | `arcanum-pokemon-poll.timer` | 04:20, + up to 20m | TCGdex prices |
 | `arcanum-lorcana-poll.timer` | 04:40, + up to 10m | Lorcast prices **and the shared Lorcana catalogue** |
 | `arcanum-yugioh-poll.timer` | 04:55, + up to 10m | YGOPRODeck prices |
+| `arcanum-gundam-import.timer` | 05:10, + up to 5m | the shared Gundam catalogue, from gcgapi |
 | `arcanum-mtg-rebuild.timer` | Mondays 05:30, + up to 30m | the MTGJSON slice, tens of minutes |
+| `arcanum-swu-import.timer` | 05:45, + up to 5m | the shared Star Wars: Unlimited catalogue |
+| `arcanum-digimon-import.timer` | 06:15, + up to 5m | the shared Digimon catalogue, from Heroicc |
 | `arcanum-alerts.timer` | every half hour | price alerts the phone cannot deliver itself |
 | `arcanum-catalog-watch.timer` | 06:30, + up to 5m | **new**: is the shared catalogue still being refreshed |
 
@@ -319,13 +322,15 @@ its priority and destination are set.
 
 ## What is not settled
 
-**The window is a fact about one game - now about three.** Lorcana's import rides
+**The window is a fact about one game - now about five.** Lorcana's import rides
 on the 04:40 sampler because that sampler already downloads Lorcana; Pokemon's
 rides on the 04:20 one for the same reason; Gundam's is a unit of its own at
 05:10, because gcgapi quotes no price at all and there is no sampler for it to
-ride on. The four games still on tcgcsv have no importer yet and will need
-windows of their own - the design's table already sketches
-`arcanum-catalog-tcgcsv.timer` after 06:00.
+ride on, and Star Wars: Unlimited's at 05:45 and Digimon's at 06:15 are units of
+their own for the same reason. The two games still on tcgcsv - One Piece and
+Dragon Ball - have no importer and will need windows of their own if they ever
+get one; both were surveyed and neither can move as things stand, which is what
+[catalogue-source-survey.md](catalogue-source-survey.md) records.
 
 The watcher got this wrong once, on 2026-09-21 at 06:31, and it is worth
 writing down because what was wrong was this table and not the catalogue:

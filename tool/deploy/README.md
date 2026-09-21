@@ -48,6 +48,7 @@ Paths on the host:
 | `arcanum-mtg-rebuild.timer` | re-slices the Magic history from MTGJSON | Mondays, 05:30 UTC |
 | `arcanum-gundam-import.timer` | refreshes Gundam's shared catalogue from gcgapi - catalogue only, because that source quotes no price | daily, 05:10 UTC (**installed 2026-09-21**) |
 | `arcanum-swu-import.timer` | refreshes Star Wars: Unlimited's shared catalogue from the publisher's own card database - catalogue only, for the same reason | daily, 05:45 UTC (**installed 2026-09-21**) |
+| `arcanum-digimon-import.timer` | refreshes Digimon's shared catalogue from Heroicc - catalogue only, for the same reason | daily, 06:15 UTC (**installed 2026-09-21**) |
 | `arcanum-catalog-watch.timer` | reports a shared catalogue that has stopped being refreshed | daily, 06:30 UTC |
 | `arcanum-account-backup.timer` | dumps `public.collection_entries` and `public.decks` into `backups/` - the only copy of the account that survives a Supabase-side loss | daily, 07:10 UTC (**installed 2026-09-21**) |
 

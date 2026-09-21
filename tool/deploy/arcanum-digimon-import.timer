@@ -1,0 +1,27 @@
+[Unit]
+Description=Daily Arcanum Digimon catalogue refresh
+Documentation=https://github.com/arm00pv/arcanum
+
+[Timer]
+# The last import of the night, and the hour it is given is the one left in it:
+# Star Wars: Unlimited fires at 05:45 and is the other long one - about twelve
+# minutes measured, so it is done by about 06:02 once its own random delay is
+# counted - and Digimon takes 06:15 rather than a share of that window. Nothing
+# depends on the ordering any more; the importers are kept apart by a lock each
+# rather than by the clock, which is what docs/catalogue-refresh.md records.
+#
+# The watcher reads at 06:30, which is inside this window's grace rather than
+# after the run: an import that starts at 06:15 can still be writing when that
+# read happens, and the thirty minutes of GRACE in check_catalog_freshness.py
+# are what stop it being read as a catalogue that has gone stale. The hour
+# below and the hour in that file's WINDOWS are the same fact, so the two move
+# together or neither does.
+OnCalendar=*-*-* 06:15:00 UTC
+# A missed run happens at the next opportunity rather than being skipped: this
+# is the only thing that keeps Digimon's 93 releases current.
+Persistent=true
+RandomizedDelaySec=300
+Unit=arcanum-digimon-import.service
+
+[Install]
+WantedBy=timers.target

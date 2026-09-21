@@ -30,19 +30,22 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 /// nothing and [extras] deliberately carries no 'tcgplayerId' - the key the app reads
 /// as the price-history join key.
 ///
-/// **Its terms are the one thing about it that is not a technical question.** The
-/// data is licensed CC BY-NC-SA 4.0: non-commercial, which this app is, and
-/// share-alike, which a *re-hosted* copy would carry. Reading it into a device's own
-/// cache is what the licence encourages - "caching of responses is encouraged" - and
-/// is what the app does; the shared catalogue on Supabase is a redistribution and is
-/// therefore not part of this move. See docs/catalogue-import-digimon.md.
+/// **Its terms are the one thing about it that is not a technical question**, and
+/// they have been read and answered rather than left standing. The data is licensed
+/// CC BY-NC-SA 4.0: non-commercial, which this app is, and share-alike, which the copy
+/// in Arcanum's own catalogue carries. The attribution the licence asks for is in the
+/// app's own acknowledgements, and the shared catalogue holds the game for the same
+/// reason it holds Gundam and Star Wars: Unlimited - a Sets tab that can list every
+/// release without opening one, and a search that answers offline. See
+/// docs/catalogue-import-digimon.md.
 ///
 /// **And one clause of those terms touches the screen**: "you must not cover, crop,
 /// or clip off the copyright or artist name on card images". Arcanum's tiles draw the
 /// whole card at the game's own ratio, so nothing is cropped - the grid was fixed for
-/// exactly that reason - but an owned card carries a quantity badge over one corner,
-/// and whether that counts as covering is a question for the owner of the app rather
-/// than for its code.
+/// exactly that reason - and the quantity badge an owned card carries sits in the
+/// top-right corner above the card's own copyright and artist line, so it covers
+/// neither. That was checked against the placement in `card_thumbnail.dart` rather
+/// than assumed.
 class DigimonCatalog extends CardCatalog {
   DigimonCatalog({Dio? dio})
     : _dio =
@@ -539,10 +542,17 @@ class DigimonCatalog extends CardCatalog {
     if (attributes == null) return null;
 
     final List<String> releases = _releasesOf(Map<String, dynamic>.from(data));
-    final String providerCode = setCode ??
-        (releases.isNotEmpty
-            ? releases.first
-            : _codeOfNumber(attributes['number']));
+    // The card's own record decides the release, and the walk it arrived in is
+    // only a fallback. That matters for the 142 cards the source files under two
+    // releases - a premium parallel listed by its own promotion and by the binder
+    // set it was reprinted in - because one card is one row here: the walk that
+    // read it last would otherwise decide, so the same card would sit in a
+    // different set depending on the order the releases happened to be walked in.
+    // The first release a card names is the source's own answer, and it is the
+    // order the by-id path has always used.
+    final String providerCode = releases.isNotEmpty
+        ? releases.first
+        : (setCode ?? _codeOfNumber(attributes['number']));
     final String code = Codes.fold(providerCode);
     final String name = _string(attributes['name']) ?? '';
     final String number = _string(attributes['number']) ?? '';
@@ -559,8 +569,11 @@ class DigimonCatalog extends CardCatalog {
       // The source's own id, verbatim - see the method comment.
       id: id,
       setCode: code,
+      // The release the row is filed under names itself in the card's own
+      // envelope; the walk's own answer is only a fallback for a card whose
+      // envelope does not carry the release it names.
       setName:
-          setName ?? _setNameOf(included, providerCode) ?? code.toUpperCase(),
+          _setNameOf(included, providerCode) ?? setName ?? code.toUpperCase(),
       name: name,
       collectorNumber: _collectorNumberOf(number),
       rarity: _rarities[rarityCode] ?? rarityCode ?? 'unknown',

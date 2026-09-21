@@ -83,6 +83,7 @@ import check_alerts  # noqa: E402
 #   lorcana  04:40  arcanum-lorcana-poll.timer      (--catalog, inside the sweep)
 #   gundam   05:10  arcanum-gundam-import.timer     (the import is the whole unit)
 #   swu      05:45  arcanum-swu-import.timer        (the longest of the night, ~12m)
+#   digimon  06:15  arcanum-digimon-import.timer    (the last of the night, after swu)
 #
 # A game that has a catalogue but no window here is reported rather than
 # silently unwatched: the failure this script exists to prevent is a catalogue
@@ -100,6 +101,7 @@ WINDOWS = {
     "lorcana": "04:40",
     "gundam": "05:10",
     "swu": "05:45",
+    "digimon": "06:15",
 }
 
 # How close to a window the watcher is willing to ask its question. The timers

@@ -339,9 +339,19 @@ quotes no price of any kind either, so its `catalog_prices` row is empty for the
 same reason Gundam's is. [catalogue-import-swu.md](catalogue-import-swu.md) is the
 report.)
 
-(One Piece, Digimon and Dragon Ball are still the row above, and
+(Digimon has left it as well, and it is the one of these that had to be asked for
+rather than decided: Heroicc answers a browser directly and carries sets with real
+counts and dates and ids that separate the printings, but its data is CC BY-NC-SA
+4.0, so re-hosting it is a redistribution with a share-alike obligation attached.
+The owner of the app was asked and said yes; `arcanum-digimon-import.timer` writes
+the game nightly at 06:15 UTC, and [catalogue-import-digimon.md](catalogue-import-digimon.md)
+is the report, including what the licence obliges and where each obligation is met.)
+
+(One Piece and Dragon Ball are still the row above, and
 [catalogue-source-survey.md](catalogue-source-survey.md) is the measured survey of
-where each of them could go instead.)
+where each of them could go instead. Neither can move as things stand: One Piece's
+source publishes no unique stable id and no set list, and Dragon Ball has no keyless
+source at all.)
 
 Two notes on that table. Magic's current prices come from Scryfall's bulk data
 rather than MTGJSON, because the deploy notes already record that MTGJSON's
@@ -358,9 +368,19 @@ importers. Its rules:
    update the set row and bump `cards_revision`, then commit. A reader sees the
    old set or the new one and never a half-written one, which is what makes the
    per-set revision mean anything.
-2. **Checksum first.** Hash the canonical card list; if it equals
-   `cards_checksum`, write nothing at all. Most nights most sets are unchanged and
-   an import should cost one comparison.
+2. **Checksum first - and the rows the table holds beside it.** Hash the canonical
+   card list; if it equals `cards_checksum`, write nothing at all. Most nights most
+   sets are unchanged and an import should cost one comparison. **Amended
+   2026-09-21:** the checksum alone was not sound, and Digimon proved it. A checksum
+   describes the set's own card list, while the rows a set owns can move between
+   sets - a card filed under one release and listed by several, which is what the
+   Digimon source does 142 times, moves out of the release that had it when the
+   release it belongs to is imported. The release left behind kept the checksum it
+   had already written, the next night skipped it, and the rows it no longer owned
+   were deleted by the set that did. 108 of Digimon's 7,541 cards were stored
+   nowhere as a result. The skip now also compares the ids the table actually holds
+   for the set with the ids about to be written - one small read per set - which is
+   the only comparison that can see a row move.
 3. **Sets before cards,** because `catalog_cards` has a foreign key to
    `catalog_sets`.
 4. **Never delete a set.** A set that disappears upstream gets `retired_at`, not a

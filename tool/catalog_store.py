@@ -755,7 +755,21 @@ class CatalogStore:
         checksum = canonical_checksum(cards)
         stored = {row["code"]: row for row in self.read_sets(game)}
         current = stored.get(code)
-        unchanged = current is not None and current.get("cards_checksum") == checksum
+        # A matching checksum is not on its own enough to skip the write, and this
+        # is not a hypothetical: the checksum describes the set's *own* card list,
+        # while the rows a set owns can move between sets. Digimon made that
+        # reachable - a card is filed under one release and listed by several, so
+        # importing the release it is filed under moves the row out of the release
+        # that had it, and the release left behind still holds its old checksum.
+        # The catalogue then holds a set whose rows are not its documents, and
+        # every night after that would skip it on the checksum: 108 of Digimon's
+        # 7,541 cards were stored nowhere until this comparison was added. So the
+        # ids the table actually holds for this set are compared too, which is one
+        # small read per set and the only thing that can see a row move.
+        held = self.card_ids_in_sets(game, [code])
+        unchanged = (current is not None
+                     and current.get("cards_checksum") == checksum
+                     and held == {card["id"] for card in cards})
 
         if not cards and current is not None and int(current.get("card_row_count") or 0) > 0:
             if not allow_empty:

@@ -45,6 +45,8 @@ import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
+import "package:arcanum/core/utils/codes.dart";
+import "package:arcanum/data/catalog/digimon_catalog.dart";
 import "package:arcanum/data/catalog/gundam_catalog.dart";
 import "package:arcanum/data/catalog/lorcana_catalog.dart";
 import "package:arcanum/data/catalog/pokemon_catalog.dart";
@@ -59,6 +61,7 @@ const String _lorcanaSample = "tool/catalog/lorcana_sample.json.gz";
 const String _pokemonSample = "tool/catalog/pokemon_sample.json.gz";
 const String _yugiohSample = "tool/catalog/yugioh_sample.json.gz";
 const String _swuSample = "tool/catalog/swu_sample.json.gz";
+const String _digimonSample = "tool/catalog/digimon_sample.json.gz";
 const String _vectorPath = "tool/catalog/catalog_id_vectors.json.gz";
 
 /// Whether to rewrite the committed vectors instead of asserting them.
@@ -832,6 +835,98 @@ class _SampleSwu implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// Serves the committed Heroicc sample in place of the network.
+///
+/// Three routes and three shapes, and the shapes matter: the set list answers one
+/// envelope whose `included` array is the releases, a release answers its own
+/// envelope with the ids of its cards and nothing else, and a card answers its own
+/// envelope with the release it is filed under inside `included` - which is where
+/// the by-id path gets a set name from. An id or a slug the sample does not hold is
+/// answered the way the source answers one, as a 404 carrying its own `errors`
+/// array, because that is a branch the client has code for.
+///
+/// A search term the sample did not capture is answered by filtering the sample's
+/// own cards on their name, which is the closest thing to the source's behaviour
+/// that needs no network; the two captured terms are served verbatim.
+class _SampleHeroicc implements HttpClientAdapter {
+  _SampleHeroicc(Map<String, dynamic> sample)
+    : listing = (sample["sets"] as Map<dynamic, dynamic>).cast<String, dynamic>(),
+      releases =
+          (sample["releases"] as Map<dynamic, dynamic>).cast<String, dynamic>(),
+      cards = (sample["cards"] as Map<dynamic, dynamic>).cast<String, dynamic>(),
+      searches =
+          (sample["searches"] as Map<dynamic, dynamic>).cast<String, dynamic>();
+
+  final Map<String, dynamic> listing;
+  final Map<String, dynamic> releases;
+  final Map<String, dynamic> cards;
+  final Map<String, dynamic> searches;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final String path = options.uri.path;
+    if (path.endsWith("/releases/en")) return _json(listing, 200);
+    const String releases = "/releases/en/";
+    const String cardPath = "/cards/en/";
+    if (path.contains(releases)) {
+      final String slug = path.substring(path.indexOf(releases) + releases.length);
+      final Object? release = this.releases[slug];
+      return release == null ? _absent(slug) : _json(release, 200);
+    }
+    if (path.contains(cardPath)) {
+      final String id = path.substring(path.indexOf(cardPath) + cardPath.length);
+      final Object? card = cards[id];
+      return card == null ? _absent(id) : _json(card, 200);
+    }
+    if (path.endsWith("/search")) {
+      final String query = options.uri.queryParameters["q"] ?? "";
+      final Object? captured = searches[query];
+      return _json(captured ?? _byName(query), 200);
+    }
+    return _absent(path);
+  }
+
+  /// What the sample holds of a term it did not capture, in the source's shape.
+  Map<String, dynamic> _byName(String query) {
+    final String wanted = query.toLowerCase();
+    final List<Map<String, dynamic>> rows = <Map<String, dynamic>>[
+      for (final Object? envelope in cards.values)
+        if ((envelope as Map<String, dynamic>?)?["data"] is Map)
+          if (((envelope!["data"] as Map<String, dynamic>)["attributes"]
+                  as Map<String, dynamic>?)?["name"]
+              ?.toString()
+              .toLowerCase()
+              .contains(wanted) ??
+              false)
+            envelope["data"] as Map<String, dynamic>,
+    ];
+    return <String, dynamic>{
+      "data": rows.take(60).toList(),
+      "meta": <String, Object?>{"total-cards": rows.length},
+    };
+  }
+
+  /// The source's own refusal: a 404 carrying an `errors` array.
+  ResponseBody _absent(String what) => _json(<String, Object?>{
+    "errors": <Object?>[
+      <String, Object?>{"status": "404", "detail": "no such route: \$what"},
+    ],
+  }, 404);
+
+  static ResponseBody _json(Object? body, int status) =>
+      ResponseBody.fromString(jsonEncode(body), status,
+          headers: <String, List<String>>{
+            Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+          });
+
+  @override
+  void close({bool force = false}) {}
+}
+
 /// Every row the two languages must agree on for Star Wars: Unlimited.
 ///
 /// The client lists every set - which is one request for the list and one count
@@ -885,6 +980,82 @@ Future<_Sample> _swuRows(Map<String, dynamic> sample) async {
     expect(sameJson(row, rowOf(byId)), isTrue,
         reason:
             "the set download and the by-id path derive different rows for $id");
+  }
+  return (cards: rows, sets: setRows);
+}
+
+/// Every row the two languages must agree on for Digimon.
+///
+/// The three shapes this game's ids take are all here. A card is the source's own
+/// id verbatim, `BT8-022` or `BT5-007_P3`; its oracle id is that id with the
+/// parallel suffix taken off; and its set code is the release it is *filed* under,
+/// which is not always the set that printed it - bt-08 lists BT5-007_P3 and bt-05
+/// lists BT2-028_P1, so the prefix of a printed number is the wrong answer often
+/// enough to be worth a sample. A card names that release in its own envelope, so
+/// the by-id pass at the end reaches every card a second time with no set context
+/// and has to derive the same row.
+///
+/// The 90 ms the client keeps between cards is the source's own politeness and it
+/// is paid here too: the walk is 553 requests against the sample, which costs the
+/// better part of a minute in a test that never touches the network.
+Future<_Sample> _digimonRows(Map<String, dynamic> sample) async {
+  final Dio dio = Dio(BaseOptions(baseUrl: "https://api.heroi.cc"));
+  dio.httpClientAdapter = _SampleHeroicc(sample);
+  final DigimonCatalog catalog = DigimonCatalog(dio: dio);
+
+  final List<TcgSet> sets = await catalog.fetchAllSets();
+  final Map<String, Map<String, Object?>> setRows =
+      <String, Map<String, Object?>>{
+    for (final TcgSet set in sets) set.code: setRowOf(set),
+  };
+
+  final Map<String, Map<String, Object?>> rows =
+      <String, Map<String, Object?>>{};
+  for (final dynamic raw in sample["sampled_sets"] as List<dynamic>) {
+    // The source's own spelling, folded to the code a screen hands the client -
+    // which is the round trip slugFor exists for, so the walk is asked for the
+    // folded form and the sample is addressed by the slug.
+    final String code = Codes.fold(raw.toString());
+    final List<TcgCard> cards = await catalog.fetchCardsInSet(code);
+    if (cards.isEmpty) {
+      fail("the sample cuts $raw whole and the walk read no card");
+    }
+    for (final TcgCard card in cards) {
+      rows[card.id] = rowOf(card);
+    }
+  }
+
+  // Every card, reached a second time by its id alone, must derive the row the
+  // walk derived. It does for all 553 of them, and the reason is worth saying:
+  // 142 of this game's cards are listed by two releases each - P-058 by the
+  // promotion that printed it and by bt-08, a premium parallel by its own
+  // promotion and by the binder set it was reprinted in - and the row takes the
+  // release the card's own record names first rather than the one the walk
+  // happened to be reading. A rule that let the walk decide would file the same
+  // card differently depending on the order the releases were walked in, which
+  // is also how a release ends up with a count and no cards.
+  for (final String id in (sample["cards"] as Map<String, dynamic>).keys) {
+    final TcgCard? byId = await catalog.fetchCardById(id);
+    if (byId == null) {
+      fail("the sample holds an id the client could not read back: $id");
+    }
+    final Map<String, Object?>? row = rows[id];
+    if (row == null) {
+      fail("the sample holds a card no set download produced: $id");
+    }
+    expect(sameJson(row, rowOf(byId)), isTrue,
+        reason:
+            "the set download and the by-id path derive different rows for $id");
+    // And the row names a release the card's own record really lists, rather
+    // than a code that reads well and means nothing.
+    final Object? releases = byId.extras["releases"];
+    final Set<String> filedUnder = <String>{
+      for (final dynamic code in (releases as List<dynamic>? ?? <dynamic>[]))
+        Codes.fold(code.toString()),
+    };
+    if (filedUnder.isEmpty) continue;
+    expect(filedUnder, contains(row["set_code"]),
+        reason: "$id was filed under a release its own record does not name");
   }
   return (cards: rows, sets: setRows);
 }
@@ -1147,6 +1318,136 @@ final List<_GameCase> _games = <_GameCase>[
         expect(stored, greaterThan(250),
             reason: "no sampled set is larger than the page cap, so the paging "
                 "is untested");
+      }),
+    ],
+  ),
+  _GameCase(
+    game: "digimon",
+    sample: _digimonSample,
+    drive: _digimonRows,
+    checks: <_NamedCheck>[
+      _NamedCheck(
+          "an id is the source's own and a parallel keeps the suffix that separates it",
+          (Map<String, dynamic> sample, _Sample rows) {
+        final Set<String> providerIds =
+            (sample["cards"] as Map<String, dynamic>).keys.toSet();
+        expect(rows.cards.keys.toSet().difference(providerIds), isEmpty);
+        expect(rows.cards.length, providerIds.length);
+
+        // The property the whole move rests on: BT5-007_P3 is a card of its own
+        // with a collector number and a price of its own, and an id derived from
+        // the printed number would collapse it onto its base and merge a
+        // collector's two holdings into one. A quarter of this game is a parallel.
+        final List<String> parallels = rows.cards.keys
+            .where((String id) => RegExp(r"_[A-Za-z0-9]{1,3}$").hasMatch(id))
+            .toList();
+        expect(parallels.length, greaterThan(100),
+            reason: "the sample holds too few parallels to prove the suffix rule");
+        for (final String id in parallels) {
+          final String base = id.substring(0, id.lastIndexOf("_"));
+          expect(rows.cards[id]!["oracle_id"], base,
+              reason: "$id does not group with the card it is a printing of");
+          expect(rows.cards[id]!["id"], id,
+              reason: "a parallel lost its own id");
+        }
+      }),
+      _NamedCheck(
+          "a card is stored under the release that filed it, not the one that printed it",
+          (Map<String, dynamic> sample, _Sample rows) {
+        // The two are different facts and the sample holds both directions:
+        // bt-08 lists BT5-007_P3, whose printed number belongs to bt-05, and
+        // bt-05 lists BT2-028_P1. A row that took the printed prefix would put
+        // these cards in sets no collector would look in.
+        expect(rows.cards["BT5-007_P3"]!["set_code"], "bt08");
+        expect(rows.cards["BT5-007"]!["set_code"], "bt05");
+        expect(rows.cards["BT5-007_P3"]!["oracle_id"],
+            rows.cards["BT5-007"]!["oracle_id"],
+            reason: "the parallel and its base do not share an oracle id");
+        expect(rows.cards["BT2-028_P1"]!["set_code"], "bt05");
+        expect(rows.cards["BT2-028_P1"]!["oracle_id"], "BT2-028",
+            reason: "a card printed by another set still groups with its base");
+        // And the release's own name travels with it, which is what the row shows
+        // where the app has no set to read.
+        expect(rows.cards["BT5-007_P3"]!["set_name"], contains("NEW AWAKENING"));
+      }),
+      _NamedCheck("every release is stored under the code the app folds it to",
+          (Map<String, dynamic> sample, _Sample rows) {
+        final List<dynamic> whole = sample["sampled_sets"] as List<dynamic>;
+        expect(rows.sets.length, 93,
+            reason: "the set list is one request and the client derives all of it");
+        expect(
+          rows.sets.values
+              .where((Map<String, Object?> set) => set["released_at"] != null)
+              .length,
+          87,
+          reason: "the source dates 87 of its 93 releases, which is why this "
+              "game's Sets tab can sort by newest");
+        for (final dynamic raw in whole) {
+          final String slug = raw.toString();
+          final String code =
+              slug.toLowerCase().replaceAll(RegExp(r"[^a-z0-9]"), "");
+          final Map<String, Object?>? set = rows.sets[code];
+          expect(set, isNotNull, reason: "$slug folded to a code no set carries");
+          expect(set!["id"], slug,
+              reason: "the source's own spelling is what a request names");
+          expect(set["card_count"], greaterThan(0));
+        }
+      }),
+      _NamedCheck("the rarity is the source's code read back as a word",
+          (Map<String, dynamic> sample, _Sample rows) {
+        const Map<String, String> words = <String, String>{
+          "C": "Common",
+          "U": "Uncommon",
+          "R": "Rare",
+          "SR": "Super Rare",
+          "UR": "Ultra Rare",
+          "SEC": "Secret Rare",
+          "P": "Promo",
+        };
+        final Set<String> seen = <String>{};
+        for (final Map<String, Object?> row in rows.cards.values) {
+          final Object? extras = row["extras"];
+          final Object? code =
+              extras is Map ? (extras["rarityCode"] ?? "") : "";
+          if (code is String && words.containsKey(code)) {
+            seen.add(code);
+            expect(row["rarity"], words[code],
+                reason: "$code is not stored as the word collectors read");
+          } else {
+            expect(row["rarity"], isNot("unknown"),
+                reason: "a row lost its rarity: ${row["id"]}");
+          }
+        }
+        expect(seen, containsAll(<String>["C", "R", "SR"]),
+            reason: "the sample does not exercise the codes the map has to cover");
+      }),
+      _NamedCheck("the art is the source's own address and never the relay's",
+          (Map<String, dynamic> sample, _Sample rows) {
+        int relayed = 0;
+        for (final Map<String, Object?> row in rows.cards.values) {
+          final Object? art = row["image_normal"];
+          expect(art, isA<String>(), reason: "${row["id"]} has no picture");
+          expect(art.toString().startsWith("https://images.heroi.cc/"), isTrue,
+              reason: "${row["id"]} does not name the source's own host");
+          if (art.toString().contains("/arcanumweb-api/art/")) relayed++;
+        }
+        expect(relayed, 0,
+            reason: "a stored row named the relay: the rewrite belongs to the "
+                "client and a phone could not read the result");
+      }),
+      _NamedCheck("nothing here is a price and nothing carries a price key",
+          (Map<String, dynamic> sample, _Sample rows) {
+        // Heroicc publishes no price and no TCGplayer product id, and the app
+        // reads 'tcgplayerId' out of extras as the join key for a price series.
+        // One under it would be a number the app looked prices up with and never
+        // found - which reads, on a screen, as a card worth nothing.
+        for (final Map<String, Object?> row in rows.cards.values) {
+          final Object? extras = row["extras"];
+          if (extras is Map) {
+            expect(extras.containsKey("tcgplayerId"), isFalse,
+                reason: "${row["id"]} carries a price join key");
+          }
+        }
       }),
     ],
   ),
