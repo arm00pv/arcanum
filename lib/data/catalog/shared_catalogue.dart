@@ -22,6 +22,7 @@ import 'package:arcanum/domain/models/card_game.dart';
 const Set<CardGame> sharedCatalogueGames = <CardGame>{
   CardGame.lorcana,
   CardGame.pokemon,
+  CardGame.gundam,
 };
 
 /// Those games, named for a person: "Lorcana and Pokemon".

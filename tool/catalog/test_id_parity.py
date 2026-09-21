@@ -33,6 +33,10 @@ compared over the fields its id derivation produces:
   * yugioh - poll_yugioh_prices.printing_id(), slug() and set_index(): the
     synthesised id and the set code inside it. The id derivation is mirrored in
     full and is where the two languages are likeliest to disagree.
+  * gundam - import_gundam_catalogue.card_document() and set_document(): every
+    column of the row, because that importer exists and writes it. The ids here
+    are forwarded from the provider verbatim, and the printed number is not an
+    id: five products are printed with GD01-005 on them.
 
 Why this is worth an offline test of its own rather than a line in the proof
 script: the failure it catches is silent. A card id that the importer derives a
@@ -74,6 +78,7 @@ VECTORS = os.path.join(HERE, "catalog_id_vectors.json.gz")
 # half below speaks to Postgres through the importer's own psql plumbing.
 sys.path.insert(0, TOOL)
 import catalog_store  # noqa: E402
+import import_gundam_catalogue as gcgapi  # noqa: E402
 import poll_lorcana_prices as lorcast  # noqa: E402
 import poll_pokemon_prices as tcgdex  # noqa: E402
 import poll_yugioh_prices as ygoprodeck  # noqa: E402
@@ -410,6 +415,81 @@ def yugioh_sets(sample):
             for code in ygoprodeck.set_index(sample["sets"]).values()}
 
 
+# ---------------------------------------------------------------------- gundam
+
+def gundam_set_downloads(sample):
+    """Each set the sample cuts whole, as (list entry, products), in order.
+
+    The client lists every set and then downloads the ones it is asked for, so
+    this is the same selection fetchCardsInSet makes: the entry the list carries,
+    which is where a set row's name and published card count come from, and the
+    products the provider files under that set, which is where its cards come
+    from. A set is cut whole or not at all, so every product in the sample is in
+    the set the payload names - and the payload names the set a product is filed
+    under, which is not always the set its printed number names.
+
+    Public because tool/catalog/prove_gundam_import.py walks the sample through
+    the same selection: one rule, one implementation, two callers.
+    """
+    by_code = {}
+    for item in sample.get("sets") or []:
+        if isinstance(item, dict):
+            code = gcgapi.slug(item.get("set_code"))
+            if code:
+                by_code[code] = item
+    products = {}
+    for card in sample.get("cards") or []:
+        if not isinstance(card, dict):
+            continue
+        products.setdefault(gcgapi.slug(card.get("set_code")), []).append(card)
+    out = []
+    for code in sample.get("sampled_sets") or []:
+        folded = gcgapi.slug(code)
+        out.append((by_code.get(folded), products.get(folded, [])))
+    return out
+
+
+def gundam_cards(sample):
+    """Every catalog_cards row the Gundam importer derives, keyed by its id.
+
+    The id is the provider's own product id and is forwarded by both sides:
+    nothing here is synthesised, and the id a row is stored under is the id the
+    provider's own response carries. Everything beside it is derived and is
+    compared column by column: the oracle id, the collector sort key, the folded
+    set code, the type line, the rarity, the art URL and the JSON in extras.
+
+    The driver mirrors the client's set-download path, because that is the path
+    the committed Dart vectors hold: the sample cuts whole sets, and a row of one
+    carries the set it was downloaded as part of.
+    """
+    mine = {}
+    for item, products in gundam_set_downloads(sample):
+        set_doc = gcgapi.set_document(item) if isinstance(item, dict) else None
+        code = set_doc["code"] if set_doc is not None else None
+        for card in products:
+            row = gcgapi.card_document(card, set_doc=set_doc, set_code=code)
+            if row is not None:
+                mine[row["id"]] = row
+    return mine
+
+
+def gundam_sets(sample):
+    """Every catalog_sets row the Gundam importer derives, keyed by its code.
+
+    The set list carries everything a set row needs: the provider's own code, the
+    name and a real card count - 28 sets, none of them short. The row's code is
+    that code folded, and the provider's spelling is kept beside it in 'id',
+    which is the one place in this document where the two genuinely differ for
+    every set of a game.
+    """
+    mine = {}
+    for item in sample.get("sets") or []:
+        row = gcgapi.set_document(item)
+        if row is not None:
+            mine[row["code"]] = row
+    return mine
+
+
 # ------------------------------------------------------------ the assertions
 #
 # One function per property, each applied to the games that can state it. They
@@ -689,6 +769,136 @@ def the_punctuated_rarities_are_slugged(case):
                    f"holds appears in any id, e.g. {sorted(punctuated)[:3]}")
 
 
+def every_id_is_the_product_id_the_provider_publishes(case):
+    """The ids the importer derives are the provider's own product ids, verbatim.
+
+    This is the whole of the id claim for this game, and it is the claim that
+    makes the catalogue usable: a collection row names a card id, so an id that
+    moved would leave a holding rendering as "--" for ever. Both languages can
+    forward an id and still disagree about it - a trim, a lower-case, a dropped
+    separator - so the id set is asserted rather than assumed.
+    """
+    provider = {str(c["product_id"]) for c in case.sample["cards"]
+                if isinstance(c, dict) and c.get("product_id")}
+    if set(case.cards) == provider:
+        return True, (f"{len(provider)} product ids forwarded verbatim, none "
+                      f"synthesised and none dropped")
+    invented = sorted(set(case.cards) - provider)[:3]
+    dropped = sorted(provider - set(case.cards))[:3]
+    return False, (f"the id set is not the provider's: "
+                   f"{len(set(case.cards) - provider)} not published by the "
+                   f"provider ({invented}), {len(provider - set(case.cards))} "
+                   f"dropped ({dropped})")
+
+
+def the_art_variants_of_one_card_stay_apart(case):
+    """The products printed with one number are separate rows, not one.
+
+    Gundam's printed number is not an id and this is the game where saying so
+    costs something: 1,912 products carry 1,148 card numbers, because an
+    alternate art is a product of its own with the same number printed on it -
+    GD01-005 has four parallels, two of them sharing a rarity. An id derived
+    from the number would be unique-looking, would store, and would silently
+    collapse a collector's two holdings into one row. A sample holding no such
+    cluster would let that pass, so the cluster is asserted rather than assumed.
+    """
+    by_number = {}
+    for card in case.sample["cards"]:
+        if not isinstance(card, dict):
+            continue
+        by_number.setdefault(str(card.get("card_number") or ""),
+                             []).append(str(card.get("product_id") or ""))
+    clusters = {n: ids for n, ids in by_number.items() if len(ids) > 1}
+    if not clusters:
+        return False, ("the sample holds no printed number shared by two "
+                       "products, so an id derived from the number would pass "
+                       "this file")
+    shared = sum(len(ids) for ids in clusters.values())
+    stored = sum(1 for ids in clusters.values() for card_id in ids
+                 if card_id in case.cards)
+    if stored != shared:
+        return False, (f"{shared - stored} of the {shared} products sharing a "
+                       f"printed number produced no row of their own")
+    numbers = {row["collector_number"] for row in case.cards.values()}
+    if len(numbers) >= len(case.cards):
+        return False, ("every row carries a distinct collector number, so this "
+                       "sample cannot show what an id built from the number "
+                       "would do")
+    return True, (f"{shared} products across {len(clusters)} printed number(s) "
+                  f"each kept a row of their own, e.g. "
+                  f"{sorted(clusters)[:3]}; the {len(case.cards)} rows carry "
+                  f"{len(numbers)} distinct collector numbers, so the number is "
+                  f"demonstrably not the id")
+
+
+def the_page_cap_is_exercised(case):
+    """A set larger than the provider's page is stored whole.
+
+    gcgapi caps a page at 250 rows and answers 250 for any larger limit rather
+    than refusing, so a set bigger than that is only complete if both languages
+    page it the same way: a loop that stopped after the first page would store a
+    set that looks catalogued and is 246 cards short. GD01 is the set that says
+    so, and the sample holds it.
+    """
+    paging = [str(item.get("set_code"))
+              for item in case.sample.get("sets") or []
+              if isinstance(item, dict) and (item.get("card_count") or 0) > 250]
+    if not paging:
+        return False, ("no set in the sample is larger than the provider's page "
+                       "cap, so the paging of a set is untested here")
+    problems = []
+    for code in paging:
+        folded = gcgapi.slug(code)
+        expected = sum(1 for card in case.sample["cards"]
+                       if isinstance(card, dict)
+                       and gcgapi.slug(card.get("set_code")) == folded)
+        stored = sum(1 for row in case.cards.values()
+                     if row.get("set_code") == folded)
+        if stored != expected:
+            problems.append(f"set {code!r} publishes {expected} products and "
+                            f"{stored} of them are rows")
+    if problems:
+        return False, "\n".join(problems)
+    return True, (f"{len(paging)} set(s) are larger than the provider's "
+                  f"250-row page ({', '.join(paging)}) and every one of their "
+                  f"products is a row")
+
+
+def the_two_paths_derive_one_row(case):
+    """A card downloaded with its set and the same card reached by its id are one row.
+
+    The client has two paths that build a row for a card - a set download and a
+    card fetched by its own id - and they are the place the Pokemon catalogue
+    genuinely derives two different rows for one card. Gundam does not: the
+    payload names the set a product is filed under, so a by-id row carries the
+    same set code as a set download's. That is a claim about this provider rather
+    than a fact about the world, so it is asserted over the sample: a change that
+    made the two disagree would otherwise move which row the committed vectors
+    hold without failing anything.
+    """
+    problems = []
+    compared = 0
+    for _item, products in gundam_set_downloads(case.sample):
+        for card in products:
+            folded = gcgapi.slug(card.get("set_code"))
+            downloaded = gcgapi.card_document(card, set_code=folded)
+            by_id = gcgapi.card_document(card, set_code=None)
+            compared += 1
+            if not same(downloaded, by_id):
+                problems.append(
+                    f"{card.get('product_id')}: " + "; ".join(
+                        field_diffs(downloaded, by_id, limit=2)))
+                if len(problems) >= 3:
+                    break
+    if problems:
+        return False, "\n".join(problems)
+    if not compared:
+        return False, "the sample holds no card to compare the two paths over"
+    return True, (f"all {compared} sampled products derive one row whichever "
+                  f"path reaches them, because the payload names the set the "
+                  f"product is filed under")
+
+
 # ------------------------------------------------------------------- the table
 #
 # One row per game. card_columns and set_columns name the columns of a row that
@@ -720,6 +930,12 @@ GAMES = (
                  the_unaddressable_card_round_trips,
                  the_set_codes_are_the_folded_form_the_catalogue_stores,
                  every_art_url_carries_its_series)),
+    Game("gundam", gundam_cards, gundam_sets,
+         checks=(every_id_is_the_product_id_the_provider_publishes,
+                 no_card_was_dropped,
+                 the_art_variants_of_one_card_stay_apart,
+                 the_two_paths_derive_one_row,
+                 the_page_cap_is_exercised)),
     Game("yugioh", yugioh_cards, yugioh_sets,
          card_columns=("id", "set_code"), set_columns=("code",),
          checks=(every_id_begins_with_its_passcode, the_collision_rule_is_exercised,

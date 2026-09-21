@@ -6,6 +6,7 @@ import 'package:arcanum/core/utils/app_settings.dart';
 import 'package:arcanum/data/catalog/card_catalog.dart';
 import 'package:arcanum/data/backup/backup_service.dart';
 import 'package:arcanum/data/catalog/catalog_meta.dart';
+import 'package:arcanum/data/catalog/gundam_catalog.dart';
 import 'package:arcanum/data/catalog/lorcana_catalog.dart';
 import 'package:arcanum/data/catalog/mtg_catalog.dart';
 import 'package:arcanum/data/catalog/pokemon_catalog.dart';
@@ -191,14 +192,20 @@ class Bootstrap {
             CardGame.lorcana,
             LorcanaCatalog(),
           ),
-          // The three games TCGplayer catalogs itself share one adapter: the
+          // Gundam is served by gcgapi rather than by tcgcsv, which is kept
+          // below as the fallback: gcgapi names the asking origin, so a browser
+          // can ask it without the relay.
+          CardGame.gundam: throughTheServer(
+            CardGame.gundam,
+            GundamCatalog(),
+          ),
+          // The four games TCGplayer catalogs itself share one adapter: the
           // provider's shape is the same for all of them and only the category
           // id and the name of the colour field differ.
           CardGame.onePiece: TcgcsvCatalog.onePiece(),
           CardGame.starWarsUnlimited: TcgcsvCatalog.starWarsUnlimited(),
           CardGame.digimon: TcgcsvCatalog.digimon(),
           CardGame.dragonBall: TcgcsvCatalog.dragonBall(),
-          CardGame.gundam: TcgcsvCatalog.gundam(),
         };
 
     final catalogRepository = CatalogRepository(

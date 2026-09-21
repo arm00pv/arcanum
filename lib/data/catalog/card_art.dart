@@ -44,6 +44,13 @@ abstract final class CardArt {
     'https://images.ygoprodeck.com': 'ygoprodeck',
     'https://cards.lorcast.io': 'lorcast',
     'https://assets.tcgdex.net': 'tcgdex',
+    // Bandai's own card database, which is where gcgapi's art URLs point, sends
+    // no Access-Control-Allow-Origin at all - measured 2026-09-21, refused for
+    // every one of the 1,912 Gundam products. The API those URLs come from does
+    // name the origin, so the JSON needs no relay and the pictures do: Gundam is
+    // the game whose move off tcgcsv leaves exactly one request still going
+    // through Arcanum's host.
+    'https://www.gundam-gcg.com': 'gundam',
   };
 
   /// The address art published at [direct] is fetched from.

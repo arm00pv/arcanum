@@ -39,6 +39,11 @@ ART_ORIGINS = {
     # 2026-09-21: of 216 Pokemon sets, 186 had a refused low.webp, 208 a refused
     # high.webp and 165 a refused high.png.
     "tcgdex": "https://assets.tcgdex.net",
+    # Bandai's own card database, which is what gcgapi's art URLs point at. The
+    # API itself names the asking origin, so only the pictures come through here:
+    # measured 2026-09-21, none of the 1,912 Gundam product images carried an
+    # Access-Control-Allow-Origin, so a browser refused every one of them.
+    "gundam": "https://www.gundam-gcg.com",
 }
 
 # A year, and immutable: the shop names a picture after the product it shows

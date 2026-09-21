@@ -31,10 +31,12 @@
 //   flutter test test/catalog/catalog_id_parity_test.dart \
 //       --dart-define=UPDATE_ID_VECTORS=true
 //
-// The three games are here because they cover the three shapes an id can take:
+// The four games are here because they cover the shapes an id can take:
 // Lorcana forwards the provider's own id, Pokemon forwards it while deriving
-// the oracle id and the collector sort key, and Yu-Gi-Oh! synthesises the id
-// from a passcode, the app's own set code, the collector code and the rarity.
+// the oracle id and the collector sort key, Yu-Gi-Oh! synthesises the id from a
+// passcode, the app's own set code, the collector code and the rarity, and
+// Gundam forwards an id whose provider prints several products under one
+// collector number - so the id has to be the product and the number cannot be.
 // Nothing here touches the network, and the Yu-Gi-Oh! case takes about half a
 // minute because that client deliberately throttles itself to ten requests a
 // second.
@@ -43,6 +45,7 @@ import "dart:convert";
 import "dart:io";
 import "dart:typed_data";
 
+import "package:arcanum/data/catalog/gundam_catalog.dart";
 import "package:arcanum/data/catalog/lorcana_catalog.dart";
 import "package:arcanum/data/catalog/pokemon_catalog.dart";
 import "package:arcanum/data/catalog/ygo_catalog.dart";
@@ -50,6 +53,7 @@ import "package:arcanum/domain/models/tcg_card.dart";
 import "package:dio/dio.dart";
 import "package:flutter_test/flutter_test.dart";
 
+const String _gundamSample = "tool/catalog/gundam_sample.json.gz";
 const String _lorcanaSample = "tool/catalog/lorcana_sample.json.gz";
 const String _pokemonSample = "tool/catalog/pokemon_sample.json.gz";
 const String _yugiohSample = "tool/catalog/yugioh_sample.json.gz";
@@ -400,6 +404,93 @@ class _SampleYgo implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+/// Serves the committed gcgapi sample.
+///
+/// gcgapi answers three things the client asks for: the set list, one set's
+/// products - paged, because the provider caps a page at 250 rows and reports
+/// the cap in its own meta rather than refusing - and one product by its id. The
+/// sample holds every product of the sets it takes whole, so a page is served by
+/// filtering those products by set code, case-insensitively as the provider
+/// does, and slicing them the way a filtered list is sliced. A product the
+/// sample does not hold is a 404, which is how the provider answers an id it
+/// does not publish.
+class _SampleGcgapi implements HttpClientAdapter {
+  _SampleGcgapi(Map<String, dynamic> sample)
+      : sets = jsonEncode(sample["sets"]),
+        byId = <String, String>{
+          for (final dynamic raw in sample["cards"] as List<dynamic>)
+            (raw as Map<String, dynamic>)["product_id"] as String: jsonEncode(raw),
+        },
+        bySet = _bySet(sample["cards"] as List<dynamic>);
+
+  /// The whole set list, as the provider answers /sets with it.
+  final String sets;
+  final Map<String, String> byId;
+  final Map<String, List<String>> bySet;
+
+  /// The sample's products filed by the set the provider files them in, which is
+  /// not always the set their printed number names.
+  static Map<String, List<String>> _bySet(List<dynamic> cards) {
+    final Map<String, List<String>> out = <String, List<String>>{};
+    for (final dynamic raw in cards) {
+      final Map<String, dynamic> card = raw as Map<String, dynamic>;
+      final String code =
+          (card["set_code"] ?? "").toString().trim().toLowerCase();
+      if (code.isEmpty) continue;
+      out.putIfAbsent(code, () => <String>[]).add(jsonEncode(card));
+    }
+    return out;
+  }
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final List<String> segments = options.uri.pathSegments;
+    if (segments.isNotEmpty && segments.last == "sets") {
+      return ResponseBody.fromString(
+          '{"data":$sets}', 200,
+          headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+      });
+    }
+    if (segments.length >= 2 && segments[segments.length - 2] == "cards") {
+      final String? body = byId[segments.last];
+      if (body == null) {
+        return _json(<String, Object?>{"detail": "Not found"}, 404);
+      }
+      return ResponseBody.fromString(
+          '{"data":$body}', 200,
+          headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+      });
+    }
+    if (segments.isNotEmpty && segments.last == "cards") {
+      final Map<String, String> query = options.uri.queryParameters;
+      final String code = (query["set_code"] ?? "").toLowerCase();
+      final List<String> all = bySet[code] ?? const <String>[];
+      final int limit = int.tryParse(query["limit"] ?? "") ?? 100;
+      final int offset = int.tryParse(query["offset"] ?? "") ?? 0;
+      final List<String> page = all.skip(offset).take(limit).toList();
+      return _json(<String, Object?>{
+        "data": <dynamic>[for (final String row in page) jsonDecode(row)],
+        "_meta": <String, Object?>{
+          "total": all.length,
+          "limit": limit,
+          "offset": offset,
+          "count": page.length,
+        },
+      }, 200);
+    }
+    return _json(<String, Object?>{"data": <dynamic>[], "_meta": <String, Object?>{}}, 200);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 // ------------------------------------------------------------ the id parity
 
 /// Every card row the Lorcana sample produces, keyed by the id it was stored
@@ -538,6 +629,60 @@ Future<_Sample> _ygoRows(Map<String, dynamic> sample) async {
   // on the same id cannot disagree about one.
   expect(metTwice, greaterThan(0),
       reason: "no id was derived by both paths, so their agreement is untested");
+  return (cards: rows, sets: setRows);
+}
+
+/// Every card row the Gundam sample produces, keyed by the id it was stored
+/// under, and every set row.
+///
+/// The sample cuts seven sets whole and lists all 28, so the rows are the ones
+/// a client derives by downloading those seven sets. Every sampled product is
+/// then reached a second time the way the app reaches a card it already holds an
+/// id for, and the two rows are asserted identical rather than one of them being
+/// chosen: Gundam is the game where the two paths could have differed - the
+/// client takes a set download's code from the set it was asked for and a by-id
+/// row's code from the payload's own set_code - and did not, because the payload
+/// names the set the product is filed under either way. A change that made them
+/// disagree fails here instead of quietly moving which row the committed vectors
+/// hold.
+Future<_Sample> _gundamRows(Map<String, dynamic> sample) async {
+  final Dio dio = Dio(BaseOptions(baseUrl: "https://api.gcgapi.com/v1"));
+  dio.httpClientAdapter = _SampleGcgapi(sample);
+  final GundamCatalog catalog = GundamCatalog(dio: dio);
+
+  final List<TcgSet> sets = await catalog.fetchAllSets();
+  final Map<String, Map<String, Object?>> setRows =
+      <String, Map<String, Object?>>{
+    for (final TcgSet set in sets) set.code: setRowOf(set),
+  };
+
+  final Set<String> whole = <String>{
+    for (final dynamic code in sample["sampled_sets"] as List<dynamic>)
+      code.toString().toLowerCase(),
+  };
+  final Map<String, Map<String, Object?>> rows =
+      <String, Map<String, Object?>>{};
+  for (final TcgSet set in sets) {
+    if (!whole.contains(set.code)) continue;
+    for (final TcgCard card in await catalog.fetchCardsInSet(set.code)) {
+      rows[card.id] = rowOf(card);
+    }
+  }
+
+  for (final dynamic raw in sample["cards"] as List<dynamic>) {
+    final String id = (raw as Map<String, dynamic>)["product_id"] as String;
+    final TcgCard? byId = await catalog.fetchCardById(id);
+    if (byId == null) {
+      fail("the sample holds an id the client could not read back");
+    }
+    final Map<String, Object?>? row = rows[id];
+    if (row == null) {
+      fail("the sample holds a product no set download produced: $id");
+    }
+    expect(sameJson(row, rowOf(byId)), isTrue,
+        reason: "the set download and the by-id path derive different rows for "
+            "$id");
+  }
   return (cards: rows, sets: setRows);
 }
 
@@ -747,6 +892,120 @@ final List<_GameCase> _games = <_GameCase>[
           expect(entry.key.trim().isEmpty, isFalse);
           expect((entry.value["name"] ?? "").toString().trim().isEmpty, isFalse,
               reason: "set ${entry.key} carries no name");
+        }
+      }),
+    ],
+  ),
+  _GameCase(
+    game: "gundam",
+    sample: _gundamSample,
+    drive: _gundamRows,
+    checks: <_NamedCheck>[
+      _NamedCheck("every id is the provider's own product id, verbatim",
+          (Map<String, dynamic> sample, _Sample rows) {
+        // gcgapi publishes one id per product and the client stores exactly it:
+        // nothing is derived, appended or re-cased. This is also the claim the
+        // game needs, because the *printed number* cannot be the id - see the
+        // next check for the cluster that says so.
+        final Set<String> providerIds = <String>{
+          for (final dynamic raw in sample["cards"] as List<dynamic>)
+            ((raw as Map<String, dynamic>)["product_id"] ?? "").toString(),
+        };
+        expect(rows.cards.keys.toSet().difference(providerIds), isEmpty);
+        expect(rows.cards.length, providerIds.length);
+      }),
+      _NamedCheck("keeps the art variants of one card apart",
+          (Map<String, dynamic> sample, _Sample rows) {
+        // A Gundam alternate art is a product of its own with the same number
+        // printed on it - GD01-005 has four - so an id derived from the printed
+        // number would collapse several holdings into one and the collector
+        // would see one row where they own two. The sample has to hold such a
+        // cluster (it holds 202 products sharing a number) and the rows have to
+        // keep them apart, which is what makes the id a product and not a
+        // number.
+        final Map<String, List<String>> byNumber = <String, List<String>>{};
+        for (final dynamic raw in sample["cards"] as List<dynamic>) {
+          final Map<String, dynamic> card = raw as Map<String, dynamic>;
+          byNumber
+              .putIfAbsent(
+                  (card["card_number"] ?? "").toString(), () => <String>[])
+              .add((card["product_id"] ?? "").toString());
+        }
+        final List<String> clusters = <String>[
+          for (final MapEntry<String, List<String>> entry in byNumber.entries)
+            if (entry.value.length > 1) entry.key,
+        ];
+        expect(clusters, isNotEmpty,
+            reason: "the sample holds no card number printed on more than one "
+                "product, so an id derived from the number would pass");
+        final int clustered = clusters.fold<int>(
+            0, (int sum, String number) => sum + byNumber[number]!.length);
+        final int stored = <String>{
+          for (final String number in clusters)
+            for (final String id in byNumber[number]!) id,
+        }.where(rows.cards.containsKey).length;
+        expect(stored, clustered,
+            reason: "the number and the id are not one-to-one over the sample");
+        final Set<String> numbers = <String>{
+          for (final Map<String, Object?> row in rows.cards.values)
+            (row["collector_number"] ?? "").toString(),
+        };
+        expect(numbers.length, lessThan(rows.cards.length),
+            reason: "no collector number repeats, so this sample cannot show "
+                "what an id built from the number would do");
+      }),
+      _NamedCheck("every stored set code is the provider's code folded",
+          (Map<String, dynamic> sample, _Sample rows) {
+        // The provider addresses a set by GD01 and every layer of the app stores
+        // and compares it as gd01, so the code and the id genuinely differ here
+        // and both are kept: the folded code in the row the app reads, the
+        // provider's spelling in the set's own id.
+        final Set<String> listed = <String>{
+          for (final dynamic raw in sample["sets"] as List<dynamic>)
+            ((raw as Map<String, dynamic>)["set_code"] ?? "").toString(),
+        };
+        expect(rows.sets.keys.toSet(), <String>{
+          for (final String code in listed)
+            code.toLowerCase().replaceAll(RegExp(r"[^a-z0-9]"), ""),
+        });
+        for (final MapEntry<String, Map<String, Object?>> entry
+            in rows.sets.entries) {
+          expect(entry.key, entry.key.toLowerCase());
+          expect(listed, contains(entry.value["id"]));
+          expect((entry.value["card_count"] as num?)?.toInt(), greaterThan(0),
+              reason: "set ${entry.key} carries no card count, so the Sets tab "
+                  "cannot say how large it is before it is opened");
+        }
+      }),
+      _NamedCheck("holds a set larger than the provider's page cap",
+          (Map<String, dynamic> sample, _Sample rows) {
+        // gcgapi caps a page at 250 rows and reports the cap rather than
+        // refusing, so a set bigger than that is only whole if both languages
+        // page it the same way. A sample in which every set fitted in one page
+        // would leave the paging untested.
+        final List<String> paging = <String>[
+          for (final dynamic raw in sample["sets"] as List<dynamic>)
+            if ((((raw as Map<String, dynamic>)["card_count"] as num?)
+                        ?.toInt() ??
+                    0) >
+                250)
+              (raw["set_code"] ?? "").toString(),
+        ];
+        expect(paging, isNotEmpty,
+            reason: "no sampled set is larger than the provider's page cap");
+        for (final String code in paging) {
+          final String folded =
+              code.toLowerCase().replaceAll(RegExp(r"[^a-z0-9]"), "");
+          final int expected = (sample["cards"] as List<dynamic>)
+              .cast<Map<String, dynamic>>()
+              .where((Map<String, dynamic> card) =>
+                  (card["set_code"] ?? "").toString().toLowerCase() == folded)
+              .length;
+          final int stored = rows.cards.values
+              .where((Map<String, Object?> row) => row["set_code"] == folded)
+              .length;
+          expect(stored, expected,
+              reason: "set $code is paged and the pages did not add up");
         }
       }),
     ],

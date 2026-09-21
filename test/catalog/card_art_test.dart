@@ -28,6 +28,13 @@ void main() {
     // a host that looks like it names the browser.
     const String pokemon =
         'https://assets.tcgdex.net/en/me/30th/001/high.webp';
+    // Bandai's own card database, which is where gcgapi's art URLs point and
+    // which sends no Access-Control-Allow-Origin at all - measured 2026-09-21,
+    // refused for every one of the 1,912 Gundam products. The API those URLs come
+    // from does name the browser, so Gundam is the game whose move off tcgcsv
+    // leaves exactly one request still going through Arcanum's host.
+    const String gundam =
+        'https://www.gundam-gcg.com/en/images/cards/card/GD01-001.webp?260917';
 
     test('is the CDN itself on a phone', () {
       // A phone sends no Origin and nothing judges its answers, so its art goes
@@ -37,6 +44,7 @@ void main() {
       expect(CardArt.host(ygo, web: false), ygo);
       expect(CardArt.host(promo, web: false), promo);
       expect(CardArt.host(pokemon, web: false), pokemon);
+      expect(CardArt.host(gundam, web: false), gundam);
     });
 
     test('and Arcanum on a web build', () {
@@ -59,6 +67,11 @@ void main() {
       expect(
         CardArt.host(pokemon, web: true),
         'https://marquezhv.com/arcanumweb-api/art/tcgdex/en/me/30th/001/high.webp',
+      );
+      expect(
+        CardArt.host(gundam, web: true),
+        'https://marquezhv.com/arcanumweb-api/art/gundam/en/images/cards/card/'
+        'GD01-001.webp?260917',
       );
     });
 
