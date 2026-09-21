@@ -33,6 +33,16 @@ TcgCard.normaliseName and collector_sort_key is
 TcgCard.collectorNumberSortKey. Two implementations of one rule is the
 likeliest way this design quietly stops working.
 
+Since step 6 it does a third job as well: the prices it has just read go into
+the shared catalog_prices table, per printing, with observed_on set to the day
+this sweep sampled rather than to the moment the row was written. Design
+section 5 fixes the shape of that write - one transaction per game, a full
+replacement, then prices_revision moves - and names this game's finishes
+(nonfoil, holofoil, reverse_holofoil, first_edition, first_edition_holofoil) and
+its two secondary figures (eur, eurLow). A zero is not a price: TCGdex quotes
+0.00 for a printing with no market, and that is no row at all rather than a row
+saying the card is worth nothing.
+
 Usage:
     python poll_pokemon_prices.py                    # poll every card
     python poll_pokemon_prices.py --limit 500        # poll only 500 cards
@@ -78,6 +88,8 @@ from poll_lorcana_prices import (  # noqa: E402  (same directory as this file)
     KEYWORD_JOIN,
     collector_sort_key,
     normalise_name,
+    price_note,
+    write_prices,
 )
 
 API = "https://api.tcgdex.net/v2/en"
@@ -85,20 +97,96 @@ UA = "Arcanum/1.0 (+https://github.com/arcanum)"
 
 # TCGdex/TCGplayer variant key -> Arcanum finish code, for the price series.
 #
-# This map is the *price* path's and is left exactly as it was. It is not the
-# catalogue's: card rows carry no prices, and the finishes a card was printed in
-# come from the card's variants map instead (see variant_types). The pricing
-# block's own keys are TCGdex's to change - it now publishes "reverse-holofoil"
-# where this map and the Dart client both say "reverseholofoil" - and a key
-# neither has heard of contributes no price row rather than a row guessed at.
+# This map is the *price* path's. It is not the catalogue's: card rows carry no
+# prices, and the finishes a card was printed in come from the card's variants
+# map instead (see variant_types).
 FINISH_MAP = {
     "normal": "nonfoil",
     "holofoil": "holofoil",
     "unlimitedholofoil": "holofoil",
     "reverseholofoil": "reverse_holofoil",
     "1stedition": "first_edition",
+    "1steditionnormal": "first_edition",
     "1steditionholofoil": "first_edition_holofoil",
 }
+
+# The finishes the app can name. CardFinish in lib/core/theme/mana.dart is this
+# list and nothing else, so a price stored under any other code is a price no
+# screen can show.
+KNOWN_FINISH_CODES = frozenset(FINISH_MAP.values())
+
+# A TCGdex pricing key with everything but its letters and digits removed, so
+# that one finish spelled two ways is one finish.
+#
+# **This function is the answer to a live finding, and the finding is why the
+# price path changed.** TCGdex has renamed a pricing variant once before, and on
+# 2026-09-21 its payload carries "reverse-holofoil" - which neither this file's
+# FINISH_MAP nor the Dart _finishForVariant knows, and which both therefore
+# dropped in silence. It is not an obscure key: in a live probe of forty cards
+# from each of base1, sv01 and swsh9tg, 43 of 110 cards quoted reverse-holofoil,
+# so the silent drop was throwing away the reverse-holo price of a large part of
+# the modern catalogue, on both the server path and the series the companion
+# serves.
+#
+# Design section 5 says a variant the app has never heard of is stored verbatim
+# "without a migration on either side", and that rule is about *card row flags* -
+# the extras a card carries, where an extra key nobody reads costs nothing. A
+# price is a different question, because a price row is only ever read back by
+# looking a finish up: the app's byFinish is keyed by a CardFinish code, and a
+# price stored under a code no CardFinish carries is a number that reaches
+# nothing - invisible to the card sheet, unselectable in the finish picker, and
+# worse than absent because TcgPrices.from still counts it when it picks the
+# cheapest quoted finish for a list row. So the spelling is folded and the key
+# is *recognised* rather than stored behind a name the app cannot read: a
+# variant key that is one the app knows with the punctuation moved is the finish
+# the app already has, and storing "reverse-holofoil" beside "reverse_holofoil"
+# would be two codes for one physical printing.
+#
+# A key that is still unknown after folding is the genuinely different case, and
+# there the design's rule is followed rather than argued with: it is stored
+# verbatim as its own code rather than dropped, because dropping the price of a
+# finish nobody anticipated is exactly the failure the rule exists to prevent,
+# and because the table's whole shape - kind and code as free text - was chosen
+# so that a provider can quote something new without a migration. What is added
+# is that the run *counts* them and says so in catalog_meta, so an unrecognised
+# variant is a fact in the log rather than a silence.
+_VARIANT_PUNCTUATION = re.compile(r"[^a-z0-9]")
+
+
+def variant_fold(key):
+    """One TCGdex pricing key with its case and punctuation removed."""
+    return _VARIANT_PUNCTUATION.sub("", str(key).strip().lower())
+
+
+# The map above, keyed the folded way: "reverse-holofoil", "reverseHolofoil" and
+# "reverse_holofoil" all arrive at "reverseholofoil" and all answer
+# reverse_holofoil.
+_FINISH_BY_FOLDED = {variant_fold(k): v for k, v in FINISH_MAP.items()}
+
+
+def variant_finish(keys):
+    """The finish code one provider variant is stored under, and whether it is known.
+
+    Two answers rather than one, because the caller has to decide differently
+    depending on which it got: a known key maps onto the app's own code, and an
+    unknown one is stored verbatim - in lower case and stripped, so that one
+    variant key arrives in one spelling - rather than being thrown away.
+
+    keys is a list because the fallback path has two candidates for one price: a
+    variants_detailed entry's pricing key, and failing that the variant's own
+    type. The first one that names a finish the app knows wins; if neither does,
+    the first candidate is the code the price is stored under.
+    """
+    candidates = [str(k).strip() for k in keys
+                  if isinstance(k, str) and str(k).strip()]
+    for key in candidates:
+        known = _FINISH_BY_FOLDED.get(variant_fold(key))
+        if known:
+            return known, True
+    if not candidates:
+        return None, False
+    return candidates[0].lower(), False
+
 
 SCHEMA = [
     """
@@ -152,10 +240,15 @@ def get_json(url, timeout=30, retries=3):
 def finish_prices(card):
     """Extracts {finish_code: usd_price} from a TCGdex card response.
 
-    Unchanged from the price sampler this file has always been. A zero is not a
-    price, so a 0.00 marketPrice contributes no row; a variant key the map has
-    never heard of contributes nothing either; and a card with no market data
-    contributes nothing rather than a row saying zero.
+    A zero is not a price, so a 0.00 marketPrice contributes no row; a card with
+    no market data contributes nothing rather than a row saying zero; and a
+    variant key is resolved through variant_finish, which maps the provider's
+    spelling of a finish the app knows onto the app's own code and keeps a key
+    nobody knows verbatim rather than dropping it.
+
+    The two non-variant keys TCGdex puts in the same block - "unit" and
+    "updated" - are strings rather than objects and are skipped by the same
+    isinstance test that has always skipped them.
     """
     pricing = card.get("pricing") or {}
     tcg = pricing.get("tcgplayer")
@@ -165,7 +258,7 @@ def finish_prices(card):
             if not isinstance(value, dict):
                 continue
             price = value.get("marketPrice") or value.get("midPrice")
-            finish = FINISH_MAP.get(str(key).lower())
+            finish, _known = variant_finish([key])
             if finish and isinstance(price, (int, float)) and price > 0:
                 out.setdefault(finish, float(price))
     # Fall back to the variants list when the flat pricing block is absent.
@@ -180,11 +273,45 @@ def finish_prices(card):
                 if not isinstance(value, dict):
                     continue
                 price = value.get("marketPrice") or value.get("midPrice")
-                finish = FINISH_MAP.get(str(key).lower()) or FINISH_MAP.get(
-                    str(variant.get("type", "")).lower())
+                finish, _known = variant_finish([key, variant.get("type")])
                 if finish and isinstance(price, (int, float)) and price > 0:
                     out.setdefault(finish, float(price))
     return out
+
+
+def secondary_prices(card):
+    """The Cardmarket figures the Dart keeps as secondary: 'eur' and 'eurLow'.
+
+    PokemonCatalog._cardFromJson reads pricing.cardmarket.trend, falling back to
+    avg, into eur, and pricing.cardmarket.low into eurLow; design section 5
+    names those same two for this game and no others. A figure the provider
+    leaves out is no row at all, exactly as a finish with no quote is: the app
+    reads a missing key as unknown, and a stored zero would read as a real euro
+    price of nothing. The -holo averages beside these are deliberately not read:
+    they describe a different printing, and the app has no finish to put them
+    under.
+    """
+    market = (card.get("pricing") or {}).get("cardmarket")
+    out = {}
+    if isinstance(market, dict):
+        for code, raw in (("eur", market.get("trend") or market.get("avg")),
+                          ("eurLow", market.get("low"))):
+            if isinstance(raw, (int, float)) and not isinstance(raw, bool) and raw > 0:
+                out[code] = float(raw)
+    return out
+
+
+def unrecognised_finishes(rows):
+    """The finish codes in a batch of catalogue price rows the app cannot name.
+
+    A price stored under a code no CardFinish carries is still a price the
+    server holds - see variant_finish for why one is kept rather than dropped -
+    but it is invisible to every screen that looks a price up by finish, so the
+    run counts them and writes the count into catalog_meta instead of leaving
+    them for somebody to find in the table.
+    """
+    return {row["code"] for row in rows
+            if row["kind"] == "finish" and row["code"] not in KNOWN_FINISH_CODES}
 
 
 def set_list():
@@ -967,18 +1094,22 @@ def set_document(item=None, detail=None):
 # ---------------------------------------------------------------------------
 
 
-def import_catalogue_set(store, set_id, stubs, cards_by_id, set_doc, serie, args):
-    """Writes one set into the shared catalogue, or reports that it could not be.
+def card_documents(stubs, cards_by_id, set_doc, serie):
+    """Every catalog_cards row one set's cards produce, keyed by the id it was fetched by.
 
-    None means the set was not written, and the caller counts that as a failure
-    so catalog_meta.last_import_ok says so. A quietly skipped set is the failure
-    mode this whole design is trying to make visible.
+    Keyed by the id the sweep *asked* for - the set response's stub id - and not
+    by the id inside the row it built, and the difference is the reason this
+    returns a map rather than a list. A row's id comes from the payload when
+    TCGdex answers one at all, and from the stub only when it does not; the sweep
+    holds the stub id and nothing else. Keying by the requested id is therefore
+    what lets the price path find a card's row with what it has in hand, and take
+    the id off that row, so a price can never be stored under an id the catalogue
+    did not use - the foreign key would refuse it, and a price row for a card no
+    client can fetch is a row nobody ever reads.
 
     Every card in the set response is written, including any the price sweep
     skipped because they were already sampled today: writing a set replaces it,
-    so a card left out of this list is a card deleted from the catalogue. Rows
-    are keyed by id and the last one wins, which is what the client's own
-    rows[card.id] = row does with a repeated id.
+    so a card left out of this list is a card deleted from the catalogue.
     """
     documents = {}
     for stub in stubs:
@@ -988,9 +1119,57 @@ def import_catalogue_set(store, set_id, stubs, cards_by_id, set_doc, serie, args
         row = card_document(cards_by_id.get(card_id), set_doc=set_doc, stub=stub,
                             serie=serie)
         if row is not None:
-            documents[row["id"]] = row
+            documents[card_id] = row
+    return documents
+
+
+def catalogue_price_rows(results, documents):
+    """The current-price rows one set's cards contribute to catalog_prices.
+
+    Design section 5's four rules in one place: a zero is not a price (both
+    readers here refuse one), the row is keyed *per printing* by the id the
+    catalogue stored the card under, the day is the caller's sampler day rather
+    than the clock, and the caller hands the whole game's rows to the store in
+    one call, which is what makes the replacement per game rather than per set.
+
+    Built from the sweep's own results rather than from the points that go into
+    the history database, and that is deliberate: the history path skips a card
+    it has already sampled today, and a card skipped there would silently lose
+    its price from the server's copy of the same night.
+    """
+    out = []
+    for card_id, card, _error in results:
+        row = documents.get(card_id)
+        if row is None or not isinstance(card, dict):
+            continue
+        for code, price in finish_prices(card).items():
+            out.append({"card_id": row["id"], "kind": "finish", "code": code,
+                        "price": price})
+        for code, price in secondary_prices(card).items():
+            out.append({"card_id": row["id"], "kind": "secondary", "code": code,
+                        "price": price})
+    return out
+
+
+def import_catalogue_set(store, set_id, documents, set_doc, args):
+    """Writes one set into the shared catalogue, or reports that it could not be.
+
+    None means the set was not written, and the caller counts that as a failure
+    so catalog_meta.last_import_ok says so - and, since step 6, treats the whole
+    set as unswept for prices, so a set that could not be catalogued keeps the
+    prices it already had rather than losing them to a replacement built from a
+    sweep that never saw it. A quietly skipped set is the failure mode this
+    whole design is trying to make visible.
+
+    Rows are keyed by id for the insert and the last one wins, which is what the
+    client's own rows[card.id] = row does with a repeated id. Two stubs that
+    answer the same payload id are one card.
+    """
+    rows = {}
+    for row in documents.values():
+        rows[row["id"]] = row
     try:
-        return store.import_set("pokemon", set_doc, list(documents.values()),
+        return store.import_set("pokemon", set_doc, list(rows.values()),
                                 allow_empty=args.allow_empty_set)
     except catalog_store.CatalogError as exc:
         print(f"  set {set_id} not imported: {exc}", file=sys.stderr, flush=True)
@@ -999,7 +1178,8 @@ def import_catalogue_set(store, set_id, stubs, cards_by_id, set_doc, serie, args
 
 def record_catalogue_outcome(store, upstream, sets_written, cards_written,
                              sets_unchanged, failed_sets, before_fingerprint,
-                             named_sets=0, published=0):
+                             price_summary=None, price_error=None, price_rows=0,
+                             price_unknown=(), named_sets=0, published=0):
     """Writes catalog_meta for the run, whether it went well or not.
 
     Design rule 5: a broken importer has to be a fact a client can read, so
@@ -1027,8 +1207,10 @@ def record_catalogue_outcome(store, upstream, sets_written, cards_written,
         what = f"{named_sets} sets named with --sets, and the list was not read"
     note = (f"{what}, {sets_written} written, "
             f"{sets_unchanged} unchanged, {cards_written} cards, "
-            f"{failed_sets} set(s) failed")
-    return store.finish("pokemon", source="tcgdex", ok=failed_sets == 0,
+            f"{failed_sets} set(s) failed; "
+            + price_note(price_summary, price_error, price_rows, price_unknown))
+    return store.finish("pokemon", source="tcgdex",
+                        ok=failed_sets == 0 and price_error is None,
                         note=note, upstream_codes=upstream,
                         before_fingerprint=before_fingerprint)
 
@@ -1198,6 +1380,17 @@ def run(args, store):
     catalogued_sets = 0
     catalogued_cards = 0
     unchanged_sets = 0
+    # The whole game's current prices, accumulated across the sweep and written
+    # once at the end: section 5's replacement is per game, not per set, and a
+    # price write per set would be 220 transactions where the design asks for
+    # one. unknown_finishes is what the note carries so that a variant key
+    # neither this file nor the app knows is a fact rather than a silence.
+    price_rows = []
+    unknown_finishes = set()
+    # The sets this run could not read. Their cards keep the price rows they
+    # already have instead of losing them to a replacement built from a sweep
+    # that never saw them - see catalog_store.replace_prices.
+    unswept_sets = []
 
     for i, set_id in enumerate(set_ids, 1):
         if args.limit and seen >= args.limit:
@@ -1206,6 +1399,7 @@ def run(args, store):
             detail = set_detail(set_id)
         except Exception as exc:  # noqa: BLE001 - reported, then the sweep goes on
             failed_sets += 1
+            unswept_sets.append(str(set_id).lower())
             print(f"  set {set_id} failed: {exc}", file=sys.stderr, flush=True)
             continue
         stubs = stubs_of(detail)
@@ -1247,28 +1441,43 @@ def run(args, store):
 
         # ---- the catalogue
         if store is not None:
-            errored = [card_id for card_id, _, error in results if error is not None]
-            set_doc = None
-            outcome = None
-            if errored:
-                # A card that could not be read at all is not evidence about the
-                # card, and rewriting the set without it would delete it. The
-                # set is left exactly as yesterday left it and counted as a
-                # failure, so last_import_ok says so.
+            set_doc = set_document(listed_set(by_id, set_id), detail)
+            if set_doc is None:
                 failed_sets += 1
-                print(f"  set {set_id} not imported: {len(errored)} card(s) could "
-                      f"not be read, e.g. {errored[0]}", file=sys.stderr, flush=True)
+                unswept_sets.append(str(set_id).lower())
+                print(f"  set {set_id} not imported: TCGdex published no set id",
+                      file=sys.stderr, flush=True)
             else:
-                set_doc = set_document(listed_set(by_id, set_id), detail)
-                if set_doc is None:
+                documents = card_documents(stubs, cards_by_id, set_doc, serie)
+                # The price rows come from the same card objects the rows above
+                # were built from, and they are built whether or not this card
+                # was already sampled into the history database today: the
+                # server's table is tonight's answer for the whole game, and a
+                # card skipped because the local series already has today's
+                # point would silently drop its price from the server's copy.
+                if not args.catalog_only:
+                    rows_here = catalogue_price_rows(results, documents)
+                    price_rows.extend(rows_here)
+                    unknown_finishes.update(unrecognised_finishes(rows_here))
+
+                errored = [card_id for card_id, _, error in results if error is not None]
+                if errored:
+                    # A card that could not be read at all is not evidence about
+                    # the card, and rewriting the set without it would delete it.
+                    # The set is left exactly as yesterday left it and counted as
+                    # a failure, so last_import_ok says so - and, since step 6,
+                    # so its prices are, because a sweep that could not read a
+                    # card cannot be the evidence that replaces a set of prices.
                     failed_sets += 1
-                    print(f"  set {set_id} not imported: TCGdex published no set id",
-                          file=sys.stderr, flush=True)
+                    unswept_sets.append(str(set_id).lower())
+                    print(f"  set {set_id} not imported: {len(errored)} card(s) could "
+                          f"not be read, e.g. {errored[0]}", file=sys.stderr, flush=True)
                 else:
-                    outcome = import_catalogue_set(store, set_id, stubs, cards_by_id,
-                                                   set_doc, serie, args)
+                    outcome = import_catalogue_set(store, set_id, documents,
+                                                   set_doc, args)
                     if outcome is None:
                         failed_sets += 1
+                        unswept_sets.append(str(set_id).lower())
                     else:
                         catalogued_sets += 1
                         catalogued_cards += outcome["cards"]
@@ -1297,6 +1506,31 @@ def run(args, store):
     print(f"  {db}", flush=True)
 
     if store is not None:
+        # ---- the prices, in one replacement for the whole game
+        price_summary = None
+        price_error = None
+        if not args.catalog_only:
+            price_summary, price_error = write_prices(
+                store, "pokemon", "tcgdex", price_rows, today, unswept_sets,
+                args.sets)
+            print("", flush=True)
+            if price_error is not None:
+                print(f"catalogue prices {price_error}", file=sys.stderr, flush=True)
+            else:
+                # A dry run writes nothing, so it says what it would do rather
+                # than claiming a write the database never saw.
+                verb = ("would replace" if price_summary.get("dry_run")
+                        else price_summary["outcome"])
+                print(f"catalogue prices {verb}: "
+                      f"{price_summary['rows']:,} rows"
+                      + (f", {price_summary['carried']:,} kept from a set this run "
+                         "could not read" if price_summary["carried"] else "")
+                      + (f", prices_revision {price_summary['revision']}"
+                         if price_summary["outcome"] == "written" else ""), flush=True)
+            if unknown_finishes:
+                print(f"  {len(unknown_finishes)} finish code(s) the app cannot "
+                      f"name: {', '.join(sorted(unknown_finishes))}", flush=True)
+
         # A run that named a subset must not retire the sets it did not ask for,
         # so the upstream list is withheld in that case.
         #
@@ -1309,6 +1543,10 @@ def run(args, store):
         summary = record_catalogue_outcome(store, upstream, catalogued_sets,
                                            catalogued_cards, unchanged_sets,
                                            failed_sets, before_fingerprint,
+                                           price_summary=price_summary,
+                                           price_error=price_error,
+                                           price_rows=len(price_rows),
+                                           price_unknown=unknown_finishes,
                                            named_sets=len(set_ids),
                                            published=len(listing))
         print("", flush=True)

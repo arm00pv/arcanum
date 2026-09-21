@@ -41,6 +41,16 @@ What this module is responsible for, and why each rule exists:
   * **No partial revision bumps.** `catalog_meta.sets_revision` moves once, at
     the end, and only when the set list itself changed.
 
+  * **One transaction per game's prices, and a full replacement.** A game's
+    current prices are deleted and rewritten whole - section 5's rule, because a
+    price is cheap to recompute and expensive to diff - and the game's
+    `prices_revision` moves with them in the same transaction. Unlike a set,
+    whose cards are never removed, the price table is meant to be replaced: what
+    it holds is tonight's number, not a record of yesterday's. Two consequences
+    are handled rather than assumed: a game's prices are only ever written by a
+    sweep that covered the whole game, and a set the sweep could not read keeps
+    the rows it already had instead of being deleted for a provider's bad night.
+
 Two boundaries this module holds deliberately:
 
   * **It cannot touch the account tables.** `public.decks` and
@@ -75,6 +85,8 @@ Usage, from an importer:
     store = CatalogStore(os.environ["SUPABASE_DB_URL"])
     for code in codes:
         store.import_set("lorcana", set_doc, cards)
+    store.replace_prices("lorcana", price_rows, observed_on, "lorcast",
+                         carry_over_sets=unswept)
     store.finish("lorcana", source="lorcast")
 """
 
@@ -89,6 +101,7 @@ import shutil
 import subprocess
 import tempfile
 from contextlib import contextmanager
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from urllib.parse import parse_qsl, unquote, urlsplit
 
 # The columns an importer supplies for a set, in a fixed order. Everything else
@@ -119,6 +132,32 @@ CARD_COLUMNS = (
 # string SQLite keeps, which is the one deliberate difference between the two
 # shapes for anything other than booleans.
 _JSON_COLUMNS = frozenset({"extras"})
+
+# The columns of one price row that come from the row itself, in a fixed order,
+# matching section 5. game, source and observed_on are not here because they are
+# properties of the night rather than of a card: one sweep has one source and one
+# observation day, and replace_prices writes them onto every row it stores.
+PRICE_COLUMNS = ("card_id", "kind", "code", "price")
+
+# The two kinds the table's own check constraint allows. A finish is a physical
+# printing the app prices per finish; a secondary figure is a provider's own
+# number - a Cardmarket euro, a ticket - which the app shows without calling it a
+# finish.
+PRICE_KINDS = ("finish", "secondary")
+
+# price is numeric(12,2) and takes an explicit cast, for the same reason extras
+# takes one: a bare text literal would be coerced by position, and the cast is
+# what states the type instead of leaving it to the shape of the statement.
+_NUMERIC_COLUMNS = frozenset({"price"})
+
+# How many price rows one insert statement carries. The whole game goes in one
+# transaction either way; this only keeps a single statement from being a
+# megabyte of text, which is a debugging convenience and nothing more.
+_PRICE_BATCH = 2000
+
+# The scale of the column, as a value rather than as a format string, so that
+# rounding and the text both come from one place.
+_TWO_PLACES = Decimal("0.01")
 
 # Tables this module must never write. Checked on every statement rather than
 # trusted to care, because the cost of the check is nothing and the cost of
@@ -246,6 +285,84 @@ def _normalise(value):
             return False
         return text or None
     return value
+
+
+def price_text(value):
+    """One price as the exact text the numeric(12,2) column stores, or a refusal.
+
+    **A zero is not a price.** Design section 5 states it as a rule the importers
+    inherit from the provider clients, and this is where it stops being a habit:
+    TCGdex and YGOPRODeck both answer 0.00 for a printing with no market, the app
+    reads an absent row as unknown and a stored 0.00 as a real quote of nothing,
+    so a zero or a negative is refused here rather than stored. The importers
+    drop one long before this point; the refusal is the guard that keeps the rule
+    from being broken by an edit that never reads this far.
+
+    Two decimal places, rounded half-up, which is what Postgres itself does when
+    a value goes into numeric(12,2). Doing it here as well is not belt and
+    braces: it is what makes the row the importer derived and the row the
+    database holds *the same row*, so an unchanged night can be recognised by
+    comparison and skipped instead of rewritten. A float left unrounded would
+    come back from the database a hair different and every night would look new.
+    """
+    if value is None or isinstance(value, bool):
+        raise CatalogError(f"a price must be a number, not {value!r}")
+    try:
+        amount = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError) as exc:
+        raise CatalogError(f"a price must be a number, not {value!r}") from exc
+    if not amount.is_finite():
+        raise CatalogError(f"refusing to store a non-finite price: {value!r}")
+    amount = amount.quantize(_TWO_PLACES, rounding=ROUND_HALF_UP)
+    if amount <= 0:
+        raise CatalogError(
+            f"refusing to store {amount} as a price: a zero is not a price, and "
+            "an absent row already says the market quoted nothing")
+    return f"{amount:f}"
+
+
+def _day_text(value):
+    """One observed_on as the date the column stores, or None."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text[:10] or None
+
+
+def _canonical_prices(rows):
+    """A price set in the one form an importer and a psql reading agree on.
+
+    The reading hands a numeric back as text with its scale ('1.20') and a date
+    as 'YYYY-MM-DD', while the importer holds a Python float and the day it
+    sampled on. The two are put in the same shape here - the price through
+    price_text, which is the column's own rule, the day truncated to its date -
+    and sorted by key, so the comparison in replace_prices answers a question
+    about the rows rather than about how they were spelled.
+    """
+    out = []
+    for row in rows:
+        out.append((
+            str(row["card_id"]),
+            str(row["kind"]),
+            str(row["code"]),
+            price_text(row["price"]),
+            _day_text(row.get("observed_on")) or "",
+            str(row.get("source") or ""),
+        ))
+    out.sort()
+    return out
+
+
+def price_fingerprint(rows):
+    """The sha256 of a game's whole price set, in that canonical form.
+
+    One hash rather than a row-by-row comparison, because the question the
+    nightly import asks is only ever "is tonight's set the set the server already
+    holds?", and a hash answers it without a diff of twenty thousand tuples.
+    """
+    blob = json.dumps(_canonical_prices(rows), ensure_ascii=False,
+                      separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -553,12 +670,48 @@ class CatalogStore:
     def read_meta(self, game):
         rows = self.query_json(
             "select game, sets_revision, prices_revision, set_count, card_count,"
+            "       to_char(prices_observed_on, 'YYYY-MM-DD') as prices_observed_on,"
             "       last_import_ok, last_import_note, source"
             f"  from public.catalog_meta where game = {sql_literal(game)}")
         if not rows:
             raise CatalogError(
                 f"no catalog_meta row for {game!r}: step 0 seeds nine of them")
         return rows[0]
+
+    def read_prices(self, game):
+        """Every current-price row one game holds, as the table spells it.
+
+        price is selected as text rather than as a number on purpose. psql
+        renders numeric(12,2) as '1.20', which is exactly the text price_text
+        produces, so the comparison in replace_prices compares the database's own
+        spelling of the row with the importer's instead of round-tripping a
+        decimal through a float on the way.
+        """
+        return self.query_json(
+            "select card_id, kind, code, price::text as price, source,"
+            "       to_char(observed_on, 'YYYY-MM-DD') as observed_on"
+            f"  from public.catalog_prices where game = {sql_literal(game)}"
+            "  order by card_id, kind, code")
+
+    def card_ids_in_sets(self, game, codes):
+        """Every card id the catalogue holds for a set of set codes.
+
+        Used by the price path to find the cards of a set the sweep could not
+        read, whose stored prices are carried over rather than deleted. The codes
+        are folded to lower case here for the reason retire_sets states at
+        length: catalog_cards.set_code holds the *stored* spelling, and a game
+        whose provider spells a code in upper case would match nothing at all
+        while looking like it had.
+        """
+        folded = sorted({str(c).strip().lower() for c in (codes or ())
+                         if str(c).strip()})
+        if not folded:
+            return set()
+        array = "array[" + ", ".join(sql_literal(c) for c in folded) + "]::text[]"
+        rows = self.query_json(
+            f"select id from public.catalog_cards where game = {sql_literal(game)}"
+            f" and set_code = any ({array})")
+        return {row["id"] for row in rows}
 
     def count_rows(self, game):
         """The catalogue's real size for a game, read back from the tables."""
@@ -730,6 +883,181 @@ class CatalogStore:
                 f"refusing to retire every set of {game!r}: an empty upstream list "
                 "is a failed fetch, not a withdrawn game")
         return self._run(sql)
+
+    def replace_prices(self, game, rows, observed_on, source, carry_over_sets=(),
+                       allow_empty=False):
+        """Replaces one game's whole current-price set, in one transaction.
+
+        Design section 5's rule, and the one place this module deliberately goes
+        past what that section spells out. The rule is *full replacement per
+        game, nightly*: delete the game's rows and insert tonight's, in one
+        transaction, then move prices_revision. That is what happens here. The
+        refinement is what the rule assumes and the sweep does not always
+        deliver - that every set of the game was read this run.
+
+        A sweep that could not read a set is not evidence that the set has no
+        prices, and a plain `delete where game = ...` would read it as exactly
+        that: a provider's 503 on one set response would delete a whole set's
+        prices and leave them missing until the next night. So the cards of a set
+        the caller names in carry_over_sets keep the rows the table already holds
+        for them, their old observed_on included, and everything the sweep *did*
+        read is replaced as the rule says. On a complete sweep - the ordinary
+        case - there is nothing to carry over and this is a plain replacement.
+
+        `rows` are dicts of card_id, kind, code and price; source is an argument
+        because one sweep has one publisher. observed_on is an argument too, and
+        it is the sweep's *sampler day* rather than the moment this statement
+        runs: the app can finally say when a price was seen, and
+        `TcgPrices.updatedAt` is null everywhere today because no provider states
+        one. A row may carry its own observed_on, which wins over the argument -
+        the table is not required to be all one day, since a card whose set a
+        later sweep could not read keeps the older day it was actually read on,
+        and a caller that re-offers stored rows has to be able to say so.
+
+        An unchanged night writes nothing. The comparison is between the set the
+        caller derived and the set the table holds, in one canonical form
+        (price_fingerprint), so re-running an importer on a day it has already
+        run costs one read and no write - the same bargain the card path strikes
+        with its checksum, and the reason prices_revision is a signal a client
+        can act on rather than a counter that moves every night regardless.
+        """
+        self.check_server()
+        day = _day_text(observed_on)
+        if not day:
+            raise CatalogError(
+                "a price row needs the day it was observed on: observed_on is "
+                "the sampler's day, and a row without one cannot be dated")
+        if not source:
+            raise CatalogError("a price row needs the source it came from")
+
+        derived = {}
+        for row in rows:
+            card_id = str(row.get("card_id") or "").strip()
+            kind = str(row.get("kind") or "").strip()
+            code = str(row.get("code") or "").strip()
+            if not card_id:
+                raise CatalogError(f"a price row needs a card id: {row!r}")
+            if kind not in PRICE_KINDS:
+                raise CatalogError(
+                    f"a price row's kind is {kind!r}, and catalog_prices allows "
+                    f"{' or '.join(PRICE_KINDS)}")
+            if not code:
+                raise CatalogError(f"a price row needs a code: {row!r}")
+            row_day = _day_text(row.get("observed_on")) or day
+            derived[(card_id, kind, code)] = {
+                "card_id": card_id,
+                "kind": kind,
+                "code": code,
+                "price": price_text(row.get("price")),
+                "source": source,
+                "observed_on": row_day,
+            }
+
+        carried_ids = self.card_ids_in_sets(game, carry_over_sets)
+        stored = self.read_prices(game)
+
+        # Tonight's set: everything the sweep read, plus the rows of the cards it
+        # could not read. A derived row for a carried-over card is dropped rather
+        # than kept - the night made no statement about that set, so the row that
+        # survives is the one the last night that could read it wrote.
+        effective = {key: row for key, row in derived.items() if key[0] not in carried_ids}
+        carried = 0
+        for row in stored:
+            key = (str(row["card_id"]), str(row["kind"]), str(row["code"]))
+            if key[0] in carried_ids:
+                effective[key] = {
+                    "card_id": key[0], "kind": key[1], "code": key[2],
+                    "price": str(row["price"]), "source": str(row["source"]),
+                    "observed_on": _day_text(row["observed_on"]),
+                }
+                carried += 1
+
+        if not effective and stored and not allow_empty:
+            raise CatalogError(
+                f"refusing to empty {game!r} prices: the sweep derived no row at "
+                f"all while the table holds {len(stored)}. A provider that answers "
+                "nothing is likelier than a game whose every price vanished, and "
+                "the replacement below would destroy the table on the strength of "
+                "it. Pass allow_empty to mean it.")
+
+        meta = {} if self.dry_run else self.read_meta(game)
+        revision = int(meta.get("prices_revision") or 0)
+        summary = {
+            "rows": len(effective),
+            "derived": len(effective) - carried,
+            "carried": carried,
+            "dropped": len(derived) - (len(effective) - carried),
+            "carry_over_sets": sorted({str(c).strip().lower()
+                                       for c in (carry_over_sets or ())}),
+            "stored": len(stored),
+            "observed_on": day,
+            "source": source,
+        }
+        if price_fingerprint(stored) == price_fingerprint(effective.values()):
+            summary.update({"outcome": "unchanged", "revision": revision})
+            return summary
+
+        sql = self._price_transaction(game, effective.values(), day)
+        out = [line for line in self._run(sql).splitlines() if line.strip()]
+        written = None
+        if out and out[-1].strip().lstrip("-").isdigit():
+            written = int(out[-1].strip())
+        if written is None and not self.dry_run:
+            # The transaction ends with `returning prices_revision`, so psql
+            # prints the new value and this is the path nobody expects to take.
+            # It reads the value back rather than adding one to a guess, because
+            # a log line that is merely plausible is worse than an extra query.
+            written = int(self.read_meta(game).get("prices_revision") or 0)
+        summary.update({"outcome": "written", "revision": written,
+                        "dry_run": self.dry_run})
+        return summary
+
+    def _price_transaction(self, game, rows, observed_on):
+        """The whole of one game's price night, as a single transaction.
+
+        Three statements and one commit. The delete is scoped to the game - never
+        to the table, never to a set - because a game's prices are exactly what
+        this replacement owns. The inserts follow inside the same transaction, so
+        a browser reading through PostgREST sees yesterday's prices or tonight's
+        and never a table with a hole in it; that is the whole reason the
+        revision this statement moves means anything. And prices_revision moves
+        with the rows it describes, returning the new value so the caller can log
+        it rather than guess at it.
+        """
+        g = sql_literal(game)
+        rows = list(rows)
+        lines = ["begin;", ""]
+        lines.append(f"delete from public.catalog_prices where game = {g};")
+        lines.append("")
+
+        columns = ("game",) + PRICE_COLUMNS + ("source", "observed_on")
+        for start in range(0, len(rows), _PRICE_BATCH):
+            rendered = []
+            for row in rows[start:start + _PRICE_BATCH]:
+                values = [g]
+                for column in PRICE_COLUMNS:
+                    value = row.get(column)
+                    literal = sql_literal(value)
+                    if value is not None and column in _NUMERIC_COLUMNS:
+                        literal += "::numeric"
+                    values.append(literal)
+                values.append(sql_literal(row.get("source")))
+                values.append(sql_literal(row.get("observed_on")))
+                rendered.append("(" + ", ".join(values) + ")")
+            lines.append(
+                f"insert into public.catalog_prices ({', '.join(columns)})\nvalues\n"
+                + ",\n".join(rendered) + ";")
+            lines.append("")
+
+        lines.append(
+            "update public.catalog_meta set\n"
+            "  prices_revision = prices_revision + 1,\n"
+            f"  prices_observed_on = {sql_literal(observed_on)}\n"
+            f"where game = {g}\n"
+            "returning prices_revision;")
+        lines.append("")
+        lines.append("commit;")
+        return "\n".join(lines)
 
     def set_list_fingerprint(self, game):
         """What the game's set list looks like right now.

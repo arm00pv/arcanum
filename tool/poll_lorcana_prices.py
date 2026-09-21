@@ -28,6 +28,15 @@ Lorcana's whole catalogue to answer a question whose answer is the same for
 everybody. The sweep is the cheapest possible importer - the data is already in
 hand - and `--catalog` is what switches the second job on.
 
+Since step 6 it does a third: the prices it has just read go into
+`catalog_prices` as well, keyed by the same card ids the catalogue stores, with
+`observed_on` set to the day this sweep sampled rather than to the moment the
+row was written. Design section 5 fixes the shape of that write: one
+transaction per game, a full replacement, then `prices_revision` moves - and
+the finish codes are the two Lorcast actually quotes, `nonfoil` and `foil`,
+with no secondary figure for this game. A price the provider quotes nothing for
+is no row at all, never a zero.
+
 The card rows it writes have to be the rows the Dart client would have written,
 byte for byte, because both paths write into the same SQLite tables and a
 holding names a card id. Every rule that derives a stored value from a Lorcast
@@ -633,11 +642,57 @@ def write_points(con, rows, state=()):
     return len(rows)
 
 
-def import_catalogue_set(store, code, cards, docs, args):
+def card_documents(cards, fallback_set_code):
+    """Every catalog_cards row one set's cards produce, in the order they arrive.
+
+    One function for the two readers of a card's stored id, because there must
+    only ever be one rule for it. The catalogue writes these rows; the price
+    rows below key themselves off the id this function put on them, so a price
+    can never be stored under an id no card row carries - a price for a card the
+    catalogue does not hold is a price no client can ask for, and
+    catalog_prices' foreign key would refuse it anyway.
+    """
+    out = []
+    for card in cards:
+        built = card_document(card, fallback_set_code)
+        if built is not None:
+            out.append(built)
+    return out
+
+
+def catalogue_price_rows(cards, documents):
+    """The current-price rows one set's cards contribute to catalog_prices.
+
+    Design section 5's four rules, in one place: nothing is stored for a price
+    the provider did not quote (money() already refuses a zero, an empty string
+    and an unparseable value), the row is keyed by the id the *catalogue* stored
+    the card under, the day is the caller's sampler day rather than the clock,
+    and the caller hands the whole game's rows to the store in one call, which
+    is what makes the replacement per game rather than per set.
+
+    Lorcana has exactly two finishes and no secondary figure - Lorcast quotes
+    prices.usd and prices.usd_foil and nothing else - so every row here is
+    kind 'finish'.
+    """
+    stored_ids = {row["id"] for row in documents}
+    out = []
+    for card in cards:
+        card_id = dart_string(card.get("id"))
+        if card_id is None or card_id not in stored_ids:
+            continue
+        for finish, price in prices_of(card).items():
+            out.append({"card_id": card_id, "kind": "finish", "code": finish,
+                        "price": price})
+    return out
+
+
+def import_catalogue_set(store, code, documents, docs, args):
     """Writes one set into the shared catalogue, or reports that it could not be.
 
     None means the set was not written, and the caller counts that as a failure
-    so catalog_meta.last_import_ok says so. A quietly skipped set is the
+    so catalog_meta.last_import_ok says so - and, since step 6, treats the whole
+    set as unswept for prices, so a set that could not be catalogued keeps the
+    prices it already had rather than losing them. A quietly skipped set is the
     failure mode this whole design is trying to make visible.
 
     A set whose metadata was never read - which happens only under --sets on a
@@ -647,11 +702,6 @@ def import_catalogue_set(store, code, cards, docs, args):
     doc = docs.get(code.lower())
     if doc is None:
         doc = {"code": code.lower(), "id": code, "name": code}
-    documents = []
-    for card in cards:
-        built = card_document(card, code.lower())
-        if built is not None:
-            documents.append(built)
     try:
         return store.import_set("lorcana", doc, documents,
                                 allow_empty=args.allow_empty_set)
@@ -660,13 +710,74 @@ def import_catalogue_set(store, code, cards, docs, args):
         return None
 
 
+def write_prices(store, game, source, rows, today, unswept, subset_run):
+    """Replaces one game's price rows, or says why it did not.
+
+    Lives here rather than in catalog_store because it is a rule about *runs*
+    rather than about rows, and the Pokemon importer imports it rather than
+    writing a second copy - the same arrangement the shared id rules already
+    have, and for the same reason: two implementations of one rule is the
+    likeliest way this design quietly stops working.
+
+    Returns (summary, error) - exactly one of the two is set. The price write is
+    reported rather than raised because a run that catalogued everything and
+    failed only at the prices is a night worth recording as a fact, not a night
+    worth losing the catalogue over: the previous prices stay serving, which is
+    the design's own rule for a failed import.
+
+    Two runs do not write prices at all, and both are stated in the note rather
+    than left as a silence. --sets names a subset of the game, and a full
+    replacement built from a subset would delete every price the run did not ask
+    for; --catalog-only samples no prices, so it has none to offer. A game's
+    prices are only ever replaced by a sweep of the whole game.
+    """
+    if subset_run:
+        return None, "not written: this run named a subset of the game, and a " \
+                     "replacement per game built from a subset would delete " \
+                     "every price the run did not ask for"
+    try:
+        return store.replace_prices(game, rows, today, source,
+                                    carry_over_sets=unswept), None
+    except catalog_store.CatalogError as exc:
+        return None, f"not written: {str(exc)[:300]}"
+
+
+def price_note(summary, error, rows, unknown=()):
+    """One line for catalog_meta.last_import_note describing the price write.
+
+    unknown is the set of finish codes the run stored that the app has no
+    CardFinish for. Pokemon is the only game that can produce one today and the
+    usual answer is that there are none; when there are, this is where a person
+    finds out, because a price under a code the app cannot name is invisible to
+    every screen that shows one.
+    """
+    tail = ("; " + f"{len(unknown)} price(s) under a finish the app cannot name: "
+            + ", ".join(sorted(unknown))[:120]) if unknown else ""
+    if error is not None:
+        return error + tail
+    if summary is None:
+        return f"prices not written: --catalog-only samples none ({rows} derived)"
+    carried = (f", {summary['carried']} kept from a set this run could not read"
+               if summary["carried"] else "")
+    if summary["outcome"] == "unchanged":
+        return (f"prices unchanged, {summary['rows']:,} rows already stored"
+                f"{carried}{tail}")
+    return (f"prices replaced, {summary['rows']:,} rows, revision "
+            f"{summary['revision']}{carried}{tail}")
+
+
 def record_catalogue_outcome(store, upstream, sets_written, cards_written,
-                             sets_unchanged, failed_sets, before_fingerprint):
+                             sets_unchanged, failed_sets, before_fingerprint,
+                             price_summary=None, price_error=None,
+                             price_rows=0, price_unknown=(), named_sets=0,
+                             published=0):
     """Writes catalog_meta for the run, whether it went well or not.
 
     Design rule 5: a broken importer has to be a fact a client can read, so
     last_import_ok is written on the failure path too and not only on the happy
-    one.
+    one - and since step 6 that includes the price write, which is recorded in
+    the same note because catalog_meta has one note and a second writer of it
+    would be a second story about one night.
 
     upstream is the provider owner's whole set list, and it deliberately includes
     the sets whose cards failed to download - those sets are still published,
@@ -676,10 +787,18 @@ def record_catalogue_outcome(store, upstream, sets_written, cards_written,
     than "withdrawn", and retiring the rest of the game would be a catastrophe
     dressed as tidiness.
     """
-    note = (f"{len(upstream) if upstream else 0} sets upstream, {sets_written} written, "
+    if upstream is not None:
+        what = f"{len(upstream)} sets upstream"
+    elif published:
+        what = f"{published} sets published, {named_sets} named with --sets"
+    else:
+        what = f"{named_sets} sets named with --sets, and the list was not read"
+    note = (f"{what}, {sets_written} written, "
             f"{sets_unchanged} unchanged, {cards_written} cards, "
-            f"{failed_sets} set(s) failed")
-    return store.finish("lorcana", source="lorcast", ok=failed_sets == 0,
+            f"{failed_sets} set(s) failed; "
+            + price_note(price_summary, price_error, price_rows, price_unknown))
+    return store.finish("lorcana", source="lorcast",
+                        ok=failed_sets == 0 and price_error is None,
                         note=note, upstream_codes=upstream,
                         before_fingerprint=before_fingerprint)
 
@@ -850,6 +969,15 @@ def run(args, store):
     catalogued_sets = 0
     catalogued_cards = 0
     unchanged_sets = 0
+    # The whole game's current prices, accumulated across the sweep and written
+    # once at the end: section 5's replacement is per game, not per set, and a
+    # price write per set would be twenty-four transactions where the design
+    # asks for one.
+    price_rows = []
+    # The sets this run could not read. Their cards keep the price rows they
+    # already have instead of losing them to a replacement built from a sweep
+    # that never saw them - see catalog_store.replace_prices.
+    unswept_sets = []
 
     for i, code in enumerate(codes, 1):
         if args.limit and seen >= args.limit:
@@ -858,19 +986,33 @@ def run(args, store):
             cards = cards_for_set(code, timeout=args.timeout, retries=args.retries)
         except Exception as exc:
             failed_sets += 1
+            # A set that could not be read at all is unswept: the price
+            # replacement keeps whatever rows its cards already have rather than
+            # deleting them on the strength of a response that never arrived.
+            unswept_sets.append(code.lower())
             print(f"  set {code} failed: {exc}", file=sys.stderr, flush=True)
             time.sleep(args.delay)
             continue
 
         if store is not None:
-            outcome = import_catalogue_set(store, code, cards, docs, args)
+            documents = card_documents(cards, code.lower())
+            outcome = import_catalogue_set(store, code, documents, docs, args)
             if outcome is None:
                 failed_sets += 1
+                unswept_sets.append(code.lower())
             else:
                 catalogued_sets += 1
                 catalogued_cards += outcome["cards"]
                 if outcome["outcome"] == "unchanged":
                     unchanged_sets += 1
+            # The price rows come from the same card objects the rows above were
+            # built from, and they are built whether or not this card was
+            # already sampled into the history database today: the server's
+            # table is tonight's answer for the whole game, and a card skipped
+            # because the local series already has today's point would silently
+            # drop its price from the server's copy.
+            if not args.catalog_only:
+                price_rows.extend(catalogue_price_rows(cards, documents))
             if args.catalog_only:
                 if i < len(codes):
                     time.sleep(args.delay)
@@ -916,6 +1058,28 @@ def run(args, store):
     print(f"  {db}", flush=True)
 
     if store is not None:
+        # ---- the prices, in one replacement for the whole game
+        price_summary = None
+        price_error = None
+        if not args.catalog_only:
+            price_summary, price_error = write_prices(
+                store, "lorcana", "lorcast", price_rows, today, unswept_sets,
+                args.sets)
+            print("", flush=True)
+            if price_error is not None:
+                print(f"catalogue prices {price_error}", file=sys.stderr, flush=True)
+            else:
+                # A dry run writes nothing, so it says what it would do rather
+                # than claiming a write the database never saw.
+                verb = ("would replace" if price_summary.get("dry_run")
+                        else price_summary["outcome"])
+                print(f"catalogue prices {verb}: "
+                      f"{price_summary['rows']:,} rows"
+                      + (f", {price_summary['carried']:,} kept from a set this run "
+                         "could not read" if price_summary["carried"] else "")
+                      + (f", prices_revision {price_summary['revision']}"
+                         if price_summary["outcome"] == "written" else ""), flush=True)
+
         # A run that named a subset must not retire the sets it did not ask
         # for, so the upstream list is withheld in that case.
         #
@@ -926,7 +1090,12 @@ def run(args, store):
         upstream = None if args.sets else [c.lower() for c in codes]
         summary = record_catalogue_outcome(store, upstream, catalogued_sets,
                                            catalogued_cards, unchanged_sets,
-                                           failed_sets, before_fingerprint)
+                                           failed_sets, before_fingerprint,
+                                           price_summary=price_summary,
+                                           price_error=price_error,
+                                           price_rows=len(price_rows),
+                                           named_sets=len(codes),
+                                           published=len(listing))
         print("", flush=True)
         if summary.get("dry_run"):
             print("dry run: no catalogue row was written", flush=True)

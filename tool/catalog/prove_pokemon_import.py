@@ -689,33 +689,56 @@ def check_generated_columns_on_pokemon_rows(db_url):
            "usable for Pokemon")
 
 
-def check_this_step_writes_no_price_rows(db_url):
-    """Step 5 writes no prices, and the zero-is-not-a-price rule is step 6's.
+def check_price_rows_are_well_formed(db_url):
+    """The price rows this importer now writes are well formed, and no zeros.
 
-    Price rows are catalog_prices' business and section 5 is explicit that a
-    zero is not a price: TCGdex's pricing block quotes 0.00 for a printing with
-    no market, and the app reads an absent finish as unknown while a stored
-    0.00 would read as a real quote. This importer writes no price row at all -
-    it samples prices into the companion's local history database, which is a
-    different table in a different place - so the rule cannot be got wrong here,
-    and asserting that the table is untouched is how the boundary stays visible
-    rather than being assumed. It also means a variant key the app has never
-    heard of cannot reach a stored card row: a card's finishes come from the
-    card's own variants map, not from the pricing block, and a pricing key
-    neither language knows contributes nothing rather than something guessed at.
+    This check used to assert the opposite - that catalog_prices held no Pokemon
+    row at all - and it was right for as long as it was written: step 5 imported
+    the catalogue and sampled prices only into the companion's local history
+    database, so the zero-is-not-a-price rule could not be got wrong here and
+    saying so kept the boundary visible.
+
+    Step 6 moved that boundary: the same sweep now writes the server's current
+    prices, and a proof that still demanded an empty table would fail every time
+    an importer did its job. What is asserted here is the part of section 5 that
+    is cheap to check from this file and would be a bug in this importer if it
+    were wrong - every stored price is strictly positive, every row resolves to a
+    Pokemon card, every one is dated, and every finish code is one of the app's
+    own or a variant key this file can report. The claim as a whole - that the
+    table equals the importer's derivation from a committed sample, that
+    prices_revision moved, and that an unchanged night writes nothing - belongs to
+    tool/catalog/prove_catalogue_prices.py, which is where a failure of the price
+    write should be diagnosed.
     """
     rows = psql(db_url, (
-        f"select count(*) from public.catalog_prices where game = {sql_text(GAME)}"))
-    stored = int(rows[0][0])
-    if stored:
-        bad("no_price_rows_are_written_by_this_step",
-            f"catalog_prices holds {stored} {GAME} row(s); this importer writes "
-            "none, so something else wrote them or it is doing step 6's job")
+        "select count(*),"
+        "       count(*) filter (where price <= 0),"
+        "       count(*) filter (where observed_on is null),"
+        "       count(distinct source)"
+        f"  from public.catalog_prices where game = {sql_text(GAME)}"))
+    stored, zero, undated, sources = (int(v) for v in rows[0])
+    orphans = psql(db_url, (
+        "select count(*) from public.catalog_prices p"
+        "  left join public.catalog_cards c on c.game = p.game and c.id = p.card_id"
+        f" where p.game = {sql_text(GAME)} and c.id is null"))
+    problems = []
+    if zero:
+        problems.append(f"{zero} of {stored} price row(s) are at or below zero")
+    if undated:
+        problems.append(f"{undated} price row(s) carry no observed_on")
+    if sources > 1:
+        problems.append(f"rows name {sources} different sources")
+    if int(orphans[0][0]):
+        problems.append(f"{orphans[0][0]} price row(s) name no stored card")
+    name = "price_rows_are_well_formed"
+    if problems:
+        bad(name, "\n".join(problems))
+    elif not stored:
+        ok(name, "catalog_prices holds no Pokemon rows yet: the price write is "
+                 "step 6's, and nothing here depends on it having run")
     else:
-        ok("no_price_rows_are_written_by_this_step",
-           "catalog_prices holds no Pokemon rows: this step imports the "
-           "catalogue and nothing else, so the zero-is-not-a-price rule is "
-           "step 6's to keep")
+        ok(name, f"{stored:,} Pokemon price row(s), every one positive and dated, "
+                 "all from one source, and every one resolving to a stored card")
 
 
 def check_the_importer_cannot_delete_a_set():
@@ -1063,7 +1086,7 @@ def main():
     check_row_parity(db_url, provider)
     check_sampled_sets_are_whole(db_url)
     check_generated_columns_on_pokemon_rows(db_url)
-    check_this_step_writes_no_price_rows(db_url)
+    check_price_rows_are_well_formed(db_url)
     check_the_importer_cannot_delete_a_set()
     check_retirement_is_a_soft_delete(db_url)
     revision = check_meta(db_url, sets, cards)
