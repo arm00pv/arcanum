@@ -1,0 +1,32 @@
+[Unit]
+Description=Arcanum - refresh the shared Star Wars: Unlimited catalogue
+Documentation=https://github.com/arm00pv/arcanum
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=zixen
+Group=zixen
+WorkingDirectory=/home/zixen/arcanum
+# Catalogue only, and that is why this game has a unit of its own rather than a
+# line in one of the three samplers' scripts: the publisher quotes no price of any
+# kind for any card, so there is nothing to sample here and replace_prices is never
+# called. A unit that spent its night polling a source for prices it does not
+# publish would be a unit that failed every night on its own assertion.
+#
+# It is the heaviest import of the night and the timeout says so: 27 sets, 40-odd
+# pages of about 3.4 MB each and 135 MB in total, about twelve minutes measured.
+# The lock is the importer's own default, per game, so a hand-run import during the
+# same minute is refused rather than allowed to interleave.
+ExecStart=/usr/bin/python3 /home/zixen/arcanum/tool/import_swu_catalogue.py
+# The database URL, and nothing else, reaches this process. The file is mode 600
+# and systemd reads it as root; the script is given these as variables rather than
+# as arguments of its own, because an argument is readable in a process listing by
+# every user on the host.
+EnvironmentFile=/home/zixen/arcanum/supabase.env
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=3600
+StandardOutput=append:/home/zixen/arcanum/logs/swu_import.log
+StandardError=append:/home/zixen/arcanum/logs/swu_import.log

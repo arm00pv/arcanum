@@ -10,11 +10,12 @@ them a browser can read.
 
 **Its recommendation was taken: Star Wars: Unlimited moved first, onto the
 official FFG API at `https://admin.starwarsunlimited.com/api/`.**
-[catalogue-import-swu.md](catalogue-import-swu.md) is that move - the client
-half of it, which is what the web build needed, with the server half still to
-come. The survey's other three games stand as written, and the costs it warned
-about for this one - no price of any kind, an undocumented internal API - are
-what the move paid.
+[catalogue-import-swu.md](catalogue-import-swu.md) is that move, both halves: the
+app reads the publisher's cards, sets, search and art directly, and
+`arcanum-swu-import.timer` keeps the shared catalogue's copy current nightly.
+The survey's other three games stand as written, and the costs it warned about
+for this one - no price of any kind, an undocumented internal API - are what the
+move paid.
 
 A measured survey. Every URL, status code, header value,
 count and byte size below was produced by a real request from this machine

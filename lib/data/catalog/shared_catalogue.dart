@@ -23,6 +23,7 @@ const Set<CardGame> sharedCatalogueGames = <CardGame>{
   CardGame.lorcana,
   CardGame.pokemon,
   CardGame.gundam,
+  CardGame.starWarsUnlimited,
 };
 
 /// Those games, named for a person: "Lorcana and Pokemon".

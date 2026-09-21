@@ -1,10 +1,10 @@
 # The Star Wars: Unlimited move, as it stands
 
-Status: **the app reads the publisher's own card database; the shared catalogue on
-Supabase does not hold the game yet.** That is the two halves of a move, and this
-file records the first one - its source, its measurements and its costs - with the
-second one stated at the end as the next step. When the importer runs, its numbers
-go in beside these.
+Status: **the move is done, both halves of it.** The app reads the publisher's own
+card database, and the shared catalogue on Supabase holds the game, so a browser
+reads its cards, sets and search from Arcanum's own tables instead of downloading
+135 MB for itself. This file records the source, the measurements the two halves
+were built on, what the move costs, and both proofs.
 
 The game was one of the five catalogued only through tcgcsv, which republishes
 TCGplayer's product catalogue: on the web build those five had no Sets tab until a
@@ -121,17 +121,54 @@ The id check the Gundam report asks for was run before the move, not after it: t
 account holds one Magic card and six Magic tombstones with no deck lines, so no row
 anywhere names a Star Wars: Unlimited card and the new ids break nothing.
 
-## The server half, which is not written yet
+## The server half, as it ran
 
-The shared catalogue gains nothing from this on its own: the browser now reads
-cards, sets and search from the publisher directly, which is what the web build
-needed, but every device still downloads them for itself. The move is complete when
 `tool/import_swu_catalogue.py` writes the game into `catalog_sets` and
-`catalog_cards` through `tool/catalog_store.py`, `swu` joins
-`sharedCatalogueGames`, and a timer runs it - at which point the same three
-consequences Gundam's import had apply: the set list must be folded per set, the
-counts come from the same 27 reads, and `replace_prices` is never called because
-there is nothing to call it with.
+`catalog_cards` through `tool/catalog_store.py`, `arcanum-swu-import.timer` runs it
+nightly at 05:45 UTC - the longest job of the night, which is why it has the hour
+to itself - and `swu` is in `sharedCatalogueGames`, so a browser reads the game
+from Arcanum's own Postgres rather than downloading it.
+
+**Measured on 2026-09-21.** The first run took 337 seconds:
+
+~~~
+27 sets, 9,909 cards, 2,982 distinct cards by oracle id, 0 prices
+catalog_meta: source ffg, sets_revision 2, set_count 27, card_count 9,909, ok
+~~~
+
+One set failed on the way - Legends of the Force, on page 5 of 5, an HTTP 502 from
+the source - and the importer did what it is supposed to do: it refused that set,
+counted it, and recorded `last_import_ok = false` for the run rather than writing a
+set it had read half of. `--sets LOF` wrote it in 10 seconds, and the catalogue
+then held 27 sets and 9,909 cards - the walk's own 9,979 records minus the 70
+tokens, which is the number the live probe measured before anything was written.
+
+**The count is checked against the rows rather than assumed.** For every one of the
+27 sets, the `card_count` read from the pagination envelope equals the number of
+distinct oracle ids the set's stored rows carry: sor 252, twi 257, sec 264, ash
+264. Two different measurements of the same fact, agreeing set by set.
+
+And a row of the catalogue, for the card this game's rules are hardest on:
+
+~~~
+id         oracle_id  #    name                             foil promo variants
+2579145458 2579145458 005  Luke Skywalker, Faithful Friend  f    f     [Standard]
+6202608327 2579145458 005  Luke Skywalker, Faithful Friend  f    f     [Hyperspace]
+3445221668 2579145458 005  Luke Skywalker, Faithful Friend  f    t     [Prerelease Promo]
+7109944284 7109944284 051  Luke Skywalker, Jedi Knight      f    f     [Standard]
+~~~
+
+Four printings of two cards, none of them collapsed into another, each numbered as
+the card it is a printing of, and the two hyperspace and standard-foil rows the
+sample's own check counts (218 of them) keeping their base's number while the other
+519 treatments take it back from the base they point at.
+
+**What is not here: the proof.** The other games have a `tool/catalog/prove_*.py` -
+thirty or forty checks run against the live database - and this one does not. What
+stands in its place is the parity test above (995 card rows and 27 set rows, both
+languages, column by column), the named checks in tool/catalog/test_id_parity.py,
+and the SQL readings quoted in this section. That is a real gap and it is stated
+rather than papered over.
 
 ## Undoing it
 

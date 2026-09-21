@@ -57,11 +57,17 @@ void main() {
       // here is one the app will ask Postgres for, and a game named before its
       // import has run costs a wasted round trip on every query. Adding one is
       // a deliberate act and this is where it is written down. Gundam joined
-      // with tool/import_gundam_catalogue.py, which is the importer that fills
-      // its tables from gcgapi.
+      // with tool/import_gundam_catalogue.py, which fills its tables from
+      // gcgapi, and Star Wars: Unlimited with tool/import_swu_catalogue.py,
+      // which fills them from the publisher's own card database.
       expect(
         sharedCatalogueGames,
-        <CardGame>{CardGame.lorcana, CardGame.pokemon, CardGame.gundam},
+        <CardGame>{
+          CardGame.lorcana,
+          CardGame.pokemon,
+          CardGame.gundam,
+          CardGame.starWarsUnlimited,
+        },
       );
     });
   });

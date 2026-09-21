@@ -1,0 +1,19 @@
+[Unit]
+Description=Daily Arcanum Star Wars: Unlimited catalogue refresh
+Documentation=https://github.com/arm00pv/arcanum
+
+[Timer]
+# After the three samplers (04:20 to 04:55) and after Gundam's catalogue at 05:10,
+# and before the watcher at 06:30 has to judge it: this import is the longest of
+# the night at about twelve minutes, so it is given the hour between them rather
+# than sharing it. Nothing depends on the ordering - each importer takes its own
+# lock - but two catalogue imports at the same minute is load for no reason.
+OnCalendar=*-*-* 05:45:00 UTC
+# A missed run happens at the next opportunity rather than being skipped: this is
+# the only thing that keeps the game's 27 sets current.
+Persistent=true
+RandomizedDelaySec=300
+Unit=arcanum-swu-import.service
+
+[Install]
+WantedBy=timers.target

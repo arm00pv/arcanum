@@ -332,11 +332,12 @@ the relay is not in the path. `arcanum-gundam-import.timer` runs it nightly at
 05:10 UTC, and the cost is that it quotes no price of any kind.
 [catalogue-import-gundam.md](catalogue-import-gundam.md) is the report.)
 
-(Star Wars: Unlimited has left it too, in half: the app reads the publisher's own
-card database directly - sets, cards, search, art, with no relay in the path -
-but the shared catalogue does not hold the game yet, so the timer row above still
-describes the server side of it. [catalogue-import-swu.md](catalogue-import-swu.md)
-is that half; the import is the other.)
+(Star Wars: Unlimited has left it too: the publisher's own card database answers a
+browser directly - sets, cards, search and art, with no relay in the path - and
+`arcanum-swu-import.timer` writes it into this catalogue nightly at 05:45 UTC. It
+quotes no price of any kind either, so its `catalog_prices` row is empty for the
+same reason Gundam's is. [catalogue-import-swu.md](catalogue-import-swu.md) is the
+report.)
 
 (One Piece, Digimon and Dragon Ball are still the row above, and
 [catalogue-source-survey.md](catalogue-source-survey.md) is the measured survey of
