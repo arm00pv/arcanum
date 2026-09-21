@@ -13,6 +13,71 @@ which is the one iOS behaviour that made the app look broken on a return visit.
 The app has never once reported a safe-area inset to Flutter, so nothing about
 the notch can be confirmed until somebody looks.
 
+**If you have the phone, run "The pass to run, in order" below and send the
+answers back.** It is eleven steps, nine of them on the phone alone, and it is
+the only thing in this repository that no amount of work on this side can
+settle.
+
+## The pass to run, in order
+
+Everything below this section is the record and the reasoning. This section is
+the fifteen minutes somebody with an iPhone should actually spend, written to be
+run without reading the rest. Each line says what to do, what to look at, and
+what to write down. If a step looks fine, "fine" is the whole answer.
+
+### Part 1 - on the phone, nothing else needed
+
+1. **Open https://marquezhv.com/arcanumweb/ in Safari and sign in.** Then Share >
+   **Add to Home Screen**, close Safari, and open it from the new icon.
+   *Record:* does it open with no Safari address bar and no toolbar? If the bars
+   are still there, stop - everything after this is testing the wrong thing.
+2. **Look at the top and the bottom.** The clock must sit above the app's own
+   "Arcanum" title, not over it. All five tab labels at the bottom must be clear
+   of the home indicator, and swiping up from the bottom edge must still work.
+   *Record:* any overlap, and whether it is the title, the tabs, or neither.
+3. **Turn the phone sideways.** *Record:* is anything cut off at the notch, or
+   pushed under the left or right edge?
+4. **Look at the colour of the edges** - the strip above and below in portrait,
+   the strips at the sides in landscape. It should be near-black (`#07070C`).
+   *Record:* black, or white? White means WebKit is painting it, not the app.
+5. **Go to Settings and look at the Catalogue switch** ("Read Pokémon and Lorcana
+   from Arcanum"). It should be **on**, without anybody having turned it on.
+   *Record:* on or off. Then open Pokémon's Sets tab - 220 sets should appear.
+6. **Add a card to a set, then open the Sets tab for that set.** The art should
+   load. *Record:* did the art appear, and roughly how long did it take.
+7. **Leave the app** (press home, or open another app) **for a minute, then come
+   back.** *Record:* is the card still there?
+8. **Tap a search field and type with the keyboard up.** *Record:* is the field
+   above the keyboard, or behind it?
+9. **Long-press some text, then double-tap a card.** The browser would select
+   text and zoom. *Record:* did it select or zoom? It should not.
+
+### Part 2 - needs a Mac, a cable, and one setting
+
+10. On the Mac: Safari > Settings > Advanced > **Show Develop menu**. Connect the
+    phone by cable, trust the computer, then **Develop > [your iPhone] >
+    marquezhv.com**. The page's console opens.
+    *Record:* the one line every load leaves - `[storage] persistent`,
+    `[storage] evictable`, or `[storage] unanswerable`. Then do the same from
+    the Home Screen icon and record that line too. **A tab saying `evictable`
+    and the icon saying `persistent` is the expected pair and is the good
+    answer.** Anything else is worth reporting.
+
+### Part 3 - the one that takes a week
+
+11. With a tab that reported `evictable`, close it and **do not open the app for
+    eight days.** Then open it and look at Pokémon's Sets tab.
+    *Record:* did the sets appear instantly from what was already stored, or did
+    they have to download again? This is the only check of the thing the storage
+    request was written for, and nothing here can fake it.
+
+### What to send back
+
+The numbered answers, in whatever words are easiest - "1 fine, 2 the title is
+under the clock, 3 fine..." is perfect. The three that are most likely to be
+wrong, and therefore the most useful to look at carefully, are 2 (the notch),
+10 (the storage line) and 11 (the week).
+
 ## What was checked
 
 **The manifest and the shell.** `web/manifest.json` names the app "arcanum" in
