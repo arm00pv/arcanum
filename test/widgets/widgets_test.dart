@@ -426,6 +426,39 @@ void main() {
       expect(size.height, closeTo(122 * 680 / 488, 0.01));
     });
 
+    testWidgets("honours a game's own ratio when it is given one", (
+      WidgetTester tester,
+    ) async {
+      // Yu-Gi-Oh!'s cards are physically 59x86mm where every other game prints
+      // 63x88mm, and its art is filed at 813x1185. Drawn in Magic's box with
+      // BoxFit.cover that crops the name bar off the top and bottom, so the
+      // call sites that know their game hand it theirs.
+      await _pump(
+        tester,
+        const Row(
+          children: <Widget>[
+            CardThumbnail(width: 118, aspectRatio: 59 / 86),
+          ],
+        ),
+      );
+      final size = tester.getSize(find.byType(CardThumbnail));
+      expect(size.width, 118);
+      expect(size.height, closeTo(118 * 86 / 59, 0.01));
+    });
+
+    testWidgets('an explicit height still wins over the ratio', (
+      WidgetTester tester,
+    ) async {
+      // The ratio decides the box only where the box is the widget's to decide:
+      // a caller that has already measured its own box keeps what it measured.
+      await _pump(
+        tester,
+        const CardThumbnail(width: 100, height: 140, aspectRatio: 59 / 86),
+      );
+      final size = tester.getSize(find.byType(CardThumbnail));
+      expect(size.height, 140);
+    });
+
     testWidgets('supports hero tags, radius and labels', (
       WidgetTester tester,
     ) async {

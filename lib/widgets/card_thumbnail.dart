@@ -13,8 +13,21 @@ import 'common.dart';
 ///
 /// The widget is a fixed-size box: it always lays out inside exactly
 /// `width` x `height` logical pixels and clips everything it draws, so it can
-/// never overflow its parent. When [height] is null the box follows the real
-/// 488:680 Magic card aspect ratio.
+/// never overflow its parent. When [height] is null the box follows
+/// [aspectRatio], which defaults to the real 488:680 Magic card shape.
+///
+/// A caller that knows which game the card belongs to should pass that game's
+/// [CardGame.cardAspectRatio]: art is drawn with BoxFit.cover, so a box of the
+/// wrong shape crops the card rather than letterboxing it, and Yu-Gi-Oh!'s
+/// cards are a different rectangle from everyone else's. A caller that does not
+/// know its game - a shared preview, a test - leaves it alone and gets exactly
+/// the box it got before, because the default is the constant.
+///
+/// Note that the ratio only decides the box where the box is the widget's to
+/// decide: [height] overrides it, and a parent that hands the thumbnail tight
+/// constraints - a grid tile's `Expanded`, say - decides it instead. The two
+/// grids that show cards are laid out that way, so their tiles are shaped by
+/// their grid delegate and not by this field.
 class CardThumbnail extends StatelessWidget {
   /// Creates a card thumbnail.
   const CardThumbnail({
@@ -22,6 +35,7 @@ class CardThumbnail extends StatelessWidget {
     this.imageUrl,
     this.width = 120,
     this.height,
+    this.aspectRatio = cardAspectRatio,
     this.heroTag,
     this.borderRadius,
     this.quantity,
@@ -35,8 +49,15 @@ class CardThumbnail extends StatelessWidget {
   /// Width in logical pixels. Defaults to 120.
   final double width;
 
-  /// Height in logical pixels. Defaults to `width * 680 / 488`.
+  /// Height in logical pixels. Defaults to `width / aspectRatio`.
   final double? height;
+
+  /// The shape of the art this box draws, as width over height.
+  ///
+  /// Defaults to [cardAspectRatio], which is Magic's card. Pass the game's own
+  /// [CardGame.cardAspectRatio] wherever the game is known - see the class doc
+  /// for what it changes and where a parent's constraints win over it.
+  final double aspectRatio;
 
   /// Optional [Hero] tag so the thumbnail can fly between routes.
   final String? heroTag;
@@ -87,7 +108,7 @@ class CardThumbnail extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.c;
     final rarity = this.rarity;
-    final height = this.height ?? width / cardAspectRatio;
+    final height = this.height ?? width / aspectRatio;
     final radius =
         borderRadius ?? BorderRadius.circular(math.min(14.0, width * 0.075));
     final url = imageUrl?.trim();

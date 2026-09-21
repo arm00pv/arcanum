@@ -412,20 +412,39 @@ class PokemonCatalog extends CardCatalog {
   // ---------------------------------------------------------------- mapping
 
   /// Builds the image URL set. TCGdex serves extension-less base URLs that need
-  /// a size suffix.
+  /// a size suffix, and files them under the card's series.
   ///
   /// The series segment is not optional decoration: `en/base1/4/high.webp` is a
-  /// 404 and `en/base/base1/4/high.webp` is the card. A URL is only built this
-  /// way as a last resort, when the response carried no `image` of its own, and
-  /// callers that know the series are expected to pass it.
+  /// 404 and `en/base/base1/4/high.webp` is the card. Ten sets from ten series
+  /// were measured - the form with the series answered 200 ten times out of ten
+  /// and the form without it 404 ten times out of ten - so a URL is only built
+  /// when the series is known. With no series there is no address that can load,
+  /// and the honest answer is no image at all: the app draws its card-back
+  /// placeholder instead of spending a request on an address known to be broken.
+  ///
+  /// [serie] is null on the one path that has no series in hand: a card fetched
+  /// by its id alone, where the response carried no `image` of its own. This
+  /// used to build the series-less form there, which is the URL this comment
+  /// warns against, and a holding reconciled that way (resolveMissingCards
+  /// reaches every card through fetchCardById) got art that could never load.
+  ///
+  /// Looking the series up in the local sets table - which does hold a series
+  /// for every set the device has cached - was the other candidate and was
+  /// rejected. It would thread a database into a provider client, whose whole
+  /// job is to be a network adapter, and it would not have rescued the cards
+  /// that actually reach this branch: `bwp-BW04` and `bwp-BW05` are reached by
+  /// id, carry no `image`, and TCGdex serves art for neither of them under
+  /// either spelling. Both were asked for live: `en/bwp/BW04/low.webp` and
+  /// `en/bw/bwp/BW04/low.webp` are 404, while `en/bw/bwp/BW01/low.webp` - the
+  /// same set, a card the provider did publish art for - is 200. A series would
+  /// have bought those two a URL that is still broken.
   static Map<String, String> _images(
     String cardId,
     String setId, {
     String? serie,
   }) {
-    final base = serie == null
-        ? '$_assets/$setId/${cardId.split('-').last}'
-        : '$_assets/$serie/$setId/${cardId.split('-').last}';
+    if (serie == null || serie.isEmpty) return const <String, String>{};
+    final base = '$_assets/$serie/$setId/${cardId.split('-').last}';
     return {
       'small': '$base/low.webp',
       'normal': '$base/high.webp',
@@ -446,7 +465,9 @@ class PokemonCatalog extends CardCatalog {
         setId ?? set?.id ?? (id.contains('-') ? id.split('-').first : '');
     final image = data['image']?.toString();
     // The response's own image URL is authoritative and already includes the
-    // series segment, which the set id alone does not.
+    // series segment, which the set id alone does not. When there is no image
+    // and no series to build one under - a card reached by its id alone, whose
+    // payload omits both - the map stays empty and the app draws the card back.
     final images = <String, String>{
       if (image != null && image.isNotEmpty) ...{
         'small': '$image/low.webp',

@@ -23,6 +23,7 @@ enum CardGame {
     dataSource: 'Scryfall',
     catalogueSince: 1993,
     collectionNoun: 'binder',
+    cardAspectRatio: 488 / 680,
   ),
   pokemon(
     id: 'pokemon',
@@ -35,6 +36,10 @@ enum CardGame {
     dataSource: 'TCGdex',
     catalogueSince: 1999,
     collectionNoun: 'binder',
+    // TCGdex files every Pokemon card at 600x825 - 8:11, at every
+    // rendition - so this is the shape of the art the app is handed rather
+    // than the shape of the cardboard, which is 63x88mm like Magic's.
+    cardAspectRatio: 600 / 825,
   ),
   lorcana(
     id: 'lorcana',
@@ -51,6 +56,7 @@ enum CardGame {
     dataSource: 'Lorcast',
     catalogueSince: 2023,
     collectionNoun: 'binder',
+    cardAspectRatio: 488 / 680,
   ),
   yugioh(
     id: 'yugioh',
@@ -68,6 +74,11 @@ enum CardGame {
     dataSource: 'YGOPRODeck',
     catalogueSince: 1999,
     collectionNoun: 'binder',
+    // Yu-Gi-Oh!'s cards are 59x86mm where every other game prints 63x88mm,
+    // and its art is filed at 813x1185 - 59/86 exactly. Drawn at Magic's shape
+    // with BoxFit.cover that crops 2.3% off the top and bottom of every card,
+    // which is where the name bar is.
+    cardAspectRatio: 59 / 86,
   ),
   onePiece(
     id: 'onepiece',
@@ -86,6 +97,7 @@ enum CardGame {
     dataSource: 'TCGplayer',
     catalogueSince: 2022,
     collectionNoun: 'binder',
+    cardAspectRatio: 488 / 680,
   ),
   starWarsUnlimited(
     id: 'swu',
@@ -101,6 +113,7 @@ enum CardGame {
     dataSource: 'TCGplayer',
     catalogueSince: 2024,
     collectionNoun: 'binder',
+    cardAspectRatio: 488 / 680,
   ),
   digimon(
     id: 'digimon',
@@ -117,6 +130,7 @@ enum CardGame {
     dataSource: 'TCGplayer',
     catalogueSince: 2020,
     collectionNoun: 'binder',
+    cardAspectRatio: 488 / 680,
   ),
   dragonBall(
     id: 'dragonball',
@@ -137,6 +151,7 @@ enum CardGame {
     dataSource: 'TCGplayer',
     catalogueSince: 2024,
     collectionNoun: 'binder',
+    cardAspectRatio: 488 / 680,
   ),
   gundam(
     id: 'gundam',
@@ -155,6 +170,7 @@ enum CardGame {
     dataSource: 'TCGplayer',
     catalogueSince: 2025,
     collectionNoun: 'binder',
+    cardAspectRatio: 488 / 680,
   );
 
   const CardGame({
@@ -168,6 +184,7 @@ enum CardGame {
     required this.dataSource,
     required this.catalogueSince,
     required this.collectionNoun,
+    required this.cardAspectRatio,
   });
 
   /// Stable identifier stored in the database and in preferences.
@@ -199,6 +216,33 @@ enum CardGame {
 
   /// Word used for a storage location in this game's UI.
   final String collectionNoun;
+
+  /// The shape of this game's card art, as width over height.
+  ///
+  /// This is a per-game fact rather than one number for the app because the
+  /// games do not all print the same rectangle. Eight of the nine here do:
+  /// every card is about 63mm by 88mm and its art is filed to that shape -
+  /// measured, Magic's own files are 488x680 and the shop's CDN serves 400x558
+  /// to 400x560 across the games it catalogues (Gundam 558, One Piece 559,
+  /// Digimon 560 in a sample of one product each, a one-pixel spread that is
+  /// noise rather than a shape). Those games share Magic's number: a box half a
+  /// percent out crops nothing anybody can see, and a constant per game fitted
+  /// to a single product's pixel height would be measuring the scan rather than
+  /// the card.
+  ///
+  /// Yu-Gi-Oh! is the one that is not the same rectangle, and the reason this
+  /// lives here at all. Its cards are physically 59mm by 86mm - narrower than
+  /// every other game's - and its art is filed at 813x1185, which is 59/86 to
+  /// three decimal places. Drawn in a Magic-shaped box with BoxFit.cover, that
+  /// crops 2.3% off the top and 2.3% off the bottom of every card, which is
+  /// where its name bar sits.
+  ///
+  /// Pokemon is stated at the shape its art actually is rather than the shape
+  /// its cardboard is. TCGdex renders every card at 600x825 - 8:11, whichever
+  /// rendition is asked for - which is 1.3% wider than a Magic card, so a box
+  /// drawn to the physical 63x88 would shave that 1.3% off the sides of the
+  /// artwork it was handed. The box should match the pixels it is given.
+  final double cardAspectRatio;
 
   /// The matching tag used by the shared enum tables.
   ///

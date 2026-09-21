@@ -279,6 +279,7 @@ class _Result extends StatelessWidget {
               width: 42,
               child: CardThumbnail(
                 imageUrl: card.imageUrl(size: 'small'),
+                aspectRatio: card.game.cardAspectRatio,
                 width: 42,
                 rarity: CardRarity.fromCode(card.rarity),
                 borderRadius: BorderRadius.circular(6),

@@ -679,6 +679,7 @@ class _SearchResultTile extends StatelessWidget {
               children: <Widget>[
                 CardThumbnail(
                   imageUrl: card.imageUrl(size: 'small'),
+                  aspectRatio: card.game.cardAspectRatio,
                   width: 56,
                   rarity: rarity,
                   semanticLabel: card.name,

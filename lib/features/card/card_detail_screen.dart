@@ -223,7 +223,10 @@ class _Hero extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(18),
               child: AspectRatio(
-                aspectRatio: 488 / 680,
+                // The card's own game decides the frame: a Yu-Gi-Oh! card is
+                // 59x86mm where every other game prints 63x88mm, so Magic's
+                // shape crops its name bar off.
+                aspectRatio: card.game.cardAspectRatio,
                 child: url == null
                     ? const CardBackPlaceholder()
                     : Hero(

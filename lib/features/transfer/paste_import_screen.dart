@@ -168,7 +168,7 @@ class _PasteImportScreenState extends ConsumerState<PasteImportScreen> {
                   ),
                 ],
                 const SizedBox(height: 10),
-                for (final r in resolved) _ResolvedRow(resolved: r),
+                for (final r in resolved) _ResolvedRow(resolved: r, game: game),
                 const SizedBox(height: 16),
                 FilledButton.icon(
                   onPressed: found.isEmpty || _importing
@@ -291,9 +291,13 @@ class _PasteImportScreenState extends ConsumerState<PasteImportScreen> {
 
 /// One line of the preview.
 class _ResolvedRow extends StatelessWidget {
-  const _ResolvedRow({required this.resolved});
+  const _ResolvedRow({required this.resolved, required this.game});
 
   final _Resolved resolved;
+
+  /// The game the list was pasted for. A line that matched nothing has no card
+  /// to take a shape from, and the box it draws says so honestly either way.
+  final CardGame game;
 
   @override
   Widget build(BuildContext context) {
@@ -314,6 +318,7 @@ class _ResolvedRow extends StatelessWidget {
               width: 34,
               child: CardThumbnail(
                 imageUrl: card?.imageUrl(size: 'small'),
+                aspectRatio: game.cardAspectRatio,
                 width: 34,
                 rarity: CardRarity.fromCode(card?.rarity),
                 borderRadius: BorderRadius.circular(5),

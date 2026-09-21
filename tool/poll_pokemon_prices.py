@@ -438,12 +438,25 @@ def image_uris(card_id, set_id, serie=None):
     """PokemonCatalog._images: TCGdex's extension-less base, plus a size suffix.
 
     The series segment is not optional decoration: en/base1/4/high.webp is a 404
-    and en/base/base1/4/high.webp is the card. A URL is only built this way when
-    the response carried no image of its own, and callers that know the series
-    are expected to pass it.
+    and en/base/base1/4/high.webp is the card. Ten sets from ten series were
+    measured - the form with the series answered 200 ten times out of ten and
+    the form without it 404 ten times out of ten - so a URL is only built when
+    the series is known, and with no series this answers nothing at all. The app
+    draws its card-back placeholder from an empty map rather than spending a
+    request on an address known to be broken.
+
+    serie is None on the one path that has no series in hand: a card fetched by
+    its id alone, where the response carried no image of its own. The other
+    candidate was looking the series up in the local sets table; it was rejected
+    because it threads a database into a network adapter and because it would not
+    have rescued the cards that reach this branch - bwp-BW04 and bwp-BW05 have no
+    art on the CDN under either spelling (both 404, measured), while
+    en/bw/bwp/BW01/low.webp, the same set, is 200.
     """
+    if not serie:
+        return {}
     tail = card_id.split("-")[-1]
-    base = f"{ASSETS}/{set_id}/{tail}" if serie is None else f"{ASSETS}/{serie}/{set_id}/{tail}"
+    base = f"{ASSETS}/{serie}/{set_id}/{tail}"
     return {
         "small": f"{base}/low.webp",
         "normal": f"{base}/high.webp",
@@ -458,7 +471,8 @@ def card_image_uris(card, card_id, set_id, serie=None):
     series segment, which the set id alone does not. So the payload wins when it
     has an image, and _images is the last resort - which 183 of the committed
     sample's 323 cards need, because TCGdex omits the field for most older
-    printings.
+    printings. A card with neither an image nor a series gets no art at all
+    rather than a series-less URL, which is the rule image_uris states.
     """
     image = dart_to_string(card.get("image"))
     if image:
@@ -663,9 +677,12 @@ def stub_document(stub, set_doc=None, serie=None):
         "color_identity": "",
         "artist": None,
         "flavor_text": None,
-        "image_small": images["small"],
-        "image_normal": images["normal"],
-        "image_large": images["large"],
+        # Empty when the card has neither an image of its own nor a series to
+        # build one under: a null column is the row the client stores, and the
+        # app draws its card back from it.
+        "image_small": images.get("small"),
+        "image_normal": images.get("normal"),
+        "image_large": images.get("large"),
         "image_art_crop": None,
         "image_png": None,
         "back_image_small": None,
@@ -801,9 +818,12 @@ def card_document(card, set_doc=None, stub=None, serie=None, requested_id=None):
         "color_identity": ",".join(types),
         "artist": dart_to_string(card.get("illustrator")),
         "flavor_text": dart_to_string(card.get("description")),
-        "image_small": images["small"],
-        "image_normal": images["normal"],
-        "image_large": images["large"],
+        # Empty when the card has neither an image of its own nor a series to
+        # build one under: a null column is the row the client stores, and the
+        # app draws its card back from it.
+        "image_small": images.get("small"),
+        "image_normal": images.get("normal"),
+        "image_large": images.get("large"),
         "image_art_crop": None,
         "image_png": None,
         "back_image_small": None,

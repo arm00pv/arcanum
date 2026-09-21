@@ -84,6 +84,16 @@ const String energyRemovalJson = '''
  "set":{"id":"base1","name":"Base Set"}}
 ''';
 
+/// A promo whose payload carries no `image` field at all, which TCGdex really
+/// does publish: `bwp-BW04` has none. Reached by its id alone there is no set
+/// object either, so its series is unknown - and art is filed under the series.
+const String bw04Json = '''
+{"id":"bwp-BW04","localId":"BW04","name":"Reshiram","rarity":"Rare",
+ "set":{"id":"bwp","name":"BW Black Star Promos"},
+ "category":"Pokemon","hp":130,"types":["Fire"],"stage":"Basic",
+ "attacks":[{"cost":["Fire"],"name":"Blue Flare","damage":"120"}]}
+''';
+
 /// The search endpoint answers with ids, names and a thumbnail - never a rarity
 /// or a price.
 const String searchJson = '''
@@ -147,6 +157,7 @@ PokemonCatalog catalogWith({
     'base1-4': charizardJson,
     'base1-58': pikachuJson,
     'base1-99': energyRemovalJson,
+    'bwp-BW04': bw04Json,
   },
   String? searchBody = searchJson,
   String? effectBody = effectSearchJson,
@@ -322,6 +333,39 @@ void main() {
 
     test('answers null for a card the provider does not hold', () async {
       expect(await catalogWith().fetchCardById('base1-100'), isNull);
+    });
+
+    test('keeps the series the payload image carries', () async {
+      // A card reached by id has no set object, so the only thing that says
+      // which series its art lives under is the payload's own image URL.
+      final card = await catalogWith().fetchCardById('base1-4');
+
+      expect(
+        card!.imageUrl(size: 'normal'),
+        'https://assets.tcgdex.net/en/base/base1/4/high.webp',
+      );
+    });
+
+    test('gives a card with no image and no series no art at all', () async {
+      // The regression this pins. TCGdex files art as
+      // <host>/en/<serie>/<set>/<number>/<size> and the series segment is load
+      // bearing: measured over ten sets from ten series, the form with it
+      // answered 200 ten times out of ten and the form without it 404 ten times
+      // out of ten. This card's payload carries no image of its own, and
+      // fetching it by id means no set response has said which series it is in,
+      // so there is no URL that could load. It used to be handed one anyway -
+      // "https://assets.tcgdex.net/en/bwp/BW04/high.webp", which is the 404
+      // form - and a holding reconciled through resolveMissingCards got art
+      // that could never arrive. An empty map draws the card back instead.
+      final card = await catalogWith().fetchCardById('bwp-BW04');
+
+      expect(card, isNotNull);
+      expect(card!.name, 'Reshiram');
+      expect(card.setCode, 'bwp');
+      expect(card.imageUris, isEmpty);
+      expect(card.imageUrl(size: 'small'), isNull);
+      expect(card.imageUrl(size: 'normal'), isNull);
+      expect(card.imageUrl(size: 'large'), isNull);
     });
 
     test(

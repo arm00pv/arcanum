@@ -548,6 +548,50 @@ def the_set_codes_are_the_folded_form_the_catalogue_stores(case):
                   "poll_pokemon_prices.set_document")
 
 
+def every_art_url_carries_its_series(case):
+    """No Pokemon row carries an address of the form the CDN answers 404 for.
+
+    TCGdex files art at <host>/en/<serie>/<set>/<number>/<size>, and the series
+    segment is load bearing: measured over ten sets from ten different series,
+    the form with it answered 200 ten times out of ten and the form without it
+    404 ten times out of ten. The client used to build the series-less form on
+    one path - a card fetched by its id alone whose payload carried no image of
+    its own - and now stores no art at all there rather than a URL that cannot
+    load, so the app draws its card back instead of requesting a broken address.
+
+    The whole-row comparison above cannot catch a disagreement about this rule
+    if both languages make the same mistake: they would still match, row for
+    row, on a URL that 404s. This asserts the rule itself, over the committed
+    rows, so a series-less URL is a failure rather than an agreement.
+    """
+    host = "https://assets.tcgdex.net/en/"
+    wrong = []
+    for card_id in sorted(case.cards):
+        row = case.cards[card_id]
+        for column in ("image_small", "image_normal", "image_large"):
+            url = row.get(column)
+            if url is None:
+                continue
+            if not isinstance(url, str) or url != url.strip():
+                wrong.append(f"{card_id}: {column} is not a clean URL: {url!r}")
+                continue
+            if not url.startswith(host):
+                continue
+            # <serie>/<set>/<number>/<size> is four segments under /en/; the
+            # series-less form the CDN 404s on is three.
+            if len(url[len(host):].split("/")) != 4:
+                wrong.append(f"{card_id}: {column} has no series segment: {url}")
+    if wrong:
+        return False, (f"{len(wrong)} art URL(s) of the form the CDN answers 404 "
+                       f"for:\n" + "\n".join(wrong[:5]))
+    arts = sum(1 for row in case.cards.values()
+               for column in ("image_small", "image_normal", "image_large")
+               if isinstance(row.get(column), str))
+    return True, (f"all {arts} art URLs carry their series segment; the cards "
+                  f"with no image of their own and no series to place them under "
+                  f"carry no art at all")
+
+
 def the_set_responses_list_the_same_ids(case):
     """The ids the provider's own set responses list are the ids the rows carry.
 
@@ -674,7 +718,8 @@ GAMES = (
          checks=(every_id_is_the_providers_own, no_card_was_dropped,
                  the_set_responses_list_the_same_ids,
                  the_unaddressable_card_round_trips,
-                 the_set_codes_are_the_folded_form_the_catalogue_stores)),
+                 the_set_codes_are_the_folded_form_the_catalogue_stores,
+                 every_art_url_carries_its_series)),
     Game("yugioh", yugioh_cards, yugioh_sets,
          card_columns=("id", "set_code"), set_columns=("code",),
          checks=(every_id_begins_with_its_passcode, the_collision_rule_is_exercised,

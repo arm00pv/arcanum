@@ -77,12 +77,25 @@ Dart uses that; `PokemonCatalog._images` is only reached when the payload has
 none, and its `serie == null` branch builds `en/<set>/<number>`, which cannot
 ever be right. It is reachable in practice - `bwp-BW04` has no `image` field at
 all - and it affects a card resolved by id, which is the path
-`resolveMissingCards` takes. **This is a pre-existing client bug and it is not
-fixed here**: fixing it means deciding whether to omit the image or look the
-series up from the local sets table, and either way it changes the id vectors
-that tool/catalog/test_id_parity.py asserts against, so it is its own change
-rather than a rider on this one. On the web it is masked, because the server's
-rows already carry the correct URL.
+`resolveMissingCards` takes. On the web it is masked, because the server's rows
+already carry the correct URL.
+
+**Fixed by omitting the image rather than looking the series up.** With no series
+there is no address that could load, so `PokemonCatalog._images` now answers
+nothing at all and the app draws its card-back placeholder instead of spending a
+request on a URL known to be broken; `tool/poll_pokemon_prices.image_uris`
+mirrors the rule, and `test_id_parity.py` asserts it over the committed rows so
+that both languages agreeing on the broken form would be a failure rather than an
+agreement. The lookup from the local sets table was the other candidate and was
+rejected: it threads a database into a provider client, whose job is to be a
+network adapter, and it would not have rescued the cards that reach this branch -
+`bwp-BW04` and `bwp-BW05` are reached by id, carry no `image`, and TCGdex
+serves them no art under either spelling. `en/bwp/BW04/low.webp` and
+`en/bw/bwp/BW04/low.webp` are both 404, while `en/bw/bwp/BW01/low.webp` from the
+same set is 200, so a series would have bought those two a URL that is still
+broken. The id vectors moved for exactly those two rows, in their three image
+columns, and both halves of the parity test were run against the regenerated
+file.
 
 ## What it costs
 

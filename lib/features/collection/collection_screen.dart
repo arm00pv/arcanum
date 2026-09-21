@@ -390,6 +390,7 @@ class _EntryRow extends StatelessWidget {
               width: 46,
               child: CardThumbnail(
                 imageUrl: card?.imageUrl(size: 'small'),
+                aspectRatio: game.cardAspectRatio,
                 width: 46,
                 rarity: rarity,
                 quantity: e.quantity.toDouble(),
@@ -544,6 +545,7 @@ class _EntryGridTile extends StatelessWidget {
                         ),
                       ),
                     ),
+                    aspectRatio: game.cardAspectRatio,
                     rarity: CardRarity.fromCode(card?.rarity),
                     quantity: valued.entry.quantity.toDouble(),
                     borderRadius: BorderRadius.circular(10),

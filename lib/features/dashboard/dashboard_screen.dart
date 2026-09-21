@@ -716,6 +716,7 @@ class _HoldingRow extends StatelessWidget {
               width: 42,
               child: CardThumbnail(
                 imageUrl: card?.imageUrl(size: 'small'),
+                aspectRatio: game.cardAspectRatio,
                 width: 42,
                 rarity: CardRarity.fromCode(card?.rarity),
                 quantity: valued.entry.quantity.toDouble(),

@@ -342,6 +342,7 @@ class _LotTile extends StatelessWidget {
               width: 40,
               child: CardThumbnail(
                 imageUrl: card?.imageUrl(size: 'small'),
+                aspectRatio: game.cardAspectRatio,
                 width: 40,
                 quantity: entry.quantity.toDouble(),
                 rarity: CardRarity.fromCode(card?.rarity),

@@ -655,6 +655,7 @@ class _DeckRow extends ConsumerWidget {
               width: 42,
               child: CardThumbnail(
                 imageUrl: card?.imageUrl(size: 'small'),
+                aspectRatio: entry.game.cardAspectRatio,
                 width: 42,
                 rarity: CardRarity.fromCode(card?.rarity),
                 borderRadius: BorderRadius.circular(6),

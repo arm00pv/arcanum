@@ -176,6 +176,7 @@ class _WantRow extends ConsumerWidget {
               width: 46,
               child: CardThumbnail(
                 imageUrl: card.imageUrl(size: 'small'),
+                aspectRatio: game.cardAspectRatio,
                 width: 46,
                 rarity: CardRarity.fromCode(card.rarity),
                 borderRadius: BorderRadius.circular(6),

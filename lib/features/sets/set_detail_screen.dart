@@ -526,6 +526,7 @@ class _CardGridTile extends StatelessWidget {
                             ),
                           ),
                         ),
+                        aspectRatio: card.game.cardAspectRatio,
                         heroTag: 'card-${card.id}',
                         rarity: rarity,
                         quantity: owned > 0 ? owned.toDouble() : null,
@@ -663,6 +664,7 @@ class _CardListTile extends StatelessWidget {
               width: 46,
               child: CardThumbnail(
                 imageUrl: card.imageUrl(size: 'small'),
+                aspectRatio: card.game.cardAspectRatio,
                 width: 46,
                 rarity: rarity,
                 quantity: owned > 0 ? owned.toDouble() : null,

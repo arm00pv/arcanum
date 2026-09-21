@@ -49,6 +49,32 @@ void main() {
       expect(accents, hasLength(CardGame.values.length));
     });
 
+    test("the card's own shape is declared, and Yu-Gi-Oh!'s is not Magic's", () {
+      // The failure this pins: card art is drawn with BoxFit.cover, so a box of
+      // the wrong shape crops the card rather than letterboxing it. Yu-Gi-Oh!
+      // prints its cards at 59x86mm where every other game here prints 63x88mm,
+      // and its art is filed at 813x1185 - 59/86 to three decimal places. Drawn
+      // in Magic's 488:680 box that crops 2.3% off the top and 2.3% off the
+      // bottom, which is where the name bar sits.
+      expect(CardGame.yugioh.cardAspectRatio, closeTo(59 / 86, 1e-12));
+      // TCGdex files every Pokemon card at 600x825 - 8:11, at every rendition -
+      // which is 1.3% wider than a Magic card, so the box is stated at the shape
+      // of the pixels it is handed rather than the shape of the cardboard.
+      expect(CardGame.pokemon.cardAspectRatio, closeTo(600 / 825, 1e-12));
+      // Everything else files its art within a pixel or two of Magic's shape,
+      // which is a rounding error rather than a rectangle, so they share it.
+      for (final game in CardGame.values) {
+        if (game == CardGame.yugioh || game == CardGame.pokemon) continue;
+        expect(game.cardAspectRatio, closeTo(488 / 680, 1e-12), reason: game.id);
+      }
+      // And a ratio is width over height for a card, which is taller than it is
+      // wide: a value outside this range is a shape no card has.
+      for (final game in CardGame.values) {
+        expect(game.cardAspectRatio, greaterThan(0.5), reason: game.id);
+        expect(game.cardAspectRatio, lessThan(1.0), reason: game.id);
+      }
+    });
+
     test('resolves ids back to games, and defaults unknown ones to Magic', () {
       expect(CardGame.fromId('lorcana'), CardGame.lorcana);
       expect(CardGame.fromId('yugioh'), CardGame.yugioh);

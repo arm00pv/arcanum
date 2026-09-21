@@ -261,6 +261,7 @@ class _AlertCard extends ConsumerWidget {
                   width: 44,
                   child: CardThumbnail(
                     imageUrl: card?.imageUrl(size: 'small'),
+                    aspectRatio: game.cardAspectRatio,
                     width: 44,
                     borderRadius: BorderRadius.circular(6),
                   ),

@@ -683,6 +683,7 @@ class _Found extends StatelessWidget {
                 width: 64,
                 child: CardThumbnail(
                   imageUrl: card.imageUrl(size: 'normal'),
+                  aspectRatio: card.game.cardAspectRatio,
                   width: 64,
                   rarity: CardRarity.fromCode(card.rarity),
                   borderRadius: BorderRadius.circular(8),
@@ -824,6 +825,7 @@ class _Candidate extends StatelessWidget {
               width: 42,
               child: CardThumbnail(
                 imageUrl: card.imageUrl(size: 'small'),
+                aspectRatio: card.game.cardAspectRatio,
                 width: 42,
                 rarity: CardRarity.fromCode(card.rarity),
                 borderRadius: BorderRadius.circular(6),
