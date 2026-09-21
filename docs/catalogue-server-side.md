@@ -331,7 +331,9 @@ catalogue from a host that sends CORS headers, so a browser reads it directly an
 the relay is not in the path. `arcanum-gundam-import.timer` runs it nightly at
 05:10 UTC, and the cost is that it quotes no price of any kind.
 [catalogue-import-gundam.md](catalogue-import-gundam.md) is the report; the other
-four games are still the row above.)
+four games are still the row above, and
+[catalogue-source-survey.md](catalogue-source-survey.md) is the measured survey of
+where each of them could go instead.)
 
 Two notes on that table. Magic's current prices come from Scryfall's bulk data
 rather than MTGJSON, because the deploy notes already record that MTGJSON's

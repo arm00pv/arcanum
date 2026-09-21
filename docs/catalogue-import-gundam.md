@@ -68,7 +68,14 @@ today, and no source that quotes one has been found.
 
 **No release date for any set.** The sets table sorts on `released_at`, so Gundam
 sets come back in name order rather than newest first until a source for the date
-is found.
+is found. The Sets tab's chip row still offers *Newest* and *Oldest* and opens
+on *Newest*, which for this game is an order it cannot take: every set sorts to
+the same date, and 28 sets is few enough that Dart's insertion sort leaves the
+query's own name order standing - so the list a collector sees under *Newest* is
+in fact A to Z. The chip is the only thing wrong there, and it is left as it is
+for now rather than taught a per-game fact this screen would use once: the honest
+fix is to drop the two date chips when no set of the game has a date at all, and
+it is a change to the chip row's index mapping rather than to the query.
 
 **Art needs the relay.** Bandai's image host sends no `Access-Control-Allow-Origin`
 at all - measured 2026-09-21, refused for every one of the 1,912 product images -
