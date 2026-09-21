@@ -17,6 +17,14 @@ import 'package:arcanum/domain/models/card_game.dart';
 /// and a row that simply vanishes is a row a sync cannot see a removal in. A
 /// deck's mark does not touch its lines, so a deck revived by a newer edit is
 /// revived whole rather than empty.
+///
+/// A mark that stays where it is also makes a deletion something the collector
+/// can take back, which is what [deletedDecks] and [restoreDeck] are: the list
+/// of what has been deleted here, and the edit that puts one of them back. The
+/// two are the same fact read and written - nothing is purged, so the list is
+/// every deck ever deleted on this device rather than a window of the last few,
+/// and undoing one is the newer edit on the row that the account's merge already
+/// knows how to weigh.
 class DeckDao {
   DeckDao(this._db);
 
@@ -48,6 +56,40 @@ class DeckDao {
        WHERE d.game = ? AND d.deleted_at IS NULL
        GROUP BY d.id
        ORDER BY d.updated_at DESC, d.id DESC
+    ''',
+      <Object?>[game.id],
+    );
+    return <Deck>[for (final r in rows) _deckFrom(r)];
+  }
+
+  /// Every deck of a game that has been deleted here, most recently deleted
+  /// first.
+  ///
+  /// The same join as [decks] with the mark the other way round, and the lines
+  /// are counted here too: a deck brought back is brought back whole, so what
+  /// the collector is choosing between is what each one actually holds. It is
+  /// also the honest thing to put beside the name - "Krenko, 98 cards" is a
+  /// different answer to "which one was that" than the name alone.
+  ///
+  /// Nothing purges these rows (§4.3 of the design), so this is every deck the
+  /// collector has ever deleted on this device and not the last handful. A list
+  /// that quietly stopped at ten would be a list that made a deletion
+  /// irreversible again, one deck at a time.
+  Future<List<Deck>> deletedDecks(CardGame game) async {
+    final rows = await _db.rawQuery(
+      '''
+      SELECT d.*,
+             COALESCE(SUM(CASE WHEN c.board != 'side' THEN c.quantity END), 0)
+               AS card_count,
+             COALESCE(SUM(CASE WHEN c.board = 'side' THEN c.quantity END), 0)
+               AS side_count,
+             COUNT(c.card_id) AS unique_cards
+        FROM decks d
+        LEFT JOIN deck_cards c
+          ON c.deck_id = d.id AND c.deleted_at IS NULL
+       WHERE d.game = ? AND d.deleted_at IS NOT NULL
+       GROUP BY d.id
+       ORDER BY d.deleted_at DESC, d.id DESC
     ''',
       <Object?>[game.id],
     );
@@ -160,6 +202,35 @@ class DeckDao {
       'decks',
       <String, Object?>{'deleted_at': now, 'updated_at': now},
       where: 'id = ?',
+      whereArgs: <Object?>[id],
+    );
+  }
+
+  /// Brings a deleted deck back, as an edit made now.
+  ///
+  /// The clear of the mark and the new stamp are one statement and both matter,
+  /// and they are the whole of this method because they are the whole of what a
+  /// deletion is. The stamp is what makes the revival travel: the account
+  /// decides whether a deck is there by comparing this row's `updated_at` with
+  /// the deletion it is holding, so a deck brought back under its old stamp
+  /// would lose that comparison and be deleted again by the next pull - arriving
+  /// here as a deck that appeared for a moment and then went. And it is an edit
+  /// like any other, which is what the watcher asks about: `ahead()` reads the
+  /// newest stamp per game, so an undo is carried up by the same pass that
+  /// carries up a rename.
+  ///
+  /// Only a deleted deck is touched. Putting back a deck that is already there
+  /// is not an edit and must not be stamped as one - it would make a deck
+  /// nobody has touched look newer than the account's copy of it, and the next
+  /// push would then write a row this device never actually changed.
+  Future<void> restoreDeck(int id) async {
+    await _db.update(
+      'decks',
+      <String, Object?>{
+        'deleted_at': null,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      where: 'id = ? AND deleted_at IS NOT NULL',
       whereArgs: <Object?>[id],
     );
   }

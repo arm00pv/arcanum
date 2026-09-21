@@ -435,4 +435,78 @@ void main() {
       reason: 'and the removal it never saw was not written over',
     );
   });
+
+  test('a deletion undone here travels as an edit, and the deck is whole', () async {
+    // The undo the design's step 3 owes the collector (docs/deck-sync.md
+    // section 4.2). It is deliberately not a second kind of write: putting a
+    // deck back clears the mark and stamps the row, which makes the deletion an
+    // older edit than the revival - the same comparison the account's merge
+    // weighs for every other change - and it is a stamp the watcher already
+    // asks about, so nothing new has to carry it up.
+    final _Account account = _Account();
+    final _Browser one = await _Browser.open(account);
+    await one.signIn();
+    final int id = await one.deck('Krenko');
+    await one.dao.addCard(id, 'goblin-chieftain', quantity: 4);
+    await one.watcher.flush();
+    final String mine = await one.syncIdOf(id);
+
+    await one.dao.deleteDeck(id);
+    await one.watcher.flush();
+    expect(account.tombstoned(mine), isTrue);
+    // While it is deleted there is somewhere for the collector to find it, with
+    // what is in it - which is what makes "which one was that" answerable.
+    final Deck listed = (await one.dao.deletedDecks(CardGame.mtg)).single;
+    expect(listed.name, 'Krenko');
+    expect(listed.cardCount, 4);
+    expect(await one.dao.decks(CardGame.mtg), isEmpty);
+
+    await one.dao.restoreDeck(id);
+    await one.watcher.flush();
+
+    expect(
+      account.live(mine),
+      isTrue,
+      reason: 'the undo is an edit like any other, so it reaches the account',
+    );
+    expect(account.tombstoned(mine), isFalse);
+    expect(
+      account.holds(mine, 'goblin-chieftain'),
+      isTrue,
+      reason: 'and the deck went back up whole, not empty',
+    );
+    expect(await one.dao.deletedDecks(CardGame.mtg), isEmpty);
+    expect((await one.dao.decks(CardGame.mtg)).single.cardCount, 4);
+  });
+
+  test('putting back a deck nothing deleted is not an edit', () async {
+    // A deck that is already there has nothing to take back, and stamping it
+    // would make it look newer than the account's copy of it - so the next push
+    // would write a row this browser never actually changed.
+    final _Account account = _Account();
+    final _Browser one = await _Browser.open(account);
+    await one.signIn();
+    final int id = await one.deck('Krenko');
+    final int before =
+        (await one.db.db.query(
+              'decks',
+              columns: <String>['updated_at'],
+              where: 'id = ?',
+              whereArgs: <Object?>[id],
+            )).single['updated_at']
+            as int;
+
+    await one.dao.restoreDeck(id);
+
+    expect(
+      (await one.db.db.query(
+            'decks',
+            columns: <String>['updated_at'],
+            where: 'id = ?',
+            whereArgs: <Object?>[id],
+          )).single['updated_at'],
+      before,
+    );
+    expect(await one.dao.decks(CardGame.mtg), hasLength(1));
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -43,18 +45,43 @@ Future<void> editDeck(BuildContext context, WidgetRef ref, Deck deck) async {
 }
 
 /// Confirms, then deletes a deck. The collection is never touched.
+///
+/// The wording changed, and the design says why (docs/deck-sync.md section 4.2).
+/// "The deck and its list are removed" was true while deleting a deck deleted a
+/// row; since v16 it is true of this device, and only until another device edits
+/// the deck. A dialog that promises a deck is gone and hands it back a moment
+/// later is worse than one that says what actually happens, so this one says
+/// both halves: the deck leaves this device's list, the cards stay in the
+/// collection, and the deletion is not final.
+///
+/// It is not final in two directions and the sentence covers both. The rule the
+/// merge follows is that a deletion is an edit made at a moment, so a device
+/// that never heard about it and then changes the deck brings the deck back
+/// everywhere, with that edit in it; and a collector who deleted the wrong deck
+/// can put it back themselves, here or from the deleted decks list. Neither is a
+/// promise this app can keep on its own - the first is another device's doing -
+/// so what is promised is what happens rather than what will not.
+///
+/// The undo is offered in the snack bar rather than in a second dialog, because
+/// the collector has just answered one question and asking twice is how a
+/// confirmation stops being read. The list behind it is what makes the offer
+/// last longer than the snack bar.
 Future<bool> confirmDeleteDeck(
   BuildContext context,
   WidgetRef ref,
   Deck deck,
 ) async {
+  final messenger = ScaffoldMessenger.of(context);
   final ok = await showDialog<bool>(
     context: context,
     builder: (BuildContext context) => AlertDialog(
       title: Text('Delete ${deck.name}?'),
       content: const Text(
-        'The deck and its list are removed. Cards in it stay in your '
-        'collection, and nothing you own is deleted.',
+        'The deck and its list leave your decks, and the cards in it stay in '
+        'your collection. Nothing you own is deleted.\n\n'
+        'Deleting is not final. A deck another device edits before it hears '
+        'about the deletion comes back with that edit, and you can put this one '
+        'back from Deleted decks.',
       ),
       actions: <Widget>[
         TextButton(
@@ -71,7 +98,33 @@ Future<bool> confirmDeleteDeck(
   if (ok != true) return false;
   await ref.read(deckRepositoryProvider).delete(deck.id);
   ref.read(deckRevisionProvider.notifier).bump();
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      SnackBar(
+        content: Text('${deck.name} deleted.'),
+        // Long enough to be read and acted on by somebody who has just clicked
+        // through a dialog, and nothing like long enough to be the only way
+        // back: Deleted decks holds the deck until it is wanted.
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => unawaited(_undoDelete(ref, deck.id)),
+        ),
+      ),
+    );
   return true;
+}
+
+/// Puts a deck back, which is an edit made now and travels like one.
+///
+/// The bump is the same one [confirmDeleteDeck] makes and for the same reason: a
+/// screen that has answered keeps its answer until it is told the answer has
+/// moved, and nothing else here would tell the deck list that a deck it stopped
+/// showing is on it again.
+Future<void> _undoDelete(WidgetRef ref, int id) async {
+  await ref.read(deckRepositoryProvider).restore(id);
+  ref.read(deckRevisionProvider.notifier).bump();
 }
 
 /// What the dialog hands back.

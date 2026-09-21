@@ -898,6 +898,21 @@ final decksProvider = FutureProvider.family<List<DeckContents>, CardGame>((
   return ref.watch(deckRepositoryProvider).all(game, owned: owned);
 });
 
+/// Every deck of a game that has been deleted here, newest deletion first.
+///
+/// Bare decks rather than priced contents: a list that only exists to put one of
+/// them back does not need the catalogue behind it, and it is asked for on the
+/// screen a collector tidies up from rather than on the one they build a deck
+/// on. It watches the same counter as every other deck provider, so a deck
+/// another browser deletes while this list is open leaves it.
+final deletedDecksProvider = FutureProvider.family<List<Deck>, CardGame>((
+  ref,
+  game,
+) async {
+  ref.watch(deckRevisionProvider);
+  return ref.watch(deckRepositoryProvider).deleted(game);
+});
+
 /// One deck by id, priced and counted against what is owned.
 final deckProvider = FutureProvider.family<DeckContents?, int>((
   ref,

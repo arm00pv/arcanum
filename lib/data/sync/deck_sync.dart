@@ -7,6 +7,18 @@ import 'package:arcanum/data/sync/account_deck.dart';
 import 'package:arcanum/data/sync/deck_table.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 
+/// What a catch-up found: whether anything here moved, and which printings the
+/// rows that did named.
+///
+/// Two answers rather than one, because the caller needs both and a count cannot
+/// give either. Whether to tell the screens is [moved] - a deck whose name was
+/// the only thing to change is a change with no card in it, and a listener that
+/// read "no cards arrived" as "nothing happened" would leave a renamed deck
+/// under its old name until something else moved it. [named] is the printings a
+/// row that landed is made of, which is what a catalogue has to be asked for
+/// before a list can draw them as cards rather than as "--".
+typedef DeckArrivals = ({bool moved, Set<String> named});
+
 /// Keeps one game's decks, and the cards in them, in step between this device
 /// and the account.
 ///
@@ -189,6 +201,60 @@ class DeckSync {
   Future<void> sync(CardGame game) async {
     await pull(game);
     await push(game);
+  }
+
+  /// Writes one account row here, whether it is a deck or one of its lines.
+  ///
+  /// The pull asks the two tables in the order it has to - decks before their
+  /// lines, because a line is stored against the local deck it belongs to - but
+  /// a change arriving on its own is one row with nothing beside it saying which
+  /// table it came from. It does not need anything beside it: the two tables'
+  /// shapes do not overlap, and a line names the deck it belongs to while a deck
+  /// names itself. So which translation a row gets is a question about the row,
+  /// and both answers are the same merge a pull makes.
+  ///
+  /// Answers whether it wrote, which is what a listener deciding whether to
+  /// disturb a screen needs to know.
+  Future<bool> mergeRow(CardGame game, Map<String, Object?> row) {
+    // A line, not a deck: only a line carries the deck it is part of. A row
+    // that is neither is answered for by the translation it falls to, which
+    // reads the identity and finds none.
+    if (row['deck_sync_id'] != null) return mergeLine(game, row);
+    return mergeDeck(game, row);
+  }
+
+  /// Brings the account's decks and lines for one game down, naming what moved.
+  ///
+  /// [pull] asks a different question - how many rows the account offered - and
+  /// that count cannot answer this one: nine games the account holds hundreds of
+  /// rows for would be nine games announced every time a browser reconnects,
+  /// most of them to show decks that are already on screen.
+  ///
+  /// Decks first and then their lines, exactly as [pull] does and for the same
+  /// reason: a line whose deck is not here has nowhere to land, so a game whose
+  /// decks arrived a moment ago is the only one whose lines can be merged at all.
+  ///
+  /// The printings rather than a bare yes, because a line that landed is a line a
+  /// screen will be drawing a moment from now, and whether it can be drawn as a
+  /// card or as a placeholder is a question about the catalogue - which the
+  /// caller holds and this file does not.
+  Future<DeckArrivals> pullChanged(CardGame game) async {
+    var moved = false;
+    final Set<String> named = <String>{};
+
+    for (final Map<String, Object?> row in await table.fetchDecks(game)) {
+      if (await mergeDeck(game, row)) moved = true;
+    }
+    for (final Map<String, Object?> row in await table.fetchLines(game)) {
+      if (!await mergeLine(game, row)) continue;
+      moved = true;
+      // mergeLine only answers for rows whose deck is here, so a row that got
+      // past it is a line and has a printing for a screen to fetch.
+      final RemoteLine? line = RemoteLine.from(row);
+      if (line != null) named.add(line.cardId);
+    }
+
+    return (moved: moved, named: named);
   }
 
   /// Writes one account deck here, field by field.

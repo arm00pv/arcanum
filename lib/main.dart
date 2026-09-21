@@ -24,6 +24,7 @@ import 'package:arcanum/features/auth/account_providers.dart';
 import 'package:arcanum/features/auth/account_reconcile.dart';
 import 'package:arcanum/features/auth/collection_listener.dart';
 import 'package:arcanum/features/auth/collection_watcher.dart';
+import 'package:arcanum/features/auth/deck_listener.dart';
 import 'package:arcanum/features/auth/deck_watcher.dart';
 import 'package:arcanum/data/backup/backup_scheduler.dart';
 import 'package:arcanum/data/db/app_database.dart';
@@ -181,10 +182,34 @@ Future<void> main() async {
       // keeps its vault to itself and has nobody to hear from.
       final CollectionListener listener = CollectionListener(
         sync: collection,
-        changes: SupabaseAccountChanges(Supabase.instance.client),
+        changes: SupabaseAccountChanges(
+          Supabase.instance.client,
+          table: SupabaseAccountChanges.collectionEntries,
+        ),
         // The catalogue this browser already has, so a change announced from
         // another browser can be fetched as the card it names rather than left
         // on screen as a placeholder.
+        catalog: bootstrap.catalog,
+        signedIn: () => service.isSignedIn,
+        accountId: () => service.user?.id,
+      );
+      // The decks' half of the same promise, and the second path rather than a
+      // change to the first: the collection's listener above is untouched by
+      // this one, and the two share nothing but the seam they hear through.
+      // Two tables, because a deck is two - the deck row and its lines - joined
+      // into the one callback a listener is written against.
+      final DeckListener deckListener = DeckListener(
+        sync: deckSync,
+        changes: JoinedChanges(
+          SupabaseAccountChanges(
+            Supabase.instance.client,
+            table: SupabaseAccountChanges.decks,
+          ),
+          SupabaseAccountChanges(
+            Supabase.instance.client,
+            table: SupabaseAccountChanges.deckCards,
+          ),
+        ),
         catalog: bootstrap.catalog,
         signedIn: () => service.isSignedIn,
         accountId: () => service.user?.id,
@@ -210,11 +235,13 @@ Future<void> main() async {
           // catch-up is a pull of the whole account as it stands at the moment
           // the subscription goes live, whenever that turns out to be.
           listener.begin(scope);
+          deckListener.begin(scope);
         },
         onSignedOut: () {
           watcher.end();
           deckWatcher.end();
           listener.end();
+          deckListener.end();
         },
         child: app,
       );

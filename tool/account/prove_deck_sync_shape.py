@@ -495,14 +495,26 @@ def check_schema(db_url):
 
     check_grants(got)
 
-    if got.get("realtime_tables") == "collection_entries":
-        ok("sql_deck_cards_is_not_streamed_yet",
-           "the publication still holds collection_entries and nothing else. "
-           "Streaming the deck tables is step 4 of the design's own table - "
-           "0004_realtime_decks.sql - and creating a table and streaming it are "
-           "two separate steps; this migration is the first one")
+    # This reading has changed since 0003 was written, and the change is the
+    # design's own step 4. When this proof was written the publication held
+    # collection_entries and nothing else, and that was the assertion: creating a
+    # table and streaming it are two separate steps, and 0003 was the first one
+    # for public.deck_cards. 0004_realtime_decks.sql is the second, and it put
+    # both deck tables in. So the check reads the state the two steps together
+    # leave - the three account tables and nothing beside them - rather than the
+    # state 0003 left on its own, which no longer exists on any database this
+    # has been applied to. prove_deck_realtime.py is the proof of the step that
+    # changed it; this one only has to stop claiming the opposite.
+    if got.get("realtime_tables") == "collection_entries,deck_cards,decks":
+        ok("sql_the_publication_is_what_the_steps_left",
+           "the publication holds the three account tables and nothing else: "
+           "collection_entries, which 0002 streamed, and decks and deck_cards, "
+           "which 0004 streamed. That is not 0003's doing - its own statements "
+           "mention no publication at all, which the check below reads out of "
+           "the file - and the deck tables being streamed is what the deck "
+           "listener needs")
     else:
-        bad("sql_deck_cards_is_not_streamed_yet",
+        bad("sql_the_publication_is_what_the_steps_left",
             f"publication holds {got.get('realtime_tables', 'missing')}")
 
     if got.get("dc_n_rows") == "0":

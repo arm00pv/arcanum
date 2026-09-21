@@ -137,6 +137,31 @@ abstract final class AccountDeck {
   static bool lineWins(DateTime local, DateTime remote) =>
       !remote.isBefore(local);
 
+  /// The game a row belongs to, or null when it names one this build cannot
+  /// place.
+  ///
+  /// Read out of the row rather than known in advance, because a change arrives
+  /// on its own with nothing to say which vault it belongs to: a subscription
+  /// filters by account, not by game, so a browser hears about every game it
+  /// owns and has to file each row where it came from. Both deck tables carry
+  /// the game on the row - on the deck because that is what a deck is, and on
+  /// the line because it is fixed when the line is created - which is what makes
+  /// this a reading rather than a join.
+  ///
+  /// [CardGame.fromId] answers Magic for anything it does not recognise, which is
+  /// the right default for a preference somebody edited by hand and the wrong one
+  /// here: a row for a game this build has never heard of would be filed under
+  /// Magic, and a game shipped on the account would quietly put its decks into a
+  /// vault they are not in.
+  static CardGame? gameOf(Map<String, Object?> row) {
+    final Object? id = row['game'];
+    if (id is! String) return null;
+    for (final CardGame game in CardGame.values) {
+      if (game.id == id) return game;
+    }
+    return null;
+  }
+
   /// A moment out of a local row: both local tables count milliseconds since the
   /// epoch. Nothing there reads as the epoch, which is older than any edit.
   static DateTime moment(Object? value) =>

@@ -64,6 +64,21 @@ class DeckRepository {
 
   Future<void> delete(int id) => _dao.deleteDeck(id);
 
+  /// Puts a deleted deck back, and does not touch a deck that is still here.
+  ///
+  /// An undo is an edit made at a moment rather than a second kind of write, so
+  /// this is the DAO's [DeckDao.restoreDeck] and nothing above it: the row that
+  /// comes out of it is newer than the deletion, which is what the account's
+  /// merge weighs, and what the watcher carries up.
+  Future<void> restore(int id) => _dao.restoreDeck(id);
+
+  /// Every deck of a game that has been deleted here, newest deletion first.
+  ///
+  /// The other half of [delete]: a deletion is not final, and this is what makes
+  /// that something a collector can see and use rather than a sentence in a
+  /// dialog.
+  Future<List<Deck>> deleted(CardGame game) => _dao.deletedDecks(game);
+
   Future<void> addCard(
     int deckId,
     String cardId, {

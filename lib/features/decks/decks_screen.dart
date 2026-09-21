@@ -8,6 +8,7 @@ import 'package:arcanum/domain/decks/deck.dart';
 import 'package:arcanum/domain/models/card_game.dart';
 import 'package:arcanum/features/decks/deck_detail_screen.dart';
 import 'package:arcanum/features/decks/deck_form.dart';
+import 'package:arcanum/features/decks/deleted_decks_sheet.dart';
 import 'package:arcanum/providers.dart';
 import 'package:arcanum/widgets/glass.dart';
 import 'package:arcanum/widgets/sliver_async.dart';
@@ -61,6 +62,17 @@ class DecksScreen extends ConsumerWidget {
                       ],
                     ),
                     actions: [
+                      // A deletion is not final, and the dialog says so - this
+                      // is where the collector goes when they said so in a
+                      // dialog they did not read, or three days later. Always
+                      // offered rather than shown only when something has been
+                      // deleted, because a control that appears after the
+                      // mistake is a control nobody knows exists.
+                      IconButton(
+                        tooltip: 'Deleted decks',
+                        icon: const Icon(Icons.restore_from_trash_outlined),
+                        onPressed: () => showDeletedDecks(context, ref, game),
+                      ),
                       IconButton(
                         tooltip: 'New deck',
                         icon: const Icon(Icons.add_rounded),
