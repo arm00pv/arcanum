@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:arcanum/data/auth/auth_refusal.dart';
 import 'package:arcanum/data/auth/supabase_config.dart';
 
 /// Something an account did that the collector needs told about, in words.
@@ -59,7 +60,7 @@ class AccountService {
         password: password,
       );
     } on AuthException catch (error) {
-      throw AccountError(_plainly(error));
+      throw AccountError(AuthRefusal.plainly(error));
     } catch (error) {
       debugPrint('[account] sign-in failed: $error');
       throw const AccountError(
@@ -85,7 +86,7 @@ class AccountService {
       _pending = email.trim();
       return false;
     } on AuthException catch (error) {
-      throw AccountError(_plainly(error));
+      throw AccountError(AuthRefusal.plainly(error));
     } catch (error) {
       debugPrint('[account] sign-up failed: $error');
       throw const AccountError(
@@ -135,38 +136,12 @@ class AccountService {
     try {
       await _client.auth.resend(type: OtpType.signup, email: email.trim());
     } on AuthException catch (error) {
-      throw AccountError(_plainly(error));
+      throw AccountError(AuthRefusal.plainly(error));
     }
   }
 
   Future<void> signOut() async {
     _pending = null;
     await _client.auth.signOut();
-  }
-
-  /// The service's vocabulary, said plainly.
-  static String _plainly(AuthException error) {
-    final String said = error.message.toLowerCase();
-    if (said.contains('invalid login credentials')) {
-      return 'That email and password do not match an account.';
-    }
-    if (said.contains('email not confirmed')) {
-      return 'That account still needs its confirmation link opened. Check '
-          'your email.';
-    }
-    if (said.contains('already registered') ||
-        said.contains('already been registered')) {
-      return 'There is already an account with that email. Sign in instead.';
-    }
-    if (said.contains('password') && said.contains('at least')) {
-      return 'That password is too short. Six characters or more.';
-    }
-    if (said.contains('rate limit') || said.contains('too many')) {
-      return 'Too many attempts just now. Wait a minute and try again.';
-    }
-    if (said.contains('valid email') || said.contains('invalid format')) {
-      return 'That does not look like an email address.';
-    }
-    return error.message;
   }
 }
