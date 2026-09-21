@@ -33,6 +33,12 @@ ART_ORIGINS = {
     "tcgplayer": "https://tcgplayer-cdn.tcgplayer.com",
     "ygoprodeck": "https://images.ygoprodeck.com",
     "lorcast": "https://cards.lorcast.io",
+    # TCGdex's card art answers with "Access-Control-Allow-Origin: *, *" - the
+    # value twice - and a browser refuses a multi-valued header outright. Its set
+    # logos send a single "*" and are fine, which is what hid this. Measured
+    # 2026-09-21: of 216 Pokemon sets, 186 had a refused low.webp, 208 a refused
+    # high.webp and 165 a refused high.png.
+    "tcgdex": "https://assets.tcgdex.net",
 }
 
 # A year, and immutable: the shop names a picture after the product it shows

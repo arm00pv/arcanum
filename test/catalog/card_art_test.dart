@@ -21,6 +21,13 @@ void main() {
         'https://images.ygoprodeck.com/images/cards/89631139.jpg';
     const String promo =
         'https://cards.lorcast.io/card/digital/normal/crd_a6f3.avif?1755566321';
+    // TCGdex, which is here for a different reason from the other three: it does
+    // send an Access-Control-Allow-Origin, and sends it twice - "*, *" - which a
+    // browser refuses outright. Measured 2026-09-21, that cost almost every
+    // Pokemon card picture on the web, which is why the relay stands in front of
+    // a host that looks like it names the browser.
+    const String pokemon =
+        'https://assets.tcgdex.net/en/me/30th/001/high.webp';
 
     test('is the CDN itself on a phone', () {
       // A phone sends no Origin and nothing judges its answers, so its art goes
@@ -29,6 +36,7 @@ void main() {
       expect(CardArt.host(shop, web: false), shop);
       expect(CardArt.host(ygo, web: false), ygo);
       expect(CardArt.host(promo, web: false), promo);
+      expect(CardArt.host(pokemon, web: false), pokemon);
     });
 
     test('and Arcanum on a web build', () {
@@ -48,19 +56,27 @@ void main() {
         'https://marquezhv.com/arcanumweb-api/art/lorcast/card/digital/normal/'
         'crd_a6f3.avif?1755566321',
       );
+      expect(
+        CardArt.host(pokemon, web: true),
+        'https://marquezhv.com/arcanumweb-api/art/tcgdex/en/me/30th/001/high.webp',
+      );
     });
 
     test('leaves a host that already answers a browser where it is', () {
-      // Scryfall and TCGdex send Access-Control-Allow-Origin themselves, and
-      // between them they carry most of the art the app shows: relaying them
-      // would spend this host's bandwidth and the user's wait on a header the
-      // CDN was giving away.
+      // Scryfall sends Access-Control-Allow-Origin itself, once, and carries
+      // most of the art the app shows: relaying it would spend this host's
+      // bandwidth and the reader's wait on a header the CDN was giving away.
+      //
+      // **TCGdex used to be listed here beside it, and that was wrong.** It does
+      // send the header and sends it twice - "*, *" - which a browser refuses
+      // outright. Measured 2026-09-21: of 216 Pokemon sets, 186 had a refused
+      // low.webp, 208 a refused high.webp and 165 a refused high.png, so almost
+      // every Pokemon card picture was missing on the web. Its set logos send a
+      // single "*" and were always fine, which is what made this look like a
+      // per-set problem rather than a per-header one.
       const String magic = 'https://cards.scryfall.io/normal/front/0/0/abc.jpg';
-      const String pokemon =
-          'https://assets.tcgdex.net/en/base/base1/4/high.webp';
 
       expect(CardArt.host(magic, web: true), magic);
-      expect(CardArt.host(pokemon, web: true), pokemon);
       // A host is recognised by its name and the slash that ends it, so a name
       // only beginning with a relayed one is not handed over as though it were
       // that host.

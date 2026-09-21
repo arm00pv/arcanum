@@ -23,14 +23,27 @@ abstract final class CardArt {
 
   /// The hosts a browser may not ask, and the name the relay knows each by.
   ///
-  /// Kept in step with the relay's own table by hand. A host missing from it
-  /// is a host the browser is left alone with, which is the right answer for
-  /// Scryfall and TCGdex - both of which do name the browser - and the wrong
-  /// one for anything added below.
+  /// Kept in step with the relay's own table by hand.
+  ///
+  /// **TCGdex is here because naming the origin is not the same as naming it
+  /// once.** This table was first written on the belief that TCGdex "does name
+  /// the browser", which is true of the header it sends and false of what a
+  /// browser makes of it: measured 2026-09-21, its card-art paths answer with
+  /// `Access-Control-Allow-Origin: *, *` - the same value twice - and a browser
+  /// refuses a multi-valued header outright with `net::ERR_FAILED`. Of 216
+  /// Pokemon sets, 186 refused `low.webp`, 208 refused `high.webp` and 165
+  /// refused `high.png`, which is to say almost every Pokemon card picture was
+  /// missing on the web and the placeholder was drawn instead. The set *logos*
+  /// on the same host send a single `*` and were always fine, which is what made
+  /// it look like a per-set problem rather than a per-header one.
+  ///
+  /// A host missing from here is a host the browser is left alone with, which is
+  /// the right answer for Scryfall, and was the wrong one for TCGdex.
   static const Map<String, String> _relayed = <String, String>{
     'https://tcgplayer-cdn.tcgplayer.com': 'tcgplayer',
     'https://images.ygoprodeck.com': 'ygoprodeck',
     'https://cards.lorcast.io': 'lorcast',
+    'https://assets.tcgdex.net': 'tcgdex',
   };
 
   /// The address art published at [direct] is fetched from.

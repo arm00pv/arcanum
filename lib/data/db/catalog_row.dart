@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/data/catalog/card_art.dart';
 import 'package:arcanum/domain/models/tcg_card.dart';
 
 /// One catalogue row, turned into a model and back.
@@ -151,7 +152,12 @@ abstract final class CatalogRow {
   static Map<String, String> _imagesFromRow(Map<String, Object?> r) {
     final out = <String, String>{};
     void put(String key, Object? v) {
-      if (v is String && v.isNotEmpty) out[key] = v;
+      // Through CardArt.host, so a row the *server* holds is addressed the same
+      // way one a provider client builds is: a browser is sent to the relay for
+      // a host that will not name it, and a phone keeps asking the CDN. This is
+      // the one place the server path builds an image URL, which is why the rule
+      // is applied here rather than at each of the five renditions.
+      if (v is String && v.isNotEmpty) out[key] = CardArt.host(v);
     }
 
     put('small', r['image_small']);
@@ -166,8 +172,8 @@ abstract final class CatalogRow {
     final back = <String, String>{};
     final bs = r['back_image_small'];
     final bn = r['back_image_normal'];
-    if (bs is String && bs.isNotEmpty) back['small'] = bs;
-    if (bn is String && bn.isNotEmpty) back['normal'] = bn;
+    if (bs is String && bs.isNotEmpty) back['small'] = CardArt.host(bs);
+    if (bn is String && bn.isNotEmpty) back['normal'] = CardArt.host(bn);
     if (back.isEmpty) return const [];
     // The front face is reconstructed from the top-level images so that
     // imageUrl(face: 0) and imageUrl(face: 1) behave identically.
