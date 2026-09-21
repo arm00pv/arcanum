@@ -1221,16 +1221,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // either: the field is hidden rather than promising a source that would
     // never answer.
     final bool isYgo = game == CardGame.yugioh || game == CardGame.lorcana;
-    // The three games TCGplayer catalogs are in the same position, and in one
+    // The four games TCGplayer catalogs are in the same position, and in one
     // respect a worse one: no free archive of them exists either, and the
     // companion does not sample them yet, so their history is what the app
     // records itself until a sampler is pointed at them.
+    //
+    // Gundam is not one of them any more, and the sentence below is why it
+    // matters that it is not: TCGplayer publishes a price for a Gundam card and
+    // gcgapi publishes none at all, so a collector reading that sentence about
+    // this game would be reading about a price the app cannot fetch.
     final bool isTcgplayerOnly =
         game == CardGame.onePiece ||
         game == CardGame.starWarsUnlimited ||
         game == CardGame.digimon ||
-        game == CardGame.dragonBall ||
-        game == CardGame.gundam;
+        game == CardGame.dragonBall;
     final bool configured = settings.hasHistoryProvider(game);
     // Every game can now be probed, because the companion answers for all four:
     // Magic from the MTGJSON slice, and the rest from their daily samplers. A
@@ -1273,6 +1277,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               'history of every card is complete from the day the sampler was '
               'switched on. Arcanum adds its own daily snapshot of everything '
               'you own on top.',
+              style: context.t.bodySmall?.copyWith(
+                color: c.textSecondary,
+                height: 1.45,
+              ),
+            ),
+          ] else if (game == CardGame.gundam) ...<Widget>[
+            Text('Gundam price history', style: context.t.titleSmall),
+            const SizedBox(height: 8),
+            Text(
+              'gcgapi quotes no price of any kind for this game: no market '
+              'price, no low and no foil figure, and no TCGplayer product id '
+              'to join a price series to. Neither a current price nor a '
+              'history of one can be read for a Gundam card at all, so the '
+              'game is catalogued and tracked and not valued - which is what '
+              'reading it from the publisher\'s own database costs, and the '
+              'one thing about this game that is still open.',
               style: context.t.bodySmall?.copyWith(
                 color: c.textSecondary,
                 height: 1.45,

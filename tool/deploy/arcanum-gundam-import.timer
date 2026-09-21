@@ -1,0 +1,20 @@
+[Unit]
+Description=Daily Arcanum Gundam catalogue refresh
+Documentation=https://github.com/arm00pv/arcanum
+
+[Timer]
+# The three samplers run 04:20 to 04:55 and Magic's rebuild is Monday at 05:30,
+# so this settles between them at 05:10. Nothing depends on the ordering any
+# more - the importers are kept apart by a lock each, not by the clock, which is
+# what docs/catalogue-refresh.md records - but a catalogue import and a rebuild
+# of the same machine at the same minute is load for no reason.
+OnCalendar=*-*-* 05:10:00 UTC
+# A missed run happens at the next opportunity rather than being skipped: this
+# is the only thing that keeps Gundam's 28 sets current, and a night skipped is
+# a week of stale cards if nobody notices.
+Persistent=true
+RandomizedDelaySec=600
+Unit=arcanum-gundam-import.service
+
+[Install]
+WantedBy=timers.target

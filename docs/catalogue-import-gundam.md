@@ -51,8 +51,20 @@ them papered over:
 card object, and no TCGplayer product id to join a price series to. So
 `replace_prices` is never called by this importer, `catalog_prices` holds no
 row for the game, and `extras` deliberately carries no `tcgplayerId` - the key
-the app reads as the price-history join key. Gundam's prices still come from the
-tcgcsv client, which is kept for this reason as well as for the fallback.
+the app reads as the price-history join key.
+
+**And so Gundam has no prices anywhere now - the phone as much as the
+browser.** The price a Gundam card carried under the old catalogue is gone
+rather than moved, and it cannot be carried across: tcgcsv names a product
+`<groupId>-<productId>`, this source names it `GD01-001`, and neither side
+publishes a field that joins the two. `TcgcsvCatalog.gundam()` is still in the
+tree and is what makes the move reversible in one line, but nothing wires it -
+checked, and the factory has no caller left. An earlier draft of this section
+said the prices still came from that client, which was never true of the
+wiring, and the live build went on telling collectors the same thing in the
+switcher and on the card detail screen until both were corrected with this
+paragraph. What a Gundam card is worth is not a question this app can answer
+today, and no source that quotes one has been found.
 
 **No release date for any set.** The sets table sorts on `released_at`, so Gundam
 sets come back in name order rather than newest first until a source for the date
@@ -122,6 +134,42 @@ in the column would be a row that works in a browser and not on a phone; and the
 importer never calls `replace_prices` and leaves no row in `catalog_prices`, which
 is what a source that quotes no price should leave behind.
 
+## The night it runs on its own
+
+`tool/deploy/arcanum-gundam-import.{service,timer}`, installed and enabled on
+2026-09-21: daily at 05:10 UTC, `Persistent=true`, `RandomizedDelaySec=600`. That
+settles between the three samplers (04:20 to 04:55) and Magic's Monday rebuild
+(05:30). Nothing depends on the ordering - each importer takes its own lock,
+`/tmp/arcanum-catalog-gundam.lock`, which is the importer's own default - but
+there is no reason to put a catalogue import and a history rebuild in the same
+minute of the same machine.
+
+The unit is a unit of its own rather than a fifth line in one of the samplers'
+scripts for the reason this whole step exists: there is no price half. gcgapi
+quotes no price, so there is nothing to sample and a sampler's end-of-run
+assertion would have nothing to assert.
+
+~~~
+pscp tool/deploy/arcanum-gundam-import.{service,timer} zixen@zapp.sytes.net:/tmp/
+sudo install -m 644 -o root -g root /tmp/arcanum-gundam-import.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now arcanum-gundam-import.timer
+sudo systemctl start arcanum-gundam-import.service     # the first run, by hand
+~~~
+
+The first run through systemd took 25 seconds, wrote nothing (*28 sets written, 28
+unchanged, 1,912 cards, 0 set(s) failed*), exited 0, and stamped
+`sets_updated_at`. That column is what `arcanum-catalog-watch.timer` measures
+staleness by, so a night that changed nothing is still a night the catalogue is
+known to be current.
+
+**And `WINDOWS` had to learn its hour.** `check_catalog_freshness.py` reports a
+game whose catalogue exists but whose import hour it does not know, rather than
+passing it silently - and the 06:31 reading of 2026-09-21 is that rule firing at
+the watcher itself, because Pokemon's catalogue had landed a day earlier and the
+table still held Lorcana alone. Gundam's hour went in beside Pokemon's, and the
+next run answers *nothing to report* for all three games.
+
 ## Undoing it
 
 ~~~sql
@@ -146,6 +194,25 @@ either side joins the two: gcgapi publishes no TCGplayer product id. A device th
 has cached Gundam under tcgcsv ids keeps those rows and keeps resolving the
 holdings that name them, because the cache is never pruned; a device that has
 never held them resolves them against the new catalogue, where they do not exist,
-and a holding renders as `--`. That is a decision for a person before the other
-four games follow, and it is recorded in this step's report rather than solved
-here.
+and a holding renders as `--`.
+
+**Measured on 2026-09-21, that breaks nobody, and the measurement is the answer
+rather than an assumption.** The whole account is one Magic holding and six Magic
+tombstones:
+
+~~~sql
+select game, count(*) from public.collection_entries
+ where deleted_at is null     group by game;   -- mtg | 1
+select game, count(*) from public.collection_entries
+ where deleted_at is not null group by game;   -- mtg | 6
+select game, count(*) from public.deck_cards  group by game;   -- no rows
+~~~
+
+No account holds a Gundam card and no deck names one, so there is no row anywhere
+the new catalogue can fail to resolve. The move is taken as it stands rather than
+carrying an alias table with no members: the only holdings an alias could have
+rescued are holdings nobody has. What does carry forward is the rule, and
+it is the same rule for the four games still to follow: **run that query for the
+game before its import, not after it.** A game with holdings in it is a game whose
+move has to be told to those accounts first - and a game with none is a game whose
+move costs nothing but the code.

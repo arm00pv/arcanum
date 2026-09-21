@@ -1,0 +1,33 @@
+[Unit]
+Description=Arcanum - refresh the shared Gundam catalogue from gcgapi
+Documentation=https://github.com/arm00pv/arcanum
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=zixen
+Group=zixen
+WorkingDirectory=/home/zixen/arcanum
+# The whole of this job is the catalogue, and that is why Gundam has a unit of
+# its own rather than a line in one of the three samplers' scripts: gcgapi
+# quotes no price of any kind for any card, so there is nothing to sample here
+# and replace_prices is never called. A unit that spent its night polling a
+# source for prices it does not publish would be a unit that failed every
+# night on the assertion at the end of the run.
+#
+# The lock the importer takes by itself - /tmp/arcanum-catalog-gundam.lock, its
+# own default - is per game, so this run does not collide with the timers above
+# it in the night, and a hand-run import during the same minute is refused
+# rather than allowed to interleave.
+ExecStart=/usr/bin/python3 /home/zixen/arcanum/tool/import_gundam_catalogue.py
+# The database URL, and nothing else, reaches this process. The file is mode 600
+# and systemd reads it as root; the script is given these as variables rather
+# than as arguments of its own, because an argument is readable in a process
+# listing by every user on the host.
+EnvironmentFile=/home/zixen/arcanum/supabase.env
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=3600
+StandardOutput=append:/home/zixen/arcanum/logs/gundam_import.log
+StandardError=append:/home/zixen/arcanum/logs/gundam_import.log

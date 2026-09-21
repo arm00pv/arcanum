@@ -167,7 +167,12 @@ enum CardGame {
     // makes it readable as the Gundam in a switcher of seven saturated hues.
     accent: Color(0xFF9AA7B8),
     deep: Color(0xFF3A4657),
-    dataSource: 'TCGplayer',
+    // gcgapi, and not the TCGplayer catalogue every other line here names,
+    // because this is the game whose catalogue is not TCGplayer's. The label
+    // is what the switcher shows a collector as the source of what they are
+    // looking at, and it is wrong for exactly as long as it goes on saying
+    // TCGplayer - which is what the live build said until this was fixed.
+    dataSource: 'gcgapi',
     catalogueSince: 2025,
     collectionNoun: 'binder',
     cardAspectRatio: 488 / 680,

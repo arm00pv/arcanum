@@ -69,9 +69,19 @@ import 'package:arcanum/domain/models/tcg_card.dart';
 /// either.** [refreshPrices] therefore answers nothing rather than inventing a
 /// number, and [extras] deliberately carries no 'tcgplayerId': the app reads
 /// that key as the join key for price history, and a Bandai product id under it
-/// would send the app looking for prices under a key no provider knows. Gundam's
-/// prices still come from the tcgcsv client, which is kept for exactly this
-/// reason alongside the fallback it already is.
+/// would send the app looking for prices under a key no provider knows.
+///
+/// **And so Gundam has no prices, on either platform, and this is where that
+/// is decided.** The tcgcsv client is still in the tree - `TcgcsvCatalog.gundam`
+/// is what makes this move reversible in one line - but nothing wires it, so
+/// the price a Gundam card had under the old catalogue is gone rather than
+/// merely moved. It cannot be carried across: tcgcsv names a product
+/// `<groupId>-<productId>` and gcgapi names it `GD01-001`, and neither side
+/// publishes a field that joins them. An earlier draft of this comment claimed
+/// the prices still came from tcgcsv, which was never true of this wiring - the
+/// factory was orphaned the moment Gundam was routed here - and the live build
+/// was telling collectors the same thing until the copy in `card_game.dart` and
+/// the card detail screen was corrected with it.
 ///
 /// **The codes are folded, and the fold is not a no-op here.** Every other layer
 /// of the app stores, queries and compares a set code in lower case - the sets

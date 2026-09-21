@@ -326,6 +326,13 @@ new fetcher: it is the existing sweep writing a second table.
 | `arcanum-mtg-rebuild.timer` (Mondays, 05:30 UTC) plus a new `catalog_import_mtg.py` | mtg | MTGJSON `AllIdentifiers` and `AllPrices`, for history | one Scryfall bulk `default_cards` download for sets, cards and current prices |
 | new `arcanum-catalog-tcgcsv.timer` (daily, after 06:00 UTC) | onepiece, swu, digimon, dragonball, gundam | nothing today | `/{cat}/groups`, `/{cat}/{group}/products`, `/{cat}/{group}/prices` |
 
+(Gundam has since left that row: gcgapi publishes the publisher's own
+catalogue from a host that sends CORS headers, so a browser reads it directly and
+the relay is not in the path. `arcanum-gundam-import.timer` runs it nightly at
+05:10 UTC, and the cost is that it quotes no price of any kind.
+[catalogue-import-gundam.md](catalogue-import-gundam.md) is the report; the other
+four games are still the row above.)
+
 Two notes on that table. Magic's current prices come from Scryfall's bulk data
 rather than MTGJSON, because the deploy notes already record that MTGJSON's
 `AllPrices` covers about four fifths of printings and recent sets thinly; the bulk

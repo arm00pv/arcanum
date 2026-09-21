@@ -39,8 +39,10 @@ row.
 price of any kind - there is no market price, no low, no foil and no TCGplayer
 product id to join a price series to - so replace_prices has nothing to be handed
 and is not called. That is a real cost of this move and it is stated in the
-report rather than worked around: Gundam's prices still come from the tcgcsv
-client, which is kept for exactly this reason as well as for the fallback.
+report rather than worked around: Gundam has no price at all once its
+catalogue comes from here, on either platform, because the only client that
+ever quoted one addresses the same products by ids that do not join to these.
+The tcgcsv factory stays in the tree as the way back and nothing wires it.
 
 Usage, from the repository root:
 

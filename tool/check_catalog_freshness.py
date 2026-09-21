@@ -77,15 +77,27 @@ import check_alerts  # noqa: E402
 
 # The UTC time by which each game's catalogue import is expected to have run,
 # which is when the timer that runs it fires - a unit cannot finish before it is
-# started. Lorcana's import rides on arcanum-lorcana-poll at 04:40 UTC
-# (tool/deploy/arcanum-lorcana-poll.timer).
+# started. One line per game that has a catalogue, and each names the unit:
+#
+#   pokemon  04:20  arcanum-pokemon-poll.timer      (--catalog, inside the sweep)
+#   lorcana  04:40  arcanum-lorcana-poll.timer      (--catalog, inside the sweep)
+#   gundam   05:10  arcanum-gundam-import.timer     (the import is the whole unit)
 #
 # A game that has a catalogue but no window here is reported rather than
 # silently unwatched: the failure this script exists to prevent is a catalogue
 # nobody is looking at, and the way to produce one is to start importing a game
-# (migration steps 3 and 5) without telling anything when to expect it.
+# (migration steps 3 and 5) without telling anything when to expect it. That is
+# not a hypothetical: the 2026-09-21 06:31 reading is the morning Pokemon's
+# catalogue landed with this table still holding Lorcana alone, and the night's
+# notification was this table's own gap rather than anything about the
+# catalogue. Both halves of a new import are the same job - the timer that runs
+# it, and the hour the watcher expects it by - and pokemon is written here
+# beside gundam because the second one is what made the first impossible to
+# miss.
 WINDOWS = {
+    "pokemon": "04:20",
     "lorcana": "04:40",
+    "gundam": "05:10",
 }
 
 # How close to a window the watcher is willing to ask its question. The timers

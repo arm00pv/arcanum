@@ -319,14 +319,21 @@ its priority and destination are set.
 
 ## What is not settled
 
-**The window is a fact about one game.** Lorcana's import rides on the 04:40
-sampler because that sampler already downloads Lorcana. Steps 3 and 5 add five
-games that have no sampler to ride on, and their importers will need windows of
-their own - the design's table already sketches `arcanum-catalog-tcgcsv.timer`
-after 06:00. When one of them is imported, `WINDOWS` in
-`check_catalog_freshness.py` has to learn its hour; until it does, the watcher
-reports the game as one nobody knows when to expect rather than passing it
-silently.
+**The window is a fact about one game - now about three.** Lorcana's import rides
+on the 04:40 sampler because that sampler already downloads Lorcana; Pokemon's
+rides on the 04:20 one for the same reason; Gundam's is a unit of its own at
+05:10, because gcgapi quotes no price at all and there is no sampler for it to
+ride on. The four games still on tcgcsv have no importer yet and will need
+windows of their own - the design's table already sketches
+`arcanum-catalog-tcgcsv.timer` after 06:00.
+
+The watcher got this wrong once, on 2026-09-21 at 06:31, and it is worth
+writing down because what was wrong was this table and not the catalogue:
+Pokemon's catalogue had landed the day before and `WINDOWS` still held Lorcana
+alone, so the night's only notification was the watcher reporting its own gap.
+Importing a game is therefore two edits - the timer that runs it, and the hour
+here - and the second is the one that gets forgotten, because leaving it out
+stops nothing from working.
 
 **06:30 is a compromise, and it is not on the critical path.** The watcher runs
 after the whole sampling window so that "nothing has finished since the window"

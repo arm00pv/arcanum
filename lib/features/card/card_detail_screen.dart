@@ -859,7 +859,21 @@ class _AnalyticsSection extends StatelessWidget {
                               'companion records every Lorcana card once a day, '
                               'and the app snapshots the cards you own. Analysis '
                               'begins after a couple of weeks.',
-                        // The three games TCGplayer catalogs are republished
+                        // gcgapi quotes no price at all, and the tcgcsv client
+                        // that used to supply Gundam's addresses the same
+                        // products by ids that do not join to gcgapi's, so there
+                        // is nothing left to read a price from. The sentence the
+                        // TCGplayer games get below would promise a price this
+                        // game cannot fetch.
+                        CardGame.gundam =>
+                          'Gundam is catalogued but not valued: gcgapi, the '
+                              'publisher\'s own card database, quotes no price of '
+                              'any kind - no market price, no low and no foil '
+                              'figure - and carries no TCGplayer product id to '
+                              'join a price series to. Cards, sets and search all '
+                              'work; the vault shows what you own with no value '
+                              'against it.',
+                        // The four games TCGplayer catalogs are republished
                         // once a day as a price file with no history in it at
                         // all, so they are in Lorcana's position - except that
                         // the companion does not sample them yet, and saying it
@@ -867,8 +881,7 @@ class _AnalyticsSection extends StatelessWidget {
                         CardGame.onePiece ||
                         CardGame.starWarsUnlimited ||
                         CardGame.digimon ||
-                        CardGame.dragonBall ||
-                        CardGame.gundam =>
+                        CardGame.dragonBall =>
                           'TCGplayer publishes current prices only: the file '
                               'Arcanum reads is rewritten once a day and keeps '
                               'no history at all. So this game has one source, '

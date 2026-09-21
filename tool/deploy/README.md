@@ -46,6 +46,7 @@ Paths on the host:
 | `arcanum-lorcana-poll.timer` | samples Lorcast into the Lorcana database, and refreshes the shared Lorcana catalogue in Postgres | daily, 04:40 UTC |
 | `arcanum-yugioh-poll.timer` | samples YGOPRODeck into the Yu-Gi-Oh! database | daily, 04:55 UTC |
 | `arcanum-mtg-rebuild.timer` | re-slices the Magic history from MTGJSON | Mondays, 05:30 UTC |
+| `arcanum-gundam-import.timer` | refreshes Gundam's shared catalogue from gcgapi - catalogue only, because that source quotes no price | daily, 05:10 UTC (**installed 2026-09-21**) |
 | `arcanum-catalog-watch.timer` | reports a shared catalogue that has stopped being refreshed | daily, 06:30 UTC |
 | `arcanum-account-backup.timer` | dumps `public.collection_entries` and `public.decks` into `backups/` - the only copy of the account that survives a Supabase-side loss | daily, 07:10 UTC (**installed 2026-09-21**) |
 
