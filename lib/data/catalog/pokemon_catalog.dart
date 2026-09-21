@@ -622,8 +622,26 @@ class PokemonCatalog extends CardCatalog {
   }
 
   /// Maps a TCGdex/TCGplayer variant key onto a physical finish.
+  ///
+  /// **The key is folded, punctuation and all, and that is the point.** TCGdex
+  /// publishes one physical finish under several spellings and has changed them
+  /// before: a live check on 2026-09-21 found `reverse-holofoil` on 43 of 110
+  /// cards sampled, and `1st-edition` on the older sets, where this switch used
+  /// to expect `reverseholofoil` and `1steditionnormal`. Neither matched, so
+  /// the price was dropped in silence rather than mistranslated - and that
+  /// silence cost 12,444 reverse-holofoil prices on this path until the
+  /// importer was taught to fold. The importer folds case and punctuation the
+  /// same way, which is what keeps a card's price the same whichever path
+  /// answered for it.
+  ///
+  /// A key that is still unknown after folding returns null, and the caller
+  /// leaves that price out. Guessing would be worse than dropping: a finish the
+  /// app cannot name is invisible on the card sheet, but [TcgPrices.from]
+  /// counts the cheapest quoted finish for list rows, so a guessed code would
+  /// put a number on the card face that belongs to a printing nobody asked
+  /// about.
   static CardFinish? _finishForVariant(String key) {
-    switch (key.toLowerCase()) {
+    switch (key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '')) {
       case 'normal':
         return CardFinish.nonfoil;
       case 'holofoil':
@@ -631,6 +649,7 @@ class PokemonCatalog extends CardCatalog {
         return CardFinish.holofoil;
       case 'reverseholofoil':
         return CardFinish.reverseHolofoil;
+      case '1stedition':
       case '1steditionnormal':
         return CardFinish.firstEdition;
       case '1steditionholofoil':
