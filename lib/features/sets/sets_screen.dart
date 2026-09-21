@@ -108,6 +108,19 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
     });
 
     final setsAsync = ref.watch(setsProvider(game));
+
+    // The date sorts are only offered where the catalogue publishes dates.
+    // Gundam's sets have none and Star Wars: Unlimited's have none either (the
+    // API's publish date is months before the street date, so it is not one),
+    // and for those games every set sorts to the same missing date: the list
+    // keeps the name order the query gave it while the chip says "Newest" over
+    // it, which is an order the screen cannot deliver and a sentence about the
+    // data rather than about the sort. Before the first read there is nothing to
+    // judge, so the full row is drawn and narrowed once the sets land.
+    final bool dated =
+        setsAsync.value?.any((TcgSet set) => set.releasedAt != null) ?? true;
+    final List<SetSort> sorts = dated ? SetSort.values : _undatedSorts;
+
     final ownedBySet =
         ref.watch(ownedBySetProvider(game)).value ?? const <String, int>{};
     final completions =
@@ -258,16 +271,16 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
                     child: PillToggle(
-                      options: const [
-                        'Newest',
-                        'Oldest',
-                        'A-Z',
-                        'Largest',
-                        'Closest',
+                      options: <String>[
+                        for (final SetSort sort in sorts) _sortLabel(sort),
                       ],
-                      selected: _sort.index,
-                      onChanged: (i) =>
-                          setState(() => _sort = SetSort.values[i]),
+                      // A date sort chosen before the sets arrived, or on a
+                      // game whose catalogue has dates and this one does not,
+                      // simply is not in the row any more: the first option is
+                      // shown as chosen and the order on screen is the name
+                      // order both of them produce.
+                      selected: sorts.contains(_sort) ? sorts.indexOf(_sort) : 0,
+                      onChanged: (i) => setState(() => _sort = sorts[i]),
                     ),
                   ),
                 ),
@@ -373,6 +386,28 @@ class _SetsScreenState extends ConsumerState<SetsScreen> {
         });
     }
     return out;
+  }
+
+  /// The orders worth offering a game whose catalogue has no release dates.
+  static final List<SetSort> _undatedSorts = <SetSort>[
+    for (final SetSort sort in SetSort.values)
+      if (sort != SetSort.newest && sort != SetSort.oldest) sort,
+  ];
+
+  /// What one order is called on the chip row.
+  static String _sortLabel(SetSort sort) {
+    switch (sort) {
+      case SetSort.newest:
+        return 'Newest';
+      case SetSort.oldest:
+        return 'Oldest';
+      case SetSort.name:
+        return 'A-Z';
+      case SetSort.size:
+        return 'Largest';
+      case SetSort.progress:
+        return 'Closest';
+    }
   }
 
   /// The set types that get a chip: the most populous ones, so the row stays

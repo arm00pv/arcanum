@@ -51,7 +51,32 @@ final List<TcgSet> digimonSets = <TcgSet>[
   aSet(CardGame.digimon, 'ST23', 'Starter Deck 23: Beatbreak', 'starter'),
 ];
 
+/// Gundam's catalogue publishes no release date for any set - the provider
+/// states none - and Star Wars: Unlimited's states only a CMS publish date,
+/// which is months before the street date and so is not one either. Two games
+/// in that position is what turned the chip row's lie from a curiosity into
+/// something worth fixing.
+final List<TcgSet> undatedSets = <TcgSet>[
+  TcgSet(
+    game: CardGame.gundam,
+    id: 'GD01',
+    code: 'gd01',
+    name: 'Newtype Rising',
+    setType: 'expansion',
+    cardCount: 254,
+  ),
+  TcgSet(
+    game: CardGame.gundam,
+    id: 'ST01',
+    code: 'st01',
+    name: 'Starter Deck 01',
+    setType: 'starter',
+    cardCount: 17,
+  ),
+];
+
 List<TcgSet> catalogFor(CardGame game) => switch (game) {
+  CardGame.gundam => undatedSets,
   CardGame.mtg => mtgSets,
   CardGame.onePiece => onePieceSets,
   CardGame.digimon => digimonSets,
@@ -249,5 +274,38 @@ void main() {
       await tester.pump(const Duration(milliseconds: 60));
     }
     expect(find.text('No sets match'), findsOneWidget);
+  });
+
+  testWidgets('a catalogue with no release dates is not offered a date order', (
+    tester,
+  ) async {
+    await pumpSets(
+      tester,
+      game: CardGame.gundam,
+      counts: (CardGame g) => <String, int>{'expansion': 10, 'starter': 4},
+    );
+
+    // Every set sorts to the same missing date, so "Newest" ordered nothing and
+    // the list underneath it was in name order - a chip making a claim about the
+    // catalogue rather than about the sort. The two date orders are dropped and
+    // the three that mean something to a game without dates are kept.
+    expect(find.text('Newest'), findsNothing);
+    expect(find.text('Oldest'), findsNothing);
+    expect(find.text('A-Z'), findsOneWidget);
+    expect(find.text('Largest'), findsOneWidget);
+    expect(find.text('Closest'), findsOneWidget);
+
+    // And the row opens on the order the list is actually in.
+    expect(find.text('Newtype Rising'), findsOneWidget);
+  });
+
+  testWidgets('and a catalogue with dates keeps the whole row', (tester) async {
+    // The other half of the same rule: a game whose provider publishes release
+    // dates still gets both date orders, because there the chip is true.
+    await pumpSets(tester, counts: (CardGame g) => mtgCounts);
+
+    expect(find.text('Newest'), findsOneWidget);
+    expect(find.text('Oldest'), findsOneWidget);
+    expect(find.text('A-Z'), findsOneWidget);
   });
 }
