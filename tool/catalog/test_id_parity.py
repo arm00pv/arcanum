@@ -79,6 +79,7 @@ VECTORS = os.path.join(HERE, "catalog_id_vectors.json.gz")
 sys.path.insert(0, TOOL)
 import catalog_store  # noqa: E402
 import import_gundam_catalogue as gcgapi  # noqa: E402
+import import_swu_catalogue as swu  # noqa: E402
 import poll_lorcana_prices as lorcast  # noqa: E402
 import poll_pokemon_prices as tcgdex  # noqa: E402
 import poll_yugioh_prices as ygoprodeck  # noqa: E402
@@ -413,6 +414,259 @@ def yugioh_sets(sample):
     """
     return {code: {"code": code}
             for code in ygoprodeck.set_index(sample["sets"]).values()}
+
+
+# ------------------------------------------------------------------------- swu
+
+def swu_records_by_code(sample):
+    """The sampled records of each set, keyed by the publisher's own code."""
+    out = {}
+    for row in sample.get("cards") or []:
+        attributes = swu.attributes_of(row)
+        if attributes is None:
+            continue
+        expansion = swu.relation_of(attributes, "expansion") or {}
+        code = swu.dart_string(expansion.get("code"))
+        if code:
+            out.setdefault(code, []).append(row)
+    return out
+
+
+def swu_base_printings(records):
+    """How many of [records] are the base printing of a card.
+
+    The set's own card count, and the number printed on the cards: the records
+    that are not a version of another card and not a token. Spark of Rebellion is
+    991 records and 252 of these.
+    """
+    count = 0
+    for row in records:
+        attributes = swu.attributes_of(row)
+        if attributes is None:
+            continue
+        kind = swu.dart_string((swu.relation_of(attributes, "type") or {})
+                               .get("name")) or ""
+        if kind in swu.TOKENS:
+            continue
+        if swu.relation_of(attributes, "variantOf") is not None:
+            continue
+        count += 1
+    return count
+
+
+def swu_set_downloads(sample):
+    """Each set the sample cuts whole, as (list entry, records), in order.
+
+    The client lists every set - one request for the list and one count request
+    per set, both answered from the sample - and then downloads the sets it is
+    asked for, so this is the same selection fetchCardsInSet makes. Public because
+    tool/catalog/prove_swu_import.py walks the sample through the same selection:
+    one rule, one implementation, two callers.
+    """
+    by_code = {}
+    for item in sample.get("sets") or []:
+        attributes = swu.attributes_of(item)
+        if attributes is None:
+            continue
+        code = swu.dart_string(attributes.get("code"))
+        if code:
+            by_code[code] = item
+    records = swu_records_by_code(sample)
+    out = []
+    for code in sample.get("sampled_sets") or []:
+        provider = str(code).strip().upper()
+        out.append((by_code.get(provider), records.get(provider, [])))
+    return out
+
+
+def swu_cards(sample):
+    """Every catalog_cards row the Star Wars: Unlimited importer derives.
+
+    The id is the publisher's cardUid, forwarded verbatim; everything beside it
+    is derived and is compared column by column - the oracle id, the collector
+    number (which a treatment takes from the base card it points at, not from its
+    own), the collector sort key, the folded set code, the type line, the rarity,
+    the portrait art and the JSON in extras.
+
+    The driver mirrors the client's set-download path, because that is the path
+    the committed Dart vectors hold: the sample cuts whole sets, and a record of
+    one carries the set it was downloaded as part of.
+    """
+    mine = {}
+    for _item, records in swu_set_downloads(sample):
+        for row in records:
+            document = swu.card_document(row)
+            if document is not None:
+                mine[document["id"]] = document
+    return mine
+
+
+def swu_sets(sample):
+    """Every catalog_sets row the Star Wars: Unlimited importer derives.
+
+    The set list carries the code and the name and no card count at all, which is
+    why a count is a second request per set in both languages: a one-record read
+    whose envelope carries the total, over the base printings that are not tokens.
+    Here that request is answered from the sample, so a set the sample does not
+    cut whole counts its own sampled records - which is zero - and the row is the
+    row the Dart side derives from the same envelope.
+    """
+    counts = {code: swu_base_printings(records)
+              for code, records in swu_records_by_code(sample).items()}
+    mine = {}
+    for item in sample.get("sets") or []:
+        attributes = swu.attributes_of(item)
+        if attributes is None:
+            continue
+        provider = swu.dart_string(attributes.get("code"))
+        if not provider:
+            continue
+        row = swu.set_document(item, counts.get(provider, 0))
+        if row is not None:
+            mine[row["code"]] = row
+    return mine
+
+
+def swu_tokens(sample):
+    """The cardUid of every sampled record that is a token."""
+    out = set()
+    for row in sample.get("cards") or []:
+        attributes = swu.attributes_of(row)
+        if attributes is None:
+            continue
+        kind = swu.dart_string((swu.relation_of(attributes, "type") or {})
+                               .get("name")) or ""
+        if kind in swu.TOKENS:
+            uid = swu.dart_string(attributes.get("cardUid"))
+            if uid:
+                out.add(uid)
+    return out
+
+
+def every_id_is_the_card_uid_the_publisher_publishes(case):
+    """The ids the importer derives are the publisher's cardUids, verbatim.
+
+    The publisher names a card three ways and only one of them is an id: cardUid
+    is unique over the whole game, cardId is null on most records and names a
+    related card where it is set, and validationId repeats. Both languages can
+    forward an id and still disagree about it - a trim, a lower-case, a dropped
+    separator - so the id set is asserted rather than assumed, over every sampled
+    record that is a card at all.
+    """
+    provider = set()
+    for row in case.sample.get("cards") or []:
+        attributes = swu.attributes_of(row)
+        if attributes is None:
+            continue
+        uid = swu.dart_string(attributes.get("cardUid"))
+        if uid:
+            provider.add(uid)
+    cards = provider - swu_tokens(case.sample)
+    if set(case.cards) == cards:
+        return True, ("%d cardUids forwarded verbatim, %d tokens dropped and "
+                      "nothing else" % (len(cards), len(provider) - len(cards)))
+    invented = sorted(set(case.cards) - cards)[:3]
+    dropped = sorted(cards - set(case.cards))[:3]
+    return False, ("the id set is not the publisher's: %d invented (%s), %d "
+                   "dropped (%s)" % (len(set(case.cards) - cards), invented,
+                                      len(cards - set(case.cards)), dropped))
+
+
+def a_treatment_takes_its_base_cards_number(case):
+    """A treatment is numbered as the card it is a version of, and stays its own.
+
+    A hyperspace Luke carries cardNumber 1 where Luke carries 5, because a
+    treatment's own number counts its run rather than the card. Both languages
+    take the number from the base record the treatment points at - which is the
+    number printed on the card and the number the app's binder slots group by -
+    while the id stays the treatment's own, so two holdings of one card do not
+    collapse into one row.
+    """
+    seen = 0
+    for row in case.sample.get("cards") or []:
+        attributes = swu.attributes_of(row)
+        if attributes is None:
+            continue
+        base = swu.relation_of(attributes, "variantOf")
+        if base is None:
+            continue
+        uid = swu.dart_string(attributes.get("cardUid"))
+        stored = case.cards.get(uid)
+        if stored is None:
+            continue
+        seen += 1
+        printed = base.get("cardNumber")
+        if not isinstance(printed, int):
+            return False, "a base record carries no cardNumber: %r" % (base,)
+        if stored["collector_number"] != "%03d" % printed:
+            return False, ("%s is stored as #%s and its base card is #%03d"
+                           % (uid, stored["collector_number"], printed))
+        if stored["oracle_id"] != str(base.get("cardUid")):
+            return False, ("%s does not group with the base card it is a version "
+                           "of" % uid)
+        if stored["id"] == str(base.get("cardUid")):
+            return False, "%s was stored under its base card's id" % uid
+    if seen < 50:
+        return False, ("the sample holds %d treatments, too few to prove the rule"
+                       % seen)
+    return True, ("%d treatments take their base card's printed number, keep "
+                  "their own id and group with the card" % seen)
+
+
+def the_landscape_art_is_drawn_from_the_other_face(case):
+    """A landscape card with a portrait face is stored as that face.
+
+    A leader's own art is 418x300 and every card in the app is drawn at the game's
+    portrait ratio, so its row carries the deployed unit from the other face of
+    the same card. The flag is not a leader flag - 32 Base records of the sample
+    are landscape too, and have no second face - so the rule is "the other face
+    when there is one" and both languages have to read it that way.
+    """
+    leaders = 0
+    bases = 0
+    for row in case.sample.get("cards") or []:
+        attributes = swu.attributes_of(row)
+        if attributes is None:
+            continue
+        if attributes.get("artFrontHorizontal") is not True:
+            continue
+        uid = swu.dart_string(attributes.get("cardUid"))
+        stored = case.cards.get(uid)
+        if stored is None:
+            continue
+        back = swu.image_of(attributes.get("artBack"))
+        if back is None:
+            bases += 1
+            continue
+        leaders += 1
+        if stored["image_normal"] != back:
+            return False, ("%s is stored with the landscape art rather than the "
+                           "other face" % uid)
+    if leaders < 5 or bases < 5:
+        return False, ("the sample holds %d landscape cards with a second face "
+                       "and %d without, too few to prove the rule"
+                       % (leaders, bases))
+    return True, ("%d landscape cards are stored as their portrait face and %d "
+                  "with no second face keep the art they have" % (leaders, bases))
+
+
+def the_set_counts_are_base_printings(case):
+    """A set's card count is its base printings, which is what the cards print.
+
+    The set list carries no count at all, so both languages read one with a
+    one-record request per set whose envelope carries the total, over the base
+    printings that are not tokens: 252 for Spark of Rebellion, where the same
+    filter answers 991 for every record in the set."""
+    bases = {code: swu_base_printings(records)
+             for code, records in swu_records_by_code(case.sample).items()}
+    for code, row in case.sets.items():
+        provider = str(row.get("id") or "")
+        if row.get("card_count") != bases.get(provider, 0):
+            return False, ("set %s is counted as %r and holds %d base printings"
+                           % (code, row.get("card_count"),
+                              bases.get(provider, 0)))
+    return True, ("every set is counted over its base printings: %s"
+                  % sorted(bases.items())[:3])
 
 
 # ---------------------------------------------------------------------- gundam
@@ -936,6 +1190,11 @@ GAMES = (
                  the_art_variants_of_one_card_stay_apart,
                  the_two_paths_derive_one_row,
                  the_page_cap_is_exercised)),
+    Game("swu", swu_cards, swu_sets,
+         checks=(every_id_is_the_card_uid_the_publisher_publishes,
+                 a_treatment_takes_its_base_cards_number,
+                 the_landscape_art_is_drawn_from_the_other_face,
+                 the_set_counts_are_base_printings)),
     Game("yugioh", yugioh_cards, yugioh_sets,
          card_columns=("id", "set_code"), set_columns=("code",),
          checks=(every_id_begins_with_its_passcode, the_collision_rule_is_exercised,

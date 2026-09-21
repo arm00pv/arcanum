@@ -48,6 +48,7 @@ import "dart:typed_data";
 import "package:arcanum/data/catalog/gundam_catalog.dart";
 import "package:arcanum/data/catalog/lorcana_catalog.dart";
 import "package:arcanum/data/catalog/pokemon_catalog.dart";
+import "package:arcanum/data/catalog/swu_catalog.dart";
 import "package:arcanum/data/catalog/ygo_catalog.dart";
 import "package:arcanum/domain/models/tcg_card.dart";
 import "package:dio/dio.dart";
@@ -57,6 +58,7 @@ const String _gundamSample = "tool/catalog/gundam_sample.json.gz";
 const String _lorcanaSample = "tool/catalog/lorcana_sample.json.gz";
 const String _pokemonSample = "tool/catalog/pokemon_sample.json.gz";
 const String _yugiohSample = "tool/catalog/yugioh_sample.json.gz";
+const String _swuSample = "tool/catalog/swu_sample.json.gz";
 const String _vectorPath = "tool/catalog/catalog_id_vectors.json.gz";
 
 /// Whether to rewrite the committed vectors instead of asserting them.
@@ -686,6 +688,207 @@ Future<_Sample> _gundamRows(Map<String, dynamic> sample) async {
   return (cards: rows, sets: setRows);
 }
 
+
+/// The card types that are not cards, spelled out because the catalogue keeps
+/// its own copy private (SwuCatalog._tokens).
+const Set<String> _tokens = <String>{
+  "Token Upgrade",
+  "Token Unit",
+  "Credit Token",
+  "Force Token",
+};
+
+/// Every sampled record that is a token, by its cardUid.
+Set<String> _sampleTokens(Map<String, dynamic> sample) => <String>{
+  for (final dynamic raw in sample["cards"] as List<dynamic>)
+    if (_tokens.contains((_SampleSwu._relation(
+                _SampleSwu._attributes(raw as Map<String, dynamic>)!,
+                "type")?["name"] ??
+            "")
+        .toString()))
+      (_SampleSwu._attributes(raw)!["cardUid"] ?? "").toString(),
+};
+
+/// Serves the committed Star Wars: Unlimited sample in place of the network.
+///
+/// Two routes and two shapes: the set list answers whole, and the card list
+/// answers a filter - expansion code, the base-printings filter the counts are
+/// read with, a token exclusion, one id, or a batch of them - sliced the way the
+/// source slices a page. The records are Strapi envelopes, so a relation is
+/// `{data: {id, attributes}}` and a list of them is `{data: [...]}`, which is what
+/// the client unwraps and what this has to read the same way.
+class _SampleSwu implements HttpClientAdapter {
+  _SampleSwu(Map<String, dynamic> sample)
+    : sets = (sample["sets"] as List<dynamic>).cast<Map<String, dynamic>>(),
+      cards = (sample["cards"] as List<dynamic>).cast<Map<String, dynamic>>();
+
+  final List<Map<String, dynamic>> sets;
+  final List<Map<String, dynamic>> cards;
+
+  static Map<String, dynamic>? _attributes(Map<String, dynamic> record) {
+    final Object? inner = record["attributes"];
+    return inner is Map ? inner.cast<String, dynamic>() : null;
+  }
+
+  static Map<String, dynamic>? _relation(
+      Map<String, dynamic> attributes, String key) {
+    final Object? raw = attributes[key];
+    if (raw is! Map) return null;
+    final Object? data = raw["data"];
+    if (data is! Map) return null;
+    final Object? inner = data["attributes"];
+    return inner is Map ? inner.cast<String, dynamic>() : null;
+  }
+
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    final String path = options.uri.path;
+    final Map<String, String> params = options.uri.queryParameters;
+    if (path.endsWith("card-expansions")) {
+      return _body(jsonEncode(<String, Object?>{
+        "data": sets,
+        "meta": <String, Object?>{
+          "pagination": <String, Object?>{"total": sets.length},
+        },
+      }));
+    }
+    if (!path.endsWith("card-list")) {
+      return _body('{"data":null,"error":{"status":404}}', 404);
+    }
+
+    List<Map<String, dynamic>> rows = List<Map<String, dynamic>>.of(cards);
+    final String? code = params["filters[expansion][code][\$eq]"];
+    if (code != null) {
+      rows = rows
+          .where((Map<String, dynamic> row) =>
+              _relation(_attributes(row)!, "expansion")?["code"] == code)
+          .toList();
+    }
+    if (params["filters[variantOf][\$null]"] == "true") {
+      rows = rows
+          .where((Map<String, dynamic> row) =>
+              _relation(_attributes(row)!, "variantOf") == null)
+          .toList();
+    }
+    for (
+      var i = 0;
+      params.containsKey("filters[type][name][\$notIn][$i]");
+      i++
+    ) {
+      final String excluded = params["filters[type][name][\$notIn][$i]"]!;
+      rows = rows
+          .where((Map<String, dynamic> row) =>
+              _relation(_attributes(row)!, "type")?["name"] != excluded)
+          .toList();
+    }
+    final String? uid = params["filters[cardUid][\$eq]"];
+    if (uid != null) {
+      rows = rows
+          .where((Map<String, dynamic> row) =>
+              _attributes(row)!["cardUid"].toString() == uid)
+          .toList();
+    }
+    final List<String> wanted = <String>[
+      for (var i = 0; params.containsKey("filters[cardUid][\$in][$i]"); i++)
+        params["filters[cardUid][\$in][$i]"]!,
+    ];
+    if (wanted.isNotEmpty) {
+      rows = rows
+          .where((Map<String, dynamic> row) =>
+              wanted.contains(_attributes(row)!["cardUid"].toString()))
+          .toList();
+    }
+
+    final int pageSize =
+        int.tryParse(params["pagination[pageSize]"] ?? "") ?? 250;
+    final int page = int.tryParse(params["pagination[page]"] ?? "") ?? 1;
+    final List<Map<String, dynamic>> slice = rows
+        .skip((page - 1) * pageSize)
+        .take(pageSize)
+        .toList();
+    return _body(jsonEncode(<String, Object?>{
+      "data": slice,
+      "meta": <String, Object?>{
+        "pagination": <String, Object?>{
+          "total": rows.length,
+          "pageSize": pageSize,
+          "page": page,
+        },
+      },
+    }));
+  }
+
+  static ResponseBody _body(String body, [int status = 200]) =>
+      ResponseBody.fromString(body, status, headers: <String, List<String>>{
+        Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+      });
+
+  @override
+  void close({bool force = false}) {}
+}
+
+/// Every row the two languages must agree on for Star Wars: Unlimited.
+///
+/// The client lists every set - which is one request for the list and one count
+/// request per set, both answered from the sample - then downloads the sets the
+/// sample cuts whole, then reaches every sampled record a second time by its own
+/// id. The two paths are asserted identical rather than one being chosen: this is
+/// the game where they could have differed, because a treatment takes its
+/// collector number and its oracle id from the base card it points at, and a
+/// by-id read has no set context to fall back on.
+Future<_Sample> _swuRows(Map<String, dynamic> sample) async {
+  final Dio dio =
+      Dio(BaseOptions(baseUrl: "https://admin.starwarsunlimited.com/api/"));
+  dio.httpClientAdapter = _SampleSwu(sample);
+  final SwuCatalog catalog = SwuCatalog(dio: dio);
+
+  final List<TcgSet> sets = await catalog.fetchAllSets();
+  final Map<String, Map<String, Object?>> setRows =
+      <String, Map<String, Object?>>{
+    for (final TcgSet set in sets) set.code: setRowOf(set),
+  };
+
+  final Set<String> whole = <String>{
+    for (final dynamic code in sample["sampled_sets"] as List<dynamic>)
+      code.toString().toLowerCase(),
+  };
+  final Map<String, Map<String, Object?>> rows =
+      <String, Map<String, Object?>>{};
+  for (final TcgSet set in sets) {
+    if (!whole.contains(set.code)) continue;
+    for (final TcgCard card in await catalog.fetchCardsInSet(set.code)) {
+      rows[card.id] = rowOf(card);
+    }
+  }
+
+  final Set<String> tokens = _sampleTokens(sample);
+  for (final dynamic raw in sample["cards"] as List<dynamic>) {
+    final Map<String, dynamic> attributes =
+        _SampleSwu._attributes(raw as Map<String, dynamic>)!;
+    final String id = (attributes["cardUid"] ?? "").toString();
+    // A token is not a card and the catalogue drops it, so there is no row for
+    // either language to agree about and nothing to read back.
+    if (tokens.contains(id)) continue;
+    final TcgCard? byId = await catalog.fetchCardById(id);
+    if (byId == null) {
+      fail("the sample holds an id the client could not read back: $id");
+    }
+    final Map<String, Object?>? row = rows[id];
+    if (row == null) {
+      fail("the sample holds a record no set download produced: $id");
+    }
+    expect(sameJson(row, rowOf(byId)), isTrue,
+        reason:
+            "the set download and the by-id path derive different rows for $id");
+  }
+  return (cards: rows, sets: setRows);
+}
+
 // ----------------------------------------------------------- the assertions
 
 /// The provider ids a sample publishes under one key.
@@ -820,6 +1023,130 @@ final List<_GameCase> _games = <_GameCase>[
             ((raw as Map<String, dynamic>)["id"] ?? "").toString(),
         };
         expect(rows.sets.keys.toSet(), listed);
+      }),
+    ],
+  ),
+  _GameCase(
+    game: "swu",
+    sample: _swuSample,
+    drive: _swuRows,
+    checks: <_NamedCheck>[
+      _NamedCheck("every id is the publisher's cardUid, verbatim",
+          (Map<String, dynamic> sample, _Sample rows) {
+        // The publisher names a card three ways and only one of them is an id.
+        // cardUid is unique over the whole game; cardId is null on most records
+        // and names a related card where it is set, and validationId repeats.
+        // This asserts the one the catalogue stores, over every record the
+        // sample holds that is a card at all.
+        final Set<String> providerIds = <String>{
+          for (final dynamic raw in sample["cards"] as List<dynamic>)
+            (_SampleSwu._attributes(raw as Map<String, dynamic>)!["cardUid"] ??
+                    "")
+                .toString(),
+        };
+        expect(rows.cards.keys.toSet().difference(providerIds), isEmpty);
+        expect(
+            rows.cards.length,
+            providerIds.length - _sampleTokens(sample).length,
+            reason: "every record that is a card is stored, and no token is");
+      }),
+      _NamedCheck("gives a treatment its base card's number, and keeps it apart",
+          (Map<String, dynamic> sample, _Sample rows) {
+        // A hyperspace Luke carries cardNumber 1 where Luke carries 5, because a
+        // treatment's own number counts its run rather than the card. Both
+        // languages take the number from the base record the treatment points at,
+        // which is the number printed on the card and the number the app's binder
+        // slots group by - while the id stays the treatment's own, so two
+        // holdings of one card do not collapse into one row.
+        int treatments = 0;
+        for (final dynamic raw in sample["cards"] as List<dynamic>) {
+          final Map<String, dynamic> attributes =
+              _SampleSwu._attributes(raw as Map<String, dynamic>)!;
+          final Map<String, dynamic>? base =
+              _SampleSwu._relation(attributes, "variantOf");
+          if (base == null) continue;
+          final Map<String, Object?>? row = rows.cards[
+              (attributes["cardUid"] ?? "").toString()];
+          if (row == null) continue;
+          treatments++;
+          final int printed = (base["cardNumber"] as num).toInt();
+          expect(row["collector_number"], printed.toString().padLeft(3, "0"),
+              reason: "a treatment took its own run number rather than the "
+                  "number printed on the card");
+          expect(row["oracle_id"], (base["cardUid"] ?? "").toString(),
+              reason: "the treatments of one card do not group with it");
+          expect(row["id"], isNot((base["cardUid"] ?? "").toString()),
+              reason: "a treatment was stored under its base card's id");
+        }
+        expect(treatments, greaterThan(50),
+            reason: "the sample holds too few treatments for this to prove "
+                "anything");
+      }),
+      _NamedCheck("draws a leader from the portrait face of a landscape card",
+          (Map<String, dynamic> sample, _Sample rows) {
+        // A leader's own art is 418x300 and the app draws every card at the
+        // game's portrait ratio, so the stored picture is the deployed unit on
+        // the other face of the same card. A row carrying the landscape URL
+        // would be a tile with a third of the card cut off each side.
+        int leaders = 0;
+        for (final dynamic raw in sample["cards"] as List<dynamic>) {
+          final Map<String, dynamic> attributes =
+              _SampleSwu._attributes(raw as Map<String, dynamic>)!;
+          if (attributes["artFrontHorizontal"] != true) continue;
+          final Map<String, Object?>? row = rows.cards[
+              (attributes["cardUid"] ?? "").toString()];
+          if (row == null) continue;
+          final Object? back =
+              _SampleSwu._relation(attributes, "artBack")?["url"];
+          if (back == null) continue;
+          leaders++;
+          expect(row["image_normal"], back.toString());
+        }
+        expect(leaders, greaterThan(5),
+            reason: "the sample holds too few leaders for this to prove "
+                "anything");
+      }),
+      _NamedCheck("counts base printings, and holds a set past the page cap",
+          (Map<String, dynamic> sample, _Sample rows) {
+        // The set list carries no card count at all, so both languages count a
+        // set with a one-record read whose envelope carries the total, over the
+        // base printings that are not tokens - which is the number printed on
+        // the cards. And a set bigger than the page cap is the only thing that
+        // proves the two languages page a set the same way.
+        final Map<String, int> bases = <String, int>{};
+        for (final dynamic raw in sample["cards"] as List<dynamic>) {
+          final Map<String, dynamic> attributes =
+              _SampleSwu._attributes(raw as Map<String, dynamic>)!;
+          if (_tokens.contains(
+              (_SampleSwu._relation(attributes, "type")?["name"] ?? "")
+                  .toString())) {
+            continue;
+          }
+          if (_SampleSwu._relation(attributes, "variantOf") != null) continue;
+          final String code =
+              (_SampleSwu._relation(attributes, "expansion")?["code"] ?? "")
+                  .toString();
+          bases[code] = (bases[code] ?? 0) + 1;
+        }
+        for (final MapEntry<String, Map<String, Object?>> entry
+            in rows.sets.entries) {
+          final String providerCode = (entry.value["id"] ?? "").toString();
+          expect(entry.value["card_count"], bases[providerCode] ?? 0,
+              reason: "set ${entry.key} is not counted over its base "
+                  "printings");
+        }
+        final String biggest = bases.entries
+            .reduce((MapEntry<String, int> a, MapEntry<String, int> b) =>
+                a.value >= b.value ? a : b)
+            .key;
+        final int stored = rows.cards.values
+            .where((Map<String, Object?> row) =>
+                row["set_code"] ==
+                    biggest.toLowerCase().replaceAll(RegExp(r"[^a-z0-9]"), ""))
+            .length;
+        expect(stored, greaterThan(250),
+            reason: "no sampled set is larger than the page cap, so the paging "
+                "is untested");
       }),
     ],
   ),

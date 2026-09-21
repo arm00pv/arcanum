@@ -218,6 +218,14 @@ class SwuCatalog extends CardCatalog {
   static String _setTypeFor(String providerCode, String name) {
     final String upper = providerCode.toUpperCase();
     final String lower = name.toLowerCase();
+    // The name is read before the code, and the weekly-play runs are why: JTLP
+    // is "Jump to Lightspeed Weekly Play" and its code begins with J, while
+    // LOFP, SECP and LAWP are the same kind of run under codes that begin with
+    // L, S and L. Reading the code first typed one of the four as a promo run
+    // and the other three as weekly play, which is one kind of set split in two
+    // by the first letter of its code.
+    if (lower.contains('weekly play')) return 'weekly';
+    if (lower.contains('intro battle')) return 'starter';
     if (lower.contains('promo') ||
         lower.contains('convention') ||
         lower.contains('judge') ||
@@ -230,8 +238,6 @@ class SwuCatalog extends CardCatalog {
     if (upper.startsWith('P') || upper.startsWith('J') || upper.startsWith('C')) {
       return 'promo';
     }
-    if (lower.contains('weekly play')) return 'weekly';
-    if (lower.contains('intro battle')) return 'starter';
     return 'expansion';
   }
 
@@ -703,9 +709,16 @@ class SwuCatalog extends CardCatalog {
   ///
   /// A leader's own art is landscape - 418x300 for the leader side, with the
   /// deployed unit on the other face at 300x418 - and every card in the app is
-  /// drawn at the game's portrait ratio. So the portrait face is what is stored
-  /// for a leader: the same card, the same character, and nothing cropped off the
-  /// sides, which is what a landscape picture in a portrait tile would be.
+  /// drawn at the game's portrait ratio. So a landscape card is drawn from its
+  /// other face when it has one: the same card, the same character, and nothing
+  /// cropped off the sides, which is what a landscape picture in a portrait tile
+  /// would be.
+  ///
+  /// **The flag is not a leader flag, and the sample says so.** 88 records of the
+  /// committed sample are landscape: 56 Leaders and 32 Bases. Every leader has the
+  /// second face; a base is a landscape card with no other face at all (no base
+  /// is printed portrait), so it is drawn from the only art it has and the crop is
+  /// the one thing about a base that cannot be helped.
   static String? _art(Map<String, dynamic> attributes) {
     final String? front = _image(attributes['artFront']);
     final String? back = _image(attributes['artBack']);
