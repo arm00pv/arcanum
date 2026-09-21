@@ -7,6 +7,7 @@ import 'package:arcanum/core/theme/app_theme.dart';
 import 'package:arcanum/domain/decks/deck.dart';
 import 'package:arcanum/domain/decks/deck_format.dart';
 import 'package:arcanum/domain/models/card_game.dart';
+import 'package:arcanum/features/auth/account_providers.dart';
 import 'package:arcanum/providers.dart';
 
 /// Asks for a deck's name and format, and creates it.
@@ -76,12 +77,16 @@ Future<bool> confirmDeleteDeck(
     context: context,
     builder: (BuildContext context) => AlertDialog(
       title: Text('Delete ${deck.name}?'),
-      content: const Text(
+      // The second sentence is only true where there is an account. A phone has
+      // none - it keeps its decks to itself and they go nowhere else - so
+      // telling its reader about "another device" describes something that
+      // cannot happen to them, and the undo is the whole of what deleting means
+      // there. Both halves still say the thing that is true on either.
+      content: Text(
         'The deck and its list leave your decks, and the cards in it stay in '
         'your collection. Nothing you own is deleted.\n\n'
-        'Deleting is not final. A deck another device edits before it hears '
-        'about the deletion comes back with that edit, and you can put this one '
-        'back from Deleted decks.',
+        'Deleting is not final. '
+        '${ref.read(accountServiceProvider) == null ? "You can put this one back from Deleted decks." : "A deck another device edits before it hears about the deletion comes back with that edit, and you can put this one back from Deleted decks."}',
       ),
       actions: <Widget>[
         TextButton(
