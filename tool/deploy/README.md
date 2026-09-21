@@ -46,6 +46,7 @@ Paths on the host:
 | `arcanum-yugioh-poll.timer` | samples YGOPRODeck into the Yu-Gi-Oh! database | daily, 04:55 UTC |
 | `arcanum-mtg-rebuild.timer` | re-slices the Magic history from MTGJSON | Mondays, 05:30 UTC |
 | `arcanum-catalog-watch.timer` | reports a shared catalogue that has stopped being refreshed | daily, 06:30 UTC |
+| `arcanum-account-backup.timer` | dumps `public.collection_entries` and `public.decks` into `backups/` - the only copy of the account that survives a Supabase-side loss | daily, 07:10 UTC (**installed 2026-09-21**) |
 
 The listening address is the docker bridge gateway on purpose. The host has a
 public address and no host firewall, so binding every interface would publish
@@ -74,6 +75,23 @@ database password and it also fails on the night the read path is what broke.
 
 The schedule, the measurement behind it and the failure modes are in
 `docs/catalogue-refresh.md`.
+
+## The account, backed up
+
+The two account tables - `public.collection_entries` and `public.decks`, one
+row per holding, row-level-security protected - live only in Supabase, and the
+free plan gives no point-in-time recovery. `arcanum-account-backup.timer` dumps
+both, whole and as the owner, into `backups/account-<stamp>.json.gz` once a day
+after every other job of the night; `tool/account/backup_accounts.py` reads its
+own dump back before calling it a backup, keeps the newest thirty and never
+deletes one that failed to verify, and `--verify-only` is what a monitor calls.
+The tombstones go in with everything else: a soft-deleted holding is the fact
+that a card was removed, and a dump without it would put the card back.
+
+The units are installed and enabled: the timer next fires at 07:11 UTC and the
+service has been run by hand once, which is where the dumps on the host come
+from. What a restore involves, what is deliberately left out, and the
+measurement behind all of it are in `docs/account-backup.md`.
 
 ## Signing in without a password
 

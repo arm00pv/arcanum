@@ -1,0 +1,22 @@
+[Unit]
+Description=Arcanum - dump the account tables to a restorable archive
+Documentation=https://github.com/arm00pv/arcanum
+
+[Timer]
+# 07:10 UTC, and the time is chosen against the rest of the night rather than
+# for its own sake. pokemon fires at 04:20, lorcana at 04:40, Yu-Gi-Oh! at
+# 04:55, the weekly Magic rebuild at 05:30 on Mondays and the catalogue watcher
+# at 06:30; each of those can be deferred by its own randomized delay or by
+# Persistent=true to the next boot. 07:10 is after all of them and after the
+# watcher's read, so a dump never contends with an import for the database and
+# never lands in the middle of a window whose answer is still being written.
+OnCalendar=*-*-* 07:10:00 UTC
+# A host that was off at 07:10 takes the dump when it comes back rather than
+# skipping the night: a backup that did not happen is the one failure that has
+# no second copy to fall back on, which is the whole reason this timer exists.
+Persistent=true
+RandomizedDelaySec=600
+Unit=arcanum-account-backup.service
+
+[Install]
+WantedBy=timers.target

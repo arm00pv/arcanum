@@ -1,0 +1,44 @@
+[Unit]
+Description=Arcanum - dump the account tables to a restorable archive
+Documentation=https://github.com/arm00pv/arcanum
+After=network-online.target
+Wants=network-online.target
+# A oneshot driven by arcanum-account-backup.timer rather than a long-running
+# process: the work is one read of two tables, one file and one rotation, and
+# there is nothing to keep alive between runs. It connects as the owner over
+# the session pooler - not through PostgREST - because the dump has to hold
+# every account's rows and a policy would only ever show it one account's.
+
+[Service]
+Type=oneshot
+User=zixen
+Group=zixen
+WorkingDirectory=/home/zixen/arcanum
+# Beside catalog_store.py, which is the module that turns the credentials below
+# into the environment psql reads, and beside the phone's backups directory the
+# dump is written into. The same flat deployment every other unit here uses.
+ExecStart=/usr/bin/python3 /home/zixen/arcanum/backup_accounts.py
+# The credentials come from the environment, which is where the script reads
+# them: the file is mode 600, systemd reads it as root, and the script is given
+# these as variables rather than as arguments of its own. Nothing in the dump or
+# in the log is ever a secret; the dump holds rows.
+EnvironmentFile=/home/zixen/arcanum/supabase.env
+# Thirty nights of history are kept by the script itself (KEEP in
+# backup_accounts.py), and a dump that fails to verify is never deleted by that
+# rotation - it is left where it is and reported in the state file.
+#
+# The exit status is non-zero when the dump was not written or did not read
+# back, so systemctl status answers the same question the state file
+# (/home/zixen/arcanum/account-backup.state.json) does.
+#
+# Nice and idle keep the dump out of the way of everything else, the same as
+# the samplers: it is a small read, and it is the least urgent job on the host.
+Nice=15
+IOSchedulingClass=idle
+# Shorter than the samplers' hour: this job reads two tables and writes one
+# small file, and a psql that has not answered in fifteen minutes is a psql
+# worth killing rather than waiting for. The script enforces its own timeout on
+# the read for the same reason.
+TimeoutStartSec=900
+StandardOutput=append:/home/zixen/arcanum/logs/account_backup.log
+StandardError=append:/home/zixen/arcanum/logs/account_backup.log
