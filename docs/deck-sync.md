@@ -17,7 +17,7 @@ The account is the collection. It is not a deck.
 | `public.decks` has exactly five columns: `id`, `user_id`, `game`, `name`, `created_at` | `docs/account-backup.md:74`, the dump header the backup script read out of `information_schema.columns` (`tool/account/backup_accounts.py:167`, `:308`) |
 | It holds zero rows | the same header, `docs/account-backup.md:76`: `"rows": {"collection_entries": 7, "decks": 0}` |
 | `id` is `generated always as identity` | `docs/account-backup.md:202-204`, where restoring a dump is recorded as needing `overriding system value` |
-| There is no server table for a deck's contents | the account backup names the account tables and there are two: `tool/account/backup_accounts.py:122`, `TABLES = ("collection_entries", "decks")` |
+| There is no server table for a deck's contents | the account backup named the account tables and there were two: `tool/account/backup_accounts.py`, `TABLES = ("collection_entries", "decks")` as it stood when this was written. **Amended 2026-09-21:** `public.deck_cards` was created by this design's migration and joined the dump, which had been backing up decks without their contents - see `docs/account-backup.md` |
 | The app has two local tables, `decks` and `deck_cards` | `lib/data/db/app_database.dart:413-438`, the `_deckSql` list |
 | A line of a deck is keyed by `(deck_id, card_id, board)` with `quantity`, `sort` and `category` | `lib/data/db/app_database.dart:427-435` |
 

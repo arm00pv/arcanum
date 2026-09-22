@@ -50,7 +50,7 @@ Paths on the host:
 | `arcanum-swu-import.timer` | refreshes Star Wars: Unlimited's shared catalogue from the publisher's own card database - catalogue only, for the same reason | daily, 05:45 UTC (**installed 2026-09-21**) |
 | `arcanum-digimon-import.timer` | refreshes Digimon's shared catalogue from Heroicc - catalogue only, for the same reason | daily, 06:15 UTC (**installed 2026-09-21**) |
 | `arcanum-catalog-watch.timer` | reports a shared catalogue that has stopped being refreshed | daily, 06:30 UTC |
-| `arcanum-account-backup.timer` | dumps `public.collection_entries` and `public.decks` into `backups/` - the only copy of the account that survives a Supabase-side loss | daily, 07:10 UTC (**installed 2026-09-21**) |
+| `arcanum-account-backup.timer` | dumps every account table - `public.collection_entries`, `public.decks` and `public.deck_cards` - into `backups/`, the only copy of the account that survives a Supabase-side loss | daily, 07:10 UTC (**installed 2026-09-21**, three-table dump since 2026-09-22) |
 
 The listening address is the docker bridge gateway on purpose. The host has a
 public address and no host firewall, so binding every interface would publish
@@ -82,15 +82,24 @@ The schedule, the measurement behind it and the failure modes are in
 
 ## The account, backed up
 
-The two account tables - `public.collection_entries` and `public.decks`, one
-row per holding, row-level-security protected - live only in Supabase, and the
-free plan gives no point-in-time recovery. `arcanum-account-backup.timer` dumps
-both, whole and as the owner, into `backups/account-<stamp>.json.gz` once a day
-after every other job of the night; `tool/account/backup_accounts.py` reads its
-own dump back before calling it a backup, keeps the newest thirty and never
-deletes one that failed to verify, and `--verify-only` is what a monitor calls.
-The tombstones go in with everything else: a soft-deleted holding is the fact
-that a card was removed, and a dump without it would put the card back.
+The account tables - `public.collection_entries`, `public.decks` and
+`public.deck_cards`, row-level-security protected - live only in Supabase, and
+the free plan gives no point-in-time recovery. `arcanum-account-backup.timer`
+dumps every one of them, whole and as the owner, into
+`backups/account-<stamp>.json.gz` once a day after every other job of the night;
+`tool/account/backup_accounts.py` reads its own dump back before calling it a
+backup, keeps the newest thirty and never deletes one that failed to verify, and
+`--verify-only` is what a monitor calls. The tombstones go in with everything
+else: a soft-deleted holding is the fact that a card was removed, and a dump
+without it would put the card back.
+
+`tool/account/restore_accounts.py` is the other half, and it is a program rather
+than a recipe now: it reads one of those dumps, says per table what restoring it
+would insert, replace or remove, runs the whole thing inside a transaction that is
+rolled back unless it was given `--apply`, and writes only for the accounts it was
+told about (`--user`, or `--every-account` when the project itself is gone). The
+write-back has been performed against the live tables on a probe account - see
+`docs/account-backup.md`, "The restore, performed".
 
 The units are installed and enabled: the timer next fires at 07:11 UTC and the
 service has been run by hand once, which is where the dumps on the host come

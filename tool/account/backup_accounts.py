@@ -2,7 +2,7 @@
 """The account tables, dumped nightly to a file somebody could restore from.
 
 The hole this closes. A collector's vault lives in the project's Supabase
-Postgres - `public.collection_entries` and `public.decks`, one row per holding,
+Postgres - `public.collection_entries`, `public.decks` and `public.deck_cards`,
 behind row level security - and until this file existed nothing anywhere held a
 copy of it. The companion has archived the *phone's* database since it shipped,
 one archive per upload, and /home/zixen/arcanum/backups is full of them; none of
@@ -67,11 +67,13 @@ The rules this file keeps, and why each one is here:
     the failure path too, so a backup that has stopped happening is a fact
     somebody can read rather than a silence.
 
-What this file deliberately does not do: it does not restore. A restore is a
-decision about somebody's collection - which rows, in what order, over what is
-already there - and it belongs in a person's hands and in docs/account-backup.md,
-which writes out the statements. This file only guarantees that the material to
-make one exists and can be read.
+What this file deliberately does not do: it does not restore, because a restore
+is a decision about somebody's collection - which rows, in what order, over what
+is already there. The decision is a person's; the work is
+tool/account/restore_accounts.py, which reads one of these dumps, says what
+restoring it would change, and writes it back only when told to with `--apply`.
+The recipe under both of them is written out in docs/account-backup.md. This file
+only guarantees that the material to make one exists and can be read.
 
 Usage:
 
@@ -116,15 +118,31 @@ for _candidate in (os.path.dirname(HERE), HERE):
         sys.path.insert(0, _candidate)
 import catalog_store  # noqa: E402
 
-# The two tables, in the order they are dumped. Both, whole, for every user:
-# this runs as the owner and bypasses row level security on purpose, because a
-# backup that could only see one account would be a backup of one account.
-TABLES = ("collection_entries", "decks")
+# Every table the account is, in the order they are dumped, whole, for every
+# user: this runs as the owner and bypasses row level security on purpose,
+# because a backup that could only see one account would be a backup of one
+# account.
+#
+# deck_cards joined on 2026-09-21, when the deck sync shipped and a deck stopped
+# being a name with nothing in it. Until then this file dumped two tables, and
+# the gap was invisible in the only way that matters: a restore made from one of
+# those dumps would have given every collector their decks back - names, formats,
+# notes and all - with none of their cards in them. A deck's contents are the
+# account as much as its holdings are, so they are dumped like holdings.
+TABLES = ("collection_entries", "decks", "deck_cards")
 
 # The header's own name and version, so a reader a year from now can tell what
 # it is holding and refuse what it does not understand rather than guess.
+#
+# The version names the tables, so a reader can say what a dump is missing
+# rather than only what it holds: a version-1 dump is two tables by definition,
+# and a restore from one has to be told that there are no deck cards in it.
 FORMAT = "arcanum-account-dump"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+VERSION_TABLES = {
+    1: ("collection_entries", "decks"),
+    2: TABLES,
+}
 
 # The naming, matching the phone's archives in the same directory
 # (tool/sync_server.py BACKUP_PREFIX/BACKUP_SUFFIX/BACKUP_STAMP). The stamp is
@@ -317,7 +335,7 @@ def columns_of(db_url, table, timeout=TIMEOUT):
 
 
 def dump_sql(tables_columns):
-    """Both tables, as one script, in one snapshot.
+    """Every table of the account, as one script, in one snapshot.
 
     Every value is cast to text rather than sent as its own JSON type, and that
     is the difference between a backup and a lossy copy: `numeric` and
@@ -331,8 +349,8 @@ def dump_sql(tables_columns):
     order the heap happens to be in.
     """
     lines = [
-        "-- One snapshot for both tables, so the file is a reading of the account",
-        "-- at one instant rather than two readings a moment apart.",
+        "-- One snapshot for every table of the account, so the file is a reading",
+        "-- of the account at one instant rather than several readings apart.",
         "begin isolation level repeatable read read only;",
         "-- timestamptz::text renders in the session's time zone, so it is pinned",
         "-- here: a dump taken under another setting would carry different text for",
@@ -354,18 +372,26 @@ def dump_sql(tables_columns):
 def row_counts(db_url, timeout=TIMEOUT):
     """How many rows each table holds, as the owner.
 
-    One script for both counts, so the two numbers describe the same instant.
+    One script for every count, so the numbers describe the same instant.
     """
     rows = psql_lines(db_url,
                       "begin isolation level repeatable read read only;"
-                      " select 'count=' || count(*)::text from public.collection_entries"
-                      " union all"
-                      " select 'count=' || count(*)::text from public.decks;"
-                      " commit;", timeout)
-    counts = [int(line.split("=", 1)[1]) for line in rows if line.startswith("count=")]
-    if len(counts) != len(TABLES):
-        raise DumpError("could not count both tables")
-    return dict(zip(TABLES, counts))
+                      + " union all".join(
+                          " select " + sql_text("count=" + table + "=")
+                          + " || count(*)::text from public." + quote_ident(table)
+                          for table in TABLES)
+                      + "; commit;", timeout)
+    counts = {}
+    for line in rows:
+        label, _, number = line.partition("=")
+        if label != "count" or "=" not in number:
+            continue
+        table, _, value = number.partition("=")
+        counts[table] = int(value)
+    if sorted(counts) != sorted(TABLES):
+        raise DumpError("could not count every table of the account: "
+                        + ", ".join(sorted(counts)) + " answered")
+    return counts
 
 
 # ---------------------------------------------------------------------------
@@ -443,10 +469,19 @@ def read_dump(path):
                         raise DumpError(
                             f"the header names format {header.get('format')!r}, "
                             f"not {FORMAT!r}")
-                    if header.get("version") != FORMAT_VERSION:
+                    version = header.get("version")
+                    if not isinstance(version, int) or version > FORMAT_VERSION:
                         raise DumpError(
-                            f"the header is version {header.get('version')!r}, and "
-                            f"this reader understands version {FORMAT_VERSION}")
+                            f"the header is version {version!r}, and this reader "
+                            f"understands version {FORMAT_VERSION} and older - a "
+                            "dump written by a newer backup is one this reader "
+                            "cannot know the shape of")
+                    expected = VERSION_TABLES.get(version)
+                    if expected is not None and tuple(header.get("tables") or ()) != expected:
+                        raise DumpError(
+                            f"a version {version} dump holds "
+                            f"{', '.join(header.get('tables') or []) or 'no tables'}, "
+                            f"where that version means {', '.join(expected)}")
                     for key in ("created_at", "tables", "rows", "columns"):
                         if key not in header:
                             raise DumpError(f"the header has no {key!r}")

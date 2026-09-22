@@ -2,10 +2,20 @@
 
 Status: built, installed and run against the live project (wqycllzbwbhqiqlmbwcu)
 from zapp.sytes.net on 2026-09-21, on branch `web/M0-spike`. The units in
-tool/deploy/ are installed and enabled: the timer next fires at 07:11 UTC, and
-the service was started by hand once, which is where the dumps in the backups
+tool/deploy/ are installed and enabled: the timer fires at 07:10 UTC, and the
+service was started by hand once, which is where the dumps in the backups
 directory and the proof output below come from. "Installing it" below records
 exactly what was run and how to check the thing is still happening.
+
+**Amended 2026-09-22: the dump holds three tables, and there is a restore tool
+that has been run.** `public.deck_cards` arrived with the deck sync after this
+file was written and was not in the dump for a day - every deck's contents,
+missing from the only copy of the account that survives a lost project. The
+format went to version 2, and `tool/account/restore_accounts.py` turns the recipe
+below into a program whose write-back has now been performed against the live
+tables, on a probe account, with every other account fingerprinted either side of
+it. Both are in this file: the table list under "What is backed up", the tool
+and its dry run under "A restore", and the run under "The restore, performed".
 
 If this file and the scripts disagree, the scripts are what ran.
 
@@ -40,8 +50,8 @@ That is tool/account/backup_accounts.py.
 
 ## What is backed up
 
-Both tables, every row, every user, connected as postgres over the session
-pooler - the same connection tool/catalog_store.py makes for the catalogue
+Every table of the account, every row, every user, connected as postgres over the
+session pooler - the same connection tool/catalog_store.py makes for the catalogue
 import, and for the same reason: postgres owns these tables and holds
 BYPASSRLS, so a dump can see every account's rows where a policy would show it
 exactly one.
@@ -49,7 +59,28 @@ exactly one.
 | Table | What it holds |
 | --- | --- |
 | public.collection_entries | one row per stack a collector owns: game, card, finish, condition, language, quantity, what they paid, the binder, the note, the trade flag |
-| public.decks | one row per deck: owner, game, name |
+| public.decks | one row per deck: owner, game, name, format, notes, the client's own sync id, and the clocks the merge reads |
+| public.deck_cards | one row per line of a deck: which deck, which printing, which board, how many, the sort, the category |
+
+**deck_cards joined on 2026-09-21, and the gap it closed was invisible in the
+worst way.** This file dumped two tables until then, from before the deck sync
+existed, and nothing failed when the third arrived: the dump was still taken,
+still verified, still rotated, and still held every deck's name, format and notes
+- with none of its cards in them. A restore made from one of those dumps would
+have given every collector their decks back empty. What found it was reading the
+schema against the file rather than trusting either: public.deck_cards exists,
+holds the lines, and was not in `TABLES`. The dump's format version went to 2 with
+it, and the version now *names* the tables it promises, so a reader can say what
+an old dump is missing instead of only what it holds:
+
+~~~python
+VERSION_TABLES = {1: ("collection_entries", "decks"),
+                  2: ("collection_entries", "decks", "deck_cards")}
+~~~
+
+A version-1 dump is still readable - it is a real backup of the account as it
+stood - and restoring from one is refused in as many words by the tool, because
+it cannot put back what it never held.
 
 **The tombstones are in it, and that is the point.** A holding that was removed
 is not a deleted row - it is the same row with `deleted_at` stamped on it, and it
@@ -71,14 +102,19 @@ one row.
 {"columns": {"collection_entries": ["id", "user_id", "game", "card_id", "finish",
  "condition", "language", "quantity", "purchase_price", "purchase_date", "binder",
  "notes", "for_trade", "created_at", "updated_at", "deleted_at"],
- "decks": ["id", "user_id", "game", "name", "created_at"]},
- "created_at": "2026-09-21T004117Z", "format": "arcanum-account-dump",
- "rows": {"collection_entries": 7, "decks": 0},
- "tables": ["collection_entries", "decks"], "version": 1}
+ "deck_cards": ["user_id", "game", "deck_sync_id", "card_id", "board",
+ "quantity", "sort", "category", "updated_at", "deleted_at"],
+ "decks": ["id", "user_id", "game", "name", "created_at", "sync_id",
+ "format_id", "notes", "updated_at", "deleted_at", "name_at", "format_at",
+ "notes_at"]},
+ "created_at": "2026-09-22T005445Z", "format": "arcanum-account-dump",
+ "rows": {"collection_entries": 7, "decks": 0, "deck_cards": 0},
+ "tables": ["collection_entries", "decks", "deck_cards"], "version": 2}
 ~~~
 
-(that header, as actually written on the day this was built - the two tables
-held seven holdings and no decks)
+(that header, as actually written by the first three-table dump, on 2026-09-22 -
+seven holdings, no decks and no lines; the version-1 header from the day this was
+built held two tables and is the reason the version had to move)
 
 ~~~json
 {"table": "collection_entries", "row": {"id": "<uuid>", "game": "<game>",
@@ -154,8 +190,53 @@ thing in a file would then be a sentence about a night that was fine.
 already there, and whether the account is rebuilt whole or merged into what it
 holds now - none of that is a thing a backup script can decide, and none of it
 is what "restore" means for a collection that two devices are still syncing
-against. What follows is the mechanical part, and the measurement under it is
-from this project rather than from a sketch.
+against.
+
+The decision is a person's. The mechanical part is
+**tool/account/restore_accounts.py**, which is this section's recipe as a program:
+
+~~~sh
+# what would restoring the newest dump do to one collector's rows?
+python3 /home/zixen/arcanum/restore_accounts.py --user someone@example.com
+
+# the same, from a named dump, and then for real
+python3 /home/zixen/arcanum/restore_accounts.py --from account-2026-09-22T005445Z.json.gz \
+    --user someone@example.com --apply
+
+# the project is gone and every account is coming back
+python3 /home/zixen/arcanum/restore_accounts.py --every-account --apply
+~~~
+
+What it does, in order: reads the dump with the backup's own reader (so a file it
+cannot read is a file the backup cannot read either), says which tables that dump
+holds and which of them it lacks, resolves the account the rows belong to -
+user_id is a foreign key to auth.users and a restore cannot invent a collector -
+reads what the tables hold for that account now, and prints the four things a
+restore can do to each table: rows inserted, rows replaced, rows removed, rows
+already identical. Then, unless it was told `--apply`, it runs the whole restore
+inside a transaction that is rolled back and checks afterwards that the tables
+hold what they held. Nothing else writes to those tables while it runs, because
+it takes the backup's own lock.
+
+What it refuses: to write without being told whose rows (`--user` or
+`--every-account`), to restore for an email that is not in auth.users, and - in
+the words it prints - to pretend a dump that predates a table can put that table
+back.
+
+Here is the plan it prints, run against the live project's own account and the
+newest dump, which is what a dry run looks like when nothing needs restoring:
+
+~~~
+account-2026-09-22T005445Z.json.gz, taken 2026-09-22T005445Z, version 2, holds 3 table(s): collection_entries 7, decks 0, deck_cards 0
+  zixen15@gmail.com is 4659db53-c002-4792-bd34-daf0600559d2 in auth.users
+
+  collection_entries   0 inserted, 0 replaced, 0 removed, 7 identical
+  decks                0 inserted, 0 replaced, 0 removed, 0 identical
+  deck_cards           0 inserted, 0 replaced, 0 removed, 0 identical
+
+dry run: the statements ran inside a transaction that was rolled back, and the account still holds 7 collection_entries, 0 decks, 0 deck_cards
+nothing was written. Run it again with --apply to mean it.
+~~~
 
 1. **Find out what you have, with no database in the room.**
 
@@ -217,11 +298,22 @@ Seven holdings came back, six of them still marked deleted, none of them
 different from the live table in either direction, and the account still held
 seven rows and no decks once the transaction rolled back.
 
-**What has not happened, and should be said plainly: this recipe has never been
-run against the live tables.** It has been run into temporary copies of their
-shape, inside transactions that were rolled back - by the run above, and by the
-proof below. The last step, writing back over a real collector's rows, is the
-one that needs a person.
+**That recipe has now been run against the live tables - and it is still true
+that it has never been run over a real collector's rows.** Those are different
+claims and both matter. The statements that put an account back have been
+executed, committed, against public.collection_entries, public.decks and
+public.deck_cards in this project: a probe account was created, a small account
+written into it the way a client writes one, the project dumped, the account's
+rows deleted, and the dump restored - all three tables, row for row, tombstones
+included - with the tool above, and then the probe rows and the account were
+deleted. Every other account's rows were fingerprinted before and after and did
+not move. That is `tool/account/prove_account_restore.py`, and its run is below.
+
+What no proof can take off a person's hands is deciding to restore over a
+collector's *live* rows, because that is a decision about somebody's collection
+rather than a mechanic. What was missing until this run was the smaller
+question - whether the mechanic works - and it is answered now rather than
+assumed.
 
 Three things to know before taking it:
 
@@ -360,11 +452,14 @@ absence has no second copy to fall back on.
   the app already shows its owner. If it is ever copied off the host, that is
   the point to think about encryption, not before.
 
-## The proof
+## The proofs
 
-tool/account/prove_account_backup.py. A backup that has never been read back is
-not a backup, so every check is about reading it: that it parses line by line,
-that every column of both tables is in every row (compared against
+Two of them now, and they answer different questions: whether the dump can be
+read, and whether the dump can be put back.
+
+**tool/account/prove_account_backup.py** - A backup that has never been read back
+is not a backup, so every check is about reading it: that it parses line by line,
+that every column of every table is in every row (compared against
 information_schema in the same run, so a column added later and quietly dropped
 from the dump is caught), that a tombstone is in it with the same timestamp,
 that the dumped rows and the live rows hash to one md5, that those rows insert
@@ -372,6 +467,18 @@ back into the table's own shape and match it row for row, that rotation keeps
 the newest dump and never deletes one that did not verify, and that
 --verify-only agrees with a fresh dump. Every check needs the live database; one
 that cannot be made says so and fails rather than passing quietly.
+
+**tool/account/prove_account_restore.py** - the restore itself, performed. It
+creates a probe account, writes a small account into it through the API the way a
+client writes one - three holdings, one of them a tombstone, a deck, and three of
+its lines, one of them a tombstone - takes a real dump of the whole project,
+deletes the account's rows, and then runs `restore_accounts.py` twice: once as a
+dry run, and once with --apply. Afterwards it hashes all three tables against the
+dump, checks the tombstones came back soft-deleted with their own timestamps,
+checks the deck's lines came back at all, fingerprints every *other* account's
+rows before and after to prove the restore stayed inside the account it was told
+to restore, and deletes the probe account and its rows. Without the admin key it
+skips itself and says why, rather than reporting a restore it never ran.
 
 Last run, 2026-09-21, on zapp.sytes.net, as the owner over the session pooler. The
 proof takes a dump of its own to read back - the examples above are the nightly
@@ -419,16 +526,81 @@ database held one where the dump held six. The dump was right and the proof was
 wrong, which is the useful direction for that bug to point. The reading is
 straight lines now, and it passes.
 
-What the proof does not say, and should not be read as saying: that tomorrow's
-dump will be right (it is a comparison with the account at the moment it ran),
-that the restore recipe above has been performed on the live tables (it has
-not), or that a dump exists for any night whose timer has not run.
+What that proof does not say, and should not be read as saying: that tomorrow's
+dump will be right (it is a comparison with the account at the moment it ran), or
+that a dump exists for any night whose timer has not run.
+
+### The restore, performed
+
+prove_account_restore.py, run on 2026-09-22 on zapp.sytes.net, against the live
+project, with the owner's connection and an admin key that made one probe account
+and deleted it again:
+
+~~~
+Restore an account from a dump, and read the tables afterwards.
+
+target   the session pooler and the three account tables
+
+--- The dump ---
+PASS  a_dump_holds_every_table_of_the_account
+      3 holding(s), 1 deck(s), 3 line(s) - the probe account, written as a client
+      writes one, inside a version 2 dump of every account
+
+--- The loss, and the plan ---
+PASS  the_rows_are_gone_before_the_restore
+      every row the probe account had is gone, which is the state a restore is for
+PASS  the_plan_says_what_a_restore_would_change
+      collection_entries   3 inserted, 0 replaced, 0 removed, 0 identical ...
+      decks                1 inserted, 0 replaced, 0 removed, 0 identical  (22)
+      deck_cards           3 inserted, 0 replaced, 0 removed, 0 identical ...
+PASS  a_dry_run_leaves_the_tables_alone
+      the plan ran inside a transaction that was rolled back and the account still
+      holds nothing, which is what the tool's own dry run asserts of itself
+
+--- The restore ---
+PASS  a_restore_puts_the_rows_back
+      all three tables hash to the value the dump holds them at: 3
+      collection_entries, 1 decks, 3 deck_cards, row for row, over every column
+PASS  a_restored_tombstone_is_still_deleted
+      2 soft-deleted row(s) came back soft-deleted with the timestamps the dump
+      carries: 2026-01-04 04:00:00+00, 2026-01-05 05:00:00+00
+PASS  a_decks_lines_come_back
+      the deck's 3 line(s) came back, which is the hole this whole change closes:
+      a dump that held two tables would have restored the deck's name and none of
+      its cards
+
+--- Nothing else moved ---
+PASS  another_accounts_rows_are_untouched
+      every other account's rows in all three tables hash to what they hashed to
+      before the restore, so a restore scoped to one collector stayed inside that
+      collector
+
+--- Nothing left behind ---
+PASS  nothing_is_left_behind
+      no probe row in any of the three tables and no probe account in auth.users
+
+9 passed, 0 failed, 0 skipped
+~~~
+
+The deck came back as id 22 - the dumped identity value, through the column that
+is `generated always as identity`, which is what the OVERRIDING SYSTEM VALUE in
+the insert is for. Its three lines came back with it, including the one whose
+`deleted_at` is stamped: a line removed from a deck is a tombstone like a holding
+is, and a restore that dropped it would put a card back in a deck its owner took
+it out of.
 
 ## Files
 
 - tool/account/backup_accounts.py - the dump: one snapshot, text values, an
-  atomic write, a read back, rotation, and the state file.
-- tool/account/prove_account_backup.py - the proof above.
+  atomic write, a read back, rotation, and the state file. It holds the format,
+  the reader and the connection rules that the restore tool uses rather than
+  copying.
+- tool/account/restore_accounts.py - the restore: verify, resolve the account,
+  say what would change, run it inside a transaction that is rolled back, and
+  write it only when told to with --apply.
+- tool/account/prove_account_backup.py - the reading proof above.
+- tool/account/prove_account_restore.py - the restore proof above, which creates
+  and deletes its own probe account and touches no collector's rows.
 - tool/deploy/arcanum-account-backup.service and .timer - once a day at 07:10
   UTC, after every other job of the night. Installed and enabled on
   zapp.sytes.net on 2026-09-21.
