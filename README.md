@@ -5,8 +5,24 @@ A precision collection tracker for Android covering **Magic: The Gathering**, th
 on-device quantitative price engine. Built for a Pixel 7 Pro on Android 17.
 
 > Arcanum is unofficial and non-commercial. It is not affiliated with, endorsed
-> by or approved by Wizards of the Coast, The Pokémon Company, Konami, or
-> Ravensburger and The Walt Disney Company.
+> by or approved by Wizards of the Coast, The Pokémon Company, Konami,
+> Ravensburger and The Walt Disney Company, Bandai, or any other publisher.
+
+## Arcanum in a browser
+
+The same app also runs as a web build, from the same code:
+**https://marquezhv.com/arcanumweb/**. It is the whole thing rather than a
+read-only page - the catalogue, the collection, the decks, the valuation - with the
+account held in Supabase instead of on a phone, so a vault opened on a laptop and a
+vault opened on a phone are the same vault. Row level security keeps one
+collector's rows out of another's hands, and the catalogue is shared by everybody.
+
+A collector needs nothing but the URL; an account is required, and **self-serve
+sign-up does not work yet** because the project has no mail path for Auth's
+confirmation email. Until that is fixed an account is made by the owner with
+`tool/account/create_account.py`, which prints a password to hand over. The
+measurement of both, and the exact dashboard setting that opens the front door,
+are in [docs/sharing-arcanum.md](docs/sharing-arcanum.md).
 
 ## Four games, four collections
 
